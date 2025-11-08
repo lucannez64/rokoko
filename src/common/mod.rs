@@ -1,1 +1,18 @@
-mod ring_arithmetic;
+use std::sync::LazyLock;
+
+pub mod ring_arithmetic;
+pub mod config;
+use crate::common::ring_arithmetic::*;
+
+pub fn init_common() {
+
+    LazyLock::force(&crate::common::ring_arithmetic::shift_factors);
+    unsafe { LazyLock::force_mut(&mut crate::common::ring_arithmetic::temp_buffer) };
+
+    // init some caches of HEXL
+    let mut a = RingElement::new(Representation::EvenOddCoefficients);
+    let mut b = RingElement::new(Representation::IncompleteNTT);
+    a.from_even_odd_coefficients_to_incomplete_ntt_representation();
+    incomplete_ntt_multiplication(&mut b, &a, &a);
+    a.from_incomplete_ntt_to_even_odd_coefficients();
+}

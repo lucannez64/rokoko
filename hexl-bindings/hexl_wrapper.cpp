@@ -5,8 +5,6 @@
 #include <memory>
 #include <utility>
 #include <immintrin.h>
-#define LIBDIVIDE_AVX512
-#include "libdivide/libdivide.h"
 
 class NTTCache {
 public:
@@ -154,36 +152,6 @@ extern "C" __attribute__((externally_visible)) void eltwise_reduce_mod(
 //         result[i] = operand[i] % modulus;
 //     }
 // }
-
-extern "C" __attribute__((externally_visible))
-void eltwise_reduce_mod_naive(
-    uint64_t* __restrict result,
-    const uint64_t* __restrict operand,
-    size_t n,
-    uint64_t modulus
-) {
-    // Build a fast divider for u64
-    libdivide::libdivide_u64_branchfree_t d = libdivide::libdivide_u64_branchfree_gen(modulus);
-
-    size_t i = 0;
-    for (; i + 8 <= n; i += 8) {
-        __m512i x = _mm512_loadu_si512((const __m512i*)(operand + i));
-
-        // q = x / modulus  (vectorised using libdivide)
-        __m512i q = libdivide::libdivide_u64_branchfree_do_vec512(x, &d);
-
-        // r = x - q * modulus
-        __m512i m = _mm512_set1_epi64((long long)modulus);
-        __m512i qm = _mm512_mullo_epi64(q, m);        // AVX-512DQ required
-        __m512i r  = _mm512_sub_epi64(x, qm);
-
-        _mm512_storeu_si512((__m512i*)(result + i), r);
-    }
-    for (; i < n; ++i) {
-        uint64_t q = libdivide::libdivide_u64_branchfree_do(operand[i], &d);
-        result[i] = operand[i] - q * modulus;
-    }
-}
 
 extern "C" __attribute__((externally_visible)) void eltwise_add_mod(
     uint64_t* result,
