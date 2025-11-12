@@ -19,6 +19,9 @@ extern "C" {
     pub fn get_roots(n: u64, modulus: u64) -> *const u64;
 
     #[inline]
+    pub fn inv_mod(a: u64, modulus: u64) -> u64;
+
+    #[inline]
     pub fn get_inv_roots(n: u64, modulus: u64) -> *const u64;
 
     #[inline]
@@ -50,4 +53,7 @@ extern "C" {
         n: usize,
         modulus: u64,
     );
+
+    #[inline]
+    pub fn eltwise_fma_mod(result: *mut u64, operand1: *const u64, operand2: u64, operand3: *const u64, n: u64, modulus: u64);
 }

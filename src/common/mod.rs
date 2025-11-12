@@ -6,7 +6,9 @@ use crate::common::ring_arithmetic::*;
 
 pub fn init_common() {
 
-    LazyLock::force(&crate::common::ring_arithmetic::shift_factors);
+    LazyLock::force(&SHIFT_FACTORS);
+    LazyLock::force(&NORMALIZE_INCOMPLETE_NTT_FACTORS);
+    LazyLock::force(&NORMALIZE_INCOMPLETE_NTT_FACTORS_INVERSE);
     unsafe { LazyLock::force_mut(&mut crate::common::ring_arithmetic::temp_buffer) };
 
     // init some caches of HEXL

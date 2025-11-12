@@ -10,6 +10,8 @@ pub enum Representation {
     Coefficients, // This should not be used almost ever. Use only for printing or debugging.
     EvenOddCoefficients, // In this representation, coefficients are stored as even part followed by odd part. This is so that NTT can be applied more easily.
     IncompleteNTT, // Incomplete NTT representation, where even and odd parts are separately transformed.
+    HomogenizedFieldExtensions // We use that reprentation so that "Incomplete NTT slots" are homogenized, i.e. they are all of 
+    // the structure Zq[X] / <X^2 + \alpha>, i.e. \alpha is the same for each slot.
 }
 
 
@@ -92,10 +94,65 @@ impl RingElement {
         self.representation = Representation::Coefficients;
     }
 
+    pub fn from_incomplete_ntt_to_homogenized_field_extensions(&mut self) {
+        debug_assert!(self.representation == Representation::IncompleteNTT, "Not in Incomplete NTT representation");
+
+        unsafe {
+            eltwise_mult_mod(
+                self.v.as_mut_ptr().add(HALF_DEGREE),
+                self.v.as_ptr().add(HALF_DEGREE),
+                NORMALIZE_INCOMPLETE_NTT_FACTORS.as_ptr(),
+                (HALF_DEGREE) as u64,
+                MOD_Q,
+            );
+        }
+        self.representation = Representation::HomogenizedFieldExtensions;
+    }
+
+    pub fn from_homogenized_field_extensions_to_incomplete_ntt(&mut self) {
+        debug_assert!(self.representation == Representation::HomogenizedFieldExtensions, "Not in Homogenized Field Extensions representation");
+
+        unsafe {
+            eltwise_mult_mod(
+                self.v.as_mut_ptr().add(HALF_DEGREE),
+                self.v.as_ptr().add(HALF_DEGREE),
+                NORMALIZE_INCOMPLETE_NTT_FACTORS_INVERSE.as_ptr(),
+                (HALF_DEGREE) as u64,
+                MOD_Q,
+            );
+        }
+        self.representation = Representation::IncompleteNTT;
+    }
+
+    // Probably should never be used
+    pub fn split_into_quadratic_extensions(&self) -> [QuadraticExtension; HALF_DEGREE] {
+        assert!(self.representation == Representation::HomogenizedFieldExtensions, "RingElement not in Homogenized Field Extensions representation");
+
+        let mut result = [QuadraticExtension { coeffs: [0u64; 2], shift: 0 }; HALF_DEGREE];
+
+        for i in 0..HALF_DEGREE {
+            result[i].coeffs[0] = self.v[i];
+            result[i].coeffs[1] = self.v[i + HALF_DEGREE];
+            result[i].shift = SHIFT_FACTORS[0];
+        }
+
+        result
+    }
+
+    // Probably should never be used
+    pub fn combine_from_quadratic_extensions(&mut self, extensions: &[QuadraticExtension; HALF_DEGREE]) {
+        assert!(self.representation == Representation::HomogenizedFieldExtensions, "RingElement not in Homogenized Field Extensions representation");
+
+        for i in 0..HALF_DEGREE {
+            self.v[i] = extensions[i].coeffs[0];
+            self.v[i + HALF_DEGREE] = extensions[i].coeffs[1];
+        }
+
+    }
+
 }
 
-
-pub static shift_factors: LazyLock<[u64; HALF_DEGREE]> = LazyLock::new(|| {
+pub static SHIFT_FACTORS: LazyLock<[u64; HALF_DEGREE]> = LazyLock::new(|| {
     let mut factors = [0u64; HALF_DEGREE];
     factors[1] = 1;
     unsafe { ntt_forward_in_place(factors.as_mut_ptr(), factors.len(), MOD_Q) };
@@ -113,16 +170,38 @@ fn get_temp_buffer() -> &'static mut [u64; DEGREE] {
 }
 
 ///// Helpers
-#[inline]
+
 pub fn incomplete_ntt_multiplication(
     result: &mut RingElement,
     operand1: &RingElement,
     operand2: &RingElement,
 ) {
 
-    debug_assert!(operand1.representation == Representation::IncompleteNTT, "Operand1 not in Incomplete NTT representation");
-    debug_assert!(operand2.representation == Representation::IncompleteNTT, "Operand2 not in Incomplete NTT representation");
-    debug_assert!(result.representation == Representation::IncompleteNTT, "Result not in Incomplete NTT representation");
+    assert!(operand1.representation == Representation::IncompleteNTT, "Operand1 not in Incomplete NTT representation");
+    assert!(operand2.representation == Representation::IncompleteNTT, "Operand2 not in Incomplete NTT representation");
+    assert!(result.representation == Representation::IncompleteNTT, "Result not in Incomplete NTT representation");
+
+    incomplete_ntt_multiplication_inner(result, operand1, operand2, false);
+}
+
+pub fn incomplete_ntt_multiplication_homogenized(
+    result: &mut RingElement,
+    operand1: &RingElement,
+    operand2: &RingElement,
+) {
+    assert!(operand1.representation == Representation::HomogenizedFieldExtensions, "Operand1 not in Homogenized Field Extensions representation");
+    assert!(operand2.representation == Representation::HomogenizedFieldExtensions, "Operand2 not in Homogenized Field Extensions representation");
+    assert!(result.representation == Representation::HomogenizedFieldExtensions, "Result not in Homogenized Field Extensions representation");
+    incomplete_ntt_multiplication_inner(result, operand1, operand2, true);
+}
+
+#[inline]
+pub fn incomplete_ntt_multiplication_inner(
+    result: &mut RingElement,
+    operand1: &RingElement,
+    operand2: &RingElement,
+    homogenized: bool,
+) {
 
     let mut temp = get_temp_buffer();
 
@@ -157,24 +236,38 @@ pub fn incomplete_ntt_multiplication(
             MOD_Q,
         );
 
-        // Apply shift factors
-        eltwise_mult_mod(
-                temp.as_mut_ptr(),
+        if homogenized {
+            // result_even += temp * SHIFT_FACTORS[0]
+            eltwise_fma_mod(
+                result.v.as_mut_ptr(),
                 temp.as_ptr(),
-                shift_factors.as_ptr(),
+                SHIFT_FACTORS[0],
+                result.v.as_ptr(),
                 HALF_DEGREE as u64,
                 MOD_Q,
-        );
+            );
+        } else {
+            // Apply shift factors
+            eltwise_mult_mod(
+                    temp.as_mut_ptr(),
+                    temp.as_ptr(),
+                    SHIFT_FACTORS.as_ptr(),
+                    HALF_DEGREE as u64,
+                    MOD_Q,
+            );
 
-        // result_even += temp
-        eltwise_add_mod(
-            result.v.as_mut_ptr(),
-            result.v.as_ptr(),
-            temp.as_ptr(),
-            HALF_DEGREE as u64,
-            MOD_Q,
-        );
+            // result_even += temp
+            eltwise_add_mod(
+                result.v.as_mut_ptr(),
+                result.v.as_ptr(),
+                temp.as_ptr(),
+                HALF_DEGREE as u64,
+                MOD_Q,
+            );
 
+        }
+
+    
         // Reuse temp for op1_even * op2_odd
         eltwise_mult_mod(
             temp.as_mut_ptr(),
@@ -220,5 +313,263 @@ pub fn naive_polynomial_multiplication(
                 result.v[index] = (result.v[index] + prod as u64) % MOD_Q;
             }
         }
+    }
+}
+
+
+
+pub static NORMALIZE_INCOMPLETE_NTT_FACTORS: LazyLock<[u64; HALF_DEGREE]> =
+    LazyLock::new(|| get_roots_of_unity_trans().0);
+
+pub static NORMALIZE_INCOMPLETE_NTT_FACTORS_INVERSE: LazyLock<[u64; HALF_DEGREE]> =
+    LazyLock::new(|| get_roots_of_unity_trans().1);
+
+pub fn get_roots_of_unity_trans() -> ([u64; HALF_DEGREE], [u64; HALF_DEGREE]) {
+    let mut roots_translations = [0u64; HALF_DEGREE];
+    for i in 0..HALF_DEGREE {
+        let mut t = 0;
+        while (|| {
+            let mut ex = RingElement::new(Representation::IncompleteNTT);
+            ex.v[HALF_DEGREE + i] = 1;
+            let mut ex_0 = RingElement::new(Representation::IncompleteNTT);
+            incomplete_ntt_multiplication_inner(&mut ex_0, &ex, &ex, false);
+            let mut ex_1 = RingElement::new(Representation::HomogenizedFieldExtensions);
+
+            ex.v[HALF_DEGREE + i] = unsafe { power_mod(SHIFT_FACTORS[i], t, MOD_Q) };
+            incomplete_ntt_multiplication_inner(&mut ex_1, &ex, &ex, true);
+            ex_0.v != ex_1.v
+        })() {
+            t = t + 1;
+        }
+        roots_translations[i] = unsafe { power_mod(SHIFT_FACTORS[i], t, MOD_Q) };
+    }
+
+    let mut roots_translations_inv = [0u64; HALF_DEGREE];
+
+    for i in 0..HALF_DEGREE {
+        roots_translations_inv[i] = unsafe { inv_mod(roots_translations[i], MOD_Q) };
+    }
+
+    (roots_translations, roots_translations_inv)
+}
+
+
+// They are small so we can store them on stack.
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub struct QuadraticExtension {
+    pub coeffs: [u64; 2],
+    shift: u64,
+}
+
+impl Add for QuadraticExtension {
+    type Output = Self;
+
+    fn add(self, other: Self) -> Self {
+        assert!(self.shift == other.shift, "Shifts must be the same for addition");
+        let coeffs = unsafe {
+            [
+                add_mod(self.coeffs[0], other.coeffs[0], MOD_Q as u64),
+                add_mod(self.coeffs[1], other.coeffs[1], MOD_Q as u64),
+            ]
+        };
+        Self {
+            coeffs,
+            shift: self.shift, // Assuming shift remains unchanged
+        }
+    }
+}
+
+impl Mul for QuadraticExtension {
+    type Output = Self;
+
+    fn mul(self, other: Self) -> Self {
+        assert!(self.shift == other.shift, "Shifts must be the same for multiplication");
+        let a = self.coeffs[0];
+        let b = self.coeffs[1];
+        let c = other.coeffs[0];
+        let d = other.coeffs[1];
+
+        let coeffs = unsafe {
+            [
+                add_mod(
+                    multiply_mod(a, c, MOD_Q as u64),
+                    multiply_mod(self.shift, multiply_mod(b, d, MOD_Q as u64), MOD_Q as u64),
+                    MOD_Q as u64,
+                ),
+                add_mod(
+                    multiply_mod(a, d, MOD_Q as u64),
+                    multiply_mod(b, c, MOD_Q as u64),
+                    MOD_Q as u64,
+                ),
+            ]
+        };
+        Self {
+            coeffs,
+            shift: self.shift, // Assuming shift remains unchanged
+        }
+    }
+}
+
+
+#[cfg(test)]
+mod tests {
+    use crate::common::init_common;
+
+    use super::*;
+
+    #[test]
+    fn test_ntt_multiplication_matches_naive() {
+        init_common();
+        let mut a = RingElement::new_random(Representation::Coefficients);
+        let mut b = RingElement::new_random(Representation::Coefficients);
+        let mut c = RingElement::new(Representation::Coefficients);
+
+        naive_polynomial_multiplication(&mut c, &a, &b);
+
+        a.from_coefficients_to_even_odd_coefficients();
+        b.from_coefficients_to_even_odd_coefficients();
+        a.from_even_odd_coefficients_to_incomplete_ntt_representation();
+        b.from_even_odd_coefficients_to_incomplete_ntt_representation();
+
+        let mut d = RingElement::new(Representation::IncompleteNTT);
+        incomplete_ntt_multiplication(&mut d, &a, &b);
+        d.from_incomplete_ntt_to_even_odd_coefficients();
+        d.from_even_odd_coefficients_to_coefficients();
+
+        assert_eq!(c.v, d.v);
+    }
+
+    #[test]
+    fn test_homogenized_field_extension_conversion_roundtrip() {
+        init_common();
+        let mut b = RingElement::new_random(Representation::Coefficients);
+        b.from_coefficients_to_even_odd_coefficients();
+        b.from_even_odd_coefficients_to_incomplete_ntt_representation();
+
+        let mut b_c = b.clone();
+        b_c.from_incomplete_ntt_to_homogenized_field_extensions();
+        b_c.from_homogenized_field_extensions_to_incomplete_ntt();
+        
+        assert_eq!(b.v, b_c.v);
+    }
+
+    #[test]
+    fn test_quadratic_extension_split_combine_roundtrip() {
+        init_common();
+        let mut b = RingElement::new_random(Representation::Coefficients);
+        b.from_coefficients_to_even_odd_coefficients();
+        b.from_even_odd_coefficients_to_incomplete_ntt_representation();
+        b.from_incomplete_ntt_to_homogenized_field_extensions();
+
+        let ext_b: [QuadraticExtension; HALF_DEGREE] = b.split_into_quadratic_extensions();
+        let mut b_reconstructed = RingElement::new(Representation::HomogenizedFieldExtensions);
+        b_reconstructed.combine_from_quadratic_extensions(&ext_b);
+        
+        assert_eq!(b.v, b_reconstructed.v);
+    }
+
+    #[test]
+    fn test_hadamard_multiplication_in_quadratic_extensions() {
+        init_common();
+        let mut a = RingElement::new_random(Representation::Coefficients);
+        let mut b = RingElement::new_random(Representation::Coefficients);
+        let mut c = RingElement::new(Representation::Coefficients);
+
+        naive_polynomial_multiplication(&mut c, &a, &b);
+
+        a.from_coefficients_to_even_odd_coefficients();
+        b.from_coefficients_to_even_odd_coefficients();
+        a.from_even_odd_coefficients_to_incomplete_ntt_representation();
+        b.from_even_odd_coefficients_to_incomplete_ntt_representation();
+        a.from_incomplete_ntt_to_homogenized_field_extensions();
+        b.from_incomplete_ntt_to_homogenized_field_extensions();
+
+        let ext_a: [QuadraticExtension; HALF_DEGREE] = a.split_into_quadratic_extensions();
+        let ext_b: [QuadraticExtension; HALF_DEGREE] = b.split_into_quadratic_extensions();
+
+        let quadratic_fields_hadamard: [QuadraticExtension; HALF_DEGREE] = ext_a
+            .iter()
+            .zip(ext_b.iter())
+            .map(|(x, y)| *x * *y)
+            .collect::<Vec<QuadraticExtension>>()
+            .try_into()
+            .unwrap();
+
+        let mut c_c = RingElement::new(Representation::HomogenizedFieldExtensions);
+        c_c.combine_from_quadratic_extensions(&quadratic_fields_hadamard);
+        c_c.from_homogenized_field_extensions_to_incomplete_ntt();
+        c_c.from_incomplete_ntt_to_even_odd_coefficients();
+        c_c.from_even_odd_coefficients_to_coefficients();
+        
+        assert_eq!(c.v, c_c.v);
+    }
+
+    #[test]
+    fn test_homogenized_multiplication_matches_naive() {
+        init_common();
+        let mut a = RingElement::new_random(Representation::Coefficients);
+        let mut b = RingElement::new_random(Representation::Coefficients);
+        let mut c = RingElement::new(Representation::Coefficients);
+
+        naive_polynomial_multiplication(&mut c, &a, &b);
+
+        a.from_coefficients_to_even_odd_coefficients();
+        b.from_coefficients_to_even_odd_coefficients();
+        a.from_even_odd_coefficients_to_incomplete_ntt_representation();
+        b.from_even_odd_coefficients_to_incomplete_ntt_representation();
+        a.from_incomplete_ntt_to_homogenized_field_extensions();
+        b.from_incomplete_ntt_to_homogenized_field_extensions();
+
+        let mut e = RingElement::new(Representation::HomogenizedFieldExtensions);
+        incomplete_ntt_multiplication_homogenized(&mut e, &a, &b);
+        e.from_homogenized_field_extensions_to_incomplete_ntt();
+        e.from_incomplete_ntt_to_even_odd_coefficients();
+        e.from_even_odd_coefficients_to_coefficients();
+
+        assert_eq!(c.v, e.v);
+    }
+
+    #[test]
+    fn test_even_odd_coefficients_conversion_roundtrip() {
+        init_common();
+        let original = RingElement::new_random(Representation::Coefficients);
+        let mut a = original.clone();
+        
+        a.from_coefficients_to_even_odd_coefficients();
+        a.from_even_odd_coefficients_to_coefficients();
+        
+        assert_eq!(original.v, a.v);
+    }
+
+    #[test]
+    fn test_quadratic_extension_addition() {
+        let qe1 = QuadraticExtension { coeffs: [1, 2], shift: 5 };
+        let qe2 = QuadraticExtension { coeffs: [3, 4], shift: 5 };
+        let result = qe1 + qe2;
+        
+        assert_eq!(result.coeffs[0], (1 + 3) % MOD_Q);
+        assert_eq!(result.coeffs[1], (2 + 4) % MOD_Q);
+    }
+
+    #[test]
+    fn test_quadratic_extension_multiplication() {
+        let qe1 = QuadraticExtension { coeffs: [2, 3], shift: SHIFT_FACTORS[0] };
+        let qe2 = QuadraticExtension { coeffs: [4, 5], shift: SHIFT_FACTORS[0] };
+        let result = qe1 * qe2;
+        
+        // (2 + 3X)(4 + 5X) = 8 + 10X + 12X + 15X^2 = 8 + 22X + 15*shift
+        let expected_c0 = unsafe { 
+            add_mod(
+                multiply_mod(2, 4, MOD_Q),
+                multiply_mod(SHIFT_FACTORS[0], multiply_mod(3, 5, MOD_Q), MOD_Q),
+                MOD_Q
+            )
+        };
+        let expected_c1 = unsafe {
+            add_mod(multiply_mod(2, 5, MOD_Q), multiply_mod(3, 4, MOD_Q), MOD_Q)
+        };
+        
+        assert_eq!(result.coeffs[0], expected_c0);
+        assert_eq!(result.coeffs[1], expected_c1);
     }
 }
