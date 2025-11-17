@@ -171,6 +171,45 @@ fn get_temp_buffer() -> &'static mut [u64; DEGREE] {
 
 ///// Helpers
 
+
+pub fn addition(
+    result: &mut RingElement,
+    operand1: &RingElement,
+    operand2: &RingElement,
+) {
+    assert!(operand1.representation == operand2.representation, "Operands have different representations");
+    assert!(result.representation == operand1.representation, "Result has different representation than operands");
+
+    unsafe {
+        eltwise_add_mod(
+            result.v.as_mut_ptr(),
+            operand1.v.as_ptr(),
+            operand2.v.as_ptr(),
+            DEGREE as u64,
+            MOD_Q,
+        );
+    }
+}
+
+pub fn subtraction(
+    result: &mut RingElement,
+    operand1: &RingElement,
+    operand2: &RingElement,
+) {
+    assert!(operand1.representation == operand2.representation, "Operands have different representations");
+    assert!(result.representation == operand1.representation, "Result has different representation than operands");
+
+    unsafe {
+        eltwise_sub_mod(
+            result.v.as_mut_ptr(),
+            operand1.v.as_ptr(),
+            operand2.v.as_ptr(),
+            DEGREE as u64,
+            MOD_Q,
+        );
+    }
+}
+
 pub fn incomplete_ntt_multiplication(
     result: &mut RingElement,
     operand1: &RingElement,
@@ -264,7 +303,6 @@ pub fn incomplete_ntt_multiplication_inner(
                 HALF_DEGREE as u64,
                 MOD_Q,
             );
-
         }
 
     
