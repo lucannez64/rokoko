@@ -83,7 +83,7 @@ impl HashWrapper {
         for i in 0..DEGREE / 8 {
             let b = buf[i];
             for j in 0..8 {
-                element.v[i * 8 + j] = ((b & (1 << j)) >> j) as u64;
+                element.v[i * 8 + j] =  ((b >> j) & 1) as u64;
             }
         }
         element
