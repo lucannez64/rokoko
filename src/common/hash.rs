@@ -99,7 +99,7 @@ impl HashWrapper {
 
     fn sample_ternary_ring_element(&mut self) -> RingElement {
         // we need 2 bits per coefficient to sample uniformly from {-1, 0, 1} 
-        // 11 is discarded so we take (two times) more bytes to account for the rejections
+        // 0b11 is discarded so we take (two times) more bytes to account for the rejections
         let mut buf = [0u8; DEGREE / 2];
         self.fill_from_xof(b"ternary-ring-element", &mut buf);
         let mut element = RingElement::new(Representation::Coefficients);
