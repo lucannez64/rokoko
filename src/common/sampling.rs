@@ -1,5 +1,5 @@
 use super::ring_arithmetic::Representation;
-use crate::common::{matrix::Matrix, ring_arithmetic::RingElement};
+use crate::common::{ring_arithmetic::RingElement, witness::WitnessMatrix};
 
 pub fn sample_random_vector(size: usize) -> Vec<RingElement> {
     let mut vec = Vec::with_capacity(size);
@@ -13,8 +13,8 @@ pub fn sample_random_vector(size: usize) -> Vec<RingElement> {
     vec
 }
 
-pub fn sample_random_short_mat(n: usize, m: usize, bound: u64) -> Matrix<RingElement> {
-    let mut m = Matrix::new(m, n);
+pub fn sample_random_short_mat(n: usize, m: usize, bound: u64) -> WitnessMatrix<RingElement> {
+    let mut m = WitnessMatrix::new(m, n);
     for i in m.data.iter_mut() {
         *i = RingElement::random_bounded(Representation::EvenOddCoefficients, bound);
 

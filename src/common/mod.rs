@@ -2,10 +2,10 @@ use std::sync::LazyLock;
 
 pub mod config;
 pub mod hash;
-pub mod matrix;
 pub mod power_series;
 pub mod ring_arithmetic;
 pub mod sampling;
+pub mod witness;
 use crate::common::ring_arithmetic::*;
 
 pub fn init_common() {

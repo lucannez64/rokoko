@@ -1,8 +1,8 @@
 use crate::common::{
-    matrix::Matrix,
     power_series::PowerSeries,
     ring_arithmetic::{incomplete_ntt_multiplication, RingElement},
     sampling::sample_random_vector,
+    witness::WitnessMatrix,
 };
 
 /// Struct representing the Common Reference String (CRS) for cryptographic operations.
@@ -50,7 +50,7 @@ pub fn compute_commitment_keys(module: Vec<RingElement>, wit_dim: usize) -> Vec<
             }
             let mut ps = PowerSeries {
                 full_layer: row.clone(),
-                tensors: Matrix::new((wit_dim / 2) - 1, 0),
+                tensors: WitnessMatrix::new((wit_dim / 2) - 1, 0),
             };
             let mut current_dim = wit_dim;
 
@@ -59,7 +59,31 @@ pub fn compute_commitment_keys(module: Vec<RingElement>, wit_dim: usize) -> Vec<
                 let mut one = RingElement::one();
                 one.from_even_odd_coefficients_to_incomplete_ntt_representation();
                 let mut new_row = vec![RingElement::one(), row[current_dim - 1].clone()];
-                ps.tensors.push_row(&mut new_row);
+                ps.tensors.push_col(&mut new_row);
+            }
+            while current_dim % 2 == 0 {
+                current_dim /= 2;
+
+                let mut one = RingElement::one();
+                one.from_even_odd_coefficients_to_incomplete_ntt_representation();
+
+                let mut new_col = Vec::with_capacity(ps.tensors.height);
+
+                for r in 0..ps.tensors.height {
+                    let value = if r == 0 {
+                        one.clone()
+                    } else if r == 1 {
+                        row[current_dim - 1].clone()
+                    } else {
+                        RingElement::zero(
+                            crate::common::ring_arithmetic::Representation::IncompleteNTT,
+                        )
+                    };
+
+                    new_col.push(value);
+                }
+
+                ps.tensors.push_col(&mut new_col);
             }
             ps
         })
