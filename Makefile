@@ -20,6 +20,9 @@ ALL_SRC = $(addprefix ./, $(SRC))
 wrapper:
 	$(CC) -std=c++17 -fPIC -shared -o libhexl_wrapper.so hexl-bindings/hexl_wrapper.cpp $(OPT_FLAGS) $(LIBS)
 
+wrapper_alt:
+	$(CC) -std=c++17 -fPIC -shared -o libhexl_wrapper.so hexl-bindings/hexl_wrapper_alt.cpp $(OPT_FLAGS)
+
 hexl: hexl/build
 	cmake --build ./hexl-bindings/hexl/build
 
