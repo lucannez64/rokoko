@@ -1,6 +1,5 @@
 use crate::common::ring_arithmetic::{Representation, RingElement};
 
-
 #[derive(Debug, Clone)]
 pub struct StructuredRow {
     pub tensor_layers: Vec<[RingElement; 2]>,
@@ -24,7 +23,6 @@ pub struct PreprocessedRow {
     pub preprocessed_row: Vec<RingElement>,
 }
 
-
 impl PreprocessedRow {
     pub fn from_structured_row(structured_row: StructuredRow) -> Self {
         let mut result = Vec::with_capacity(2usize.pow(structured_row.tensor_layers.len() as u32));
@@ -41,35 +39,80 @@ impl PreprocessedRow {
                 result.push(e);
             }
         }
-        PreprocessedRow { structured_row, preprocessed_row: result }
+        PreprocessedRow {
+            structured_row,
+            preprocessed_row: result,
+        }
     }
 }
 
 #[test]
 fn test_structured_row() {
     let tensor_layers = vec![
-        [RingElement::constant(1, Representation::IncompleteNTT), RingElement::constant(2, Representation::IncompleteNTT)],
-        [RingElement::constant(3, Representation::IncompleteNTT), RingElement::constant(4, Representation::IncompleteNTT)],
-        [RingElement::constant(5, Representation::IncompleteNTT), RingElement::constant(6, Representation::IncompleteNTT)],
+        [
+            RingElement::constant(1, Representation::IncompleteNTT),
+            RingElement::constant(2, Representation::IncompleteNTT),
+        ],
+        [
+            RingElement::constant(3, Representation::IncompleteNTT),
+            RingElement::constant(4, Representation::IncompleteNTT),
+        ],
+        [
+            RingElement::constant(5, Representation::IncompleteNTT),
+            RingElement::constant(6, Representation::IncompleteNTT),
+        ],
     ];
     let structured_row = StructuredRow { tensor_layers };
 
-    assert_eq!(structured_row.at(0), RingElement::constant(1 * 3 * 5, Representation::IncompleteNTT));
-    assert_eq!(structured_row.at(1), RingElement::constant(2 * 3 * 5, Representation::IncompleteNTT));
-    assert_eq!(structured_row.at(2), RingElement::constant(1 * 4 * 5, Representation::IncompleteNTT));
-    assert_eq!(structured_row.at(3), RingElement::constant(2 * 4 * 5, Representation::IncompleteNTT));
-    assert_eq!(structured_row.at(4), RingElement::constant(1 * 3 * 6, Representation::IncompleteNTT));
-    assert_eq!(structured_row.at(5), RingElement::constant(2 * 3 * 6, Representation::IncompleteNTT));
-    assert_eq!(structured_row.at(6), RingElement::constant(1 * 4 * 6, Representation::IncompleteNTT));
-    assert_eq!(structured_row.at(7), RingElement::constant(2 * 4 * 6, Representation::IncompleteNTT));
+    assert_eq!(
+        structured_row.at(0),
+        RingElement::constant(1 * 3 * 5, Representation::IncompleteNTT)
+    );
+    assert_eq!(
+        structured_row.at(1),
+        RingElement::constant(2 * 3 * 5, Representation::IncompleteNTT)
+    );
+    assert_eq!(
+        structured_row.at(2),
+        RingElement::constant(1 * 4 * 5, Representation::IncompleteNTT)
+    );
+    assert_eq!(
+        structured_row.at(3),
+        RingElement::constant(2 * 4 * 5, Representation::IncompleteNTT)
+    );
+    assert_eq!(
+        structured_row.at(4),
+        RingElement::constant(1 * 3 * 6, Representation::IncompleteNTT)
+    );
+    assert_eq!(
+        structured_row.at(5),
+        RingElement::constant(2 * 3 * 6, Representation::IncompleteNTT)
+    );
+    assert_eq!(
+        structured_row.at(6),
+        RingElement::constant(1 * 4 * 6, Representation::IncompleteNTT)
+    );
+    assert_eq!(
+        structured_row.at(7),
+        RingElement::constant(2 * 4 * 6, Representation::IncompleteNTT)
+    );
 }
 
 #[test]
 fn test_preprocessed_row() {
-        let tensor_layers = vec![
-        [RingElement::constant(1, Representation::IncompleteNTT), RingElement::constant(2, Representation::IncompleteNTT)],
-        [RingElement::constant(3, Representation::IncompleteNTT), RingElement::constant(4, Representation::IncompleteNTT)],
-        [RingElement::constant(5, Representation::IncompleteNTT), RingElement::constant(6, Representation::IncompleteNTT)],
+    let tensor_layers = vec![
+        [
+            RingElement::constant(1, Representation::IncompleteNTT),
+            RingElement::constant(2, Representation::IncompleteNTT),
+        ],
+        [
+            RingElement::constant(3, Representation::IncompleteNTT),
+            RingElement::constant(4, Representation::IncompleteNTT),
+        ],
+        [
+            RingElement::constant(5, Representation::IncompleteNTT),
+            RingElement::constant(6, Representation::IncompleteNTT),
+        ],
     ];
     let structured_row = StructuredRow { tensor_layers };
 

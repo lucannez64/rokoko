@@ -1,10 +1,11 @@
 use std::sync::LazyLock;
 
+pub mod arithmetic;
 pub mod config;
 pub mod hash;
-pub mod structured_row;
 pub mod ring_arithmetic;
 pub mod sampling;
+pub mod structured_row;
 pub mod witness;
 use crate::common::ring_arithmetic::*;
 

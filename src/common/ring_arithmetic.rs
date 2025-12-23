@@ -12,7 +12,7 @@ pub enum Representation {
     EvenOddCoefficients, // In this representation, coefficients are stored as even part followed by odd part. This is so that NTT can be applied more easily.
     IncompleteNTT, // Incomplete NTT representation, where even and odd parts are separately transformed.
     HomogenizedFieldExtensions, // We use that reprentation so that "Incomplete NTT slots" are homogenized, i.e. they are all of
-                                      // the structure Zq[X] / <X^2 + \alpha>, i.e. \alpha is the same for each slot.
+                                // the structure Zq[X] / <X^2 + \alpha>, i.e. \alpha is the same for each slot.
 }
 
 // DO NOT derive Copy here, as RingElement is large.
@@ -54,7 +54,7 @@ impl RingElement {
     pub fn one(representation: Representation) -> Self {
         let mut element = Self {
             v: [0; DEGREE],
-            representation: Representation::EvenOddCoefficients
+            representation: Representation::EvenOddCoefficients,
         };
         element.v[0] = 1;
 
@@ -76,7 +76,7 @@ impl RingElement {
     pub fn constant(value: u64, representation: Representation) -> Self {
         let mut element = Self {
             v: [0; DEGREE],
-            representation: Representation::EvenOddCoefficients
+            representation: Representation::EvenOddCoefficients,
         };
 
         element.v[0] = value;
@@ -85,8 +85,6 @@ impl RingElement {
 
         element
     }
-
-    
 
     pub fn random_bounded(representation: Representation, bound: u64) -> Self {
         let mut element = Self {
@@ -263,7 +261,6 @@ impl RingElement {
                 // nothing to do
             }
         }
-        
     }
 
     // Probably should never be used
@@ -415,11 +412,7 @@ pub fn incomplete_ntt_multiplication(
     incomplete_ntt_multiplication_inner(result, operand1, operand2, false);
 }
 
-
-pub fn incomplete_ntt_multiplication_in_place(
-    result: &mut RingElement,
-    operand: &RingElement,
-) {
+pub fn incomplete_ntt_multiplication_in_place(result: &mut RingElement, operand: &RingElement) {
     assert!(
         operand.representation == Representation::IncompleteNTT,
         "Operand not in Incomplete NTT representation"
@@ -429,10 +422,9 @@ pub fn incomplete_ntt_multiplication_in_place(
         "Result not in Incomplete NTT representation"
     );
 
-    // TODO: figure out if the cloning is needed 
+    // TODO: figure out if the cloning is needed
     incomplete_ntt_multiplication_in_place_inner(result, operand, false);
 }
-
 
 pub fn incomplete_ntt_multiplication_homogenized(
     result: &mut RingElement,
@@ -453,7 +445,6 @@ pub fn incomplete_ntt_multiplication_homogenized(
     );
     incomplete_ntt_multiplication_inner(result, operand1, operand2, true);
 }
-
 
 #[inline]
 pub fn incomplete_ntt_multiplication_inner(
@@ -545,7 +536,6 @@ pub fn incomplete_ntt_multiplication_inner(
     }
 }
 
-
 #[inline]
 pub fn incomplete_ntt_multiplication_in_place_inner(
     result: &mut RingElement,
@@ -633,8 +623,6 @@ pub fn incomplete_ntt_multiplication_in_place_inner(
         );
     }
 }
-
-
 
 pub fn naive_polynomial_multiplication(
     result: &mut RingElement,

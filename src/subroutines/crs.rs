@@ -1,7 +1,7 @@
 use crate::common::{
-    structured_row::StructuredRow,
     ring_arithmetic::{Representation, RingElement},
     sampling::sample_random_vector,
+    structured_row::StructuredRow,
 };
 
 /// Struct representing the Common Reference String (CRS) for cryptographic operations.
@@ -20,21 +20,24 @@ impl CRS {
 
         let nof_tensor_layers = wit_dim.ilog2() as usize;
 
-        let ck = v_module.iter().map(|elem| {
-            let mut tensor_layers = Vec::with_capacity(nof_tensor_layers);
-            let mut elem_power = elem.clone();
-            for i in 0..nof_tensor_layers {
-                let layer = [
-                    RingElement::one(Representation::IncompleteNTT),
-                    elem_power.clone(),
-                ];
-                // TODO how to optimize this?
-                // This is not very important as CRS generation is done only once.
-                elem_power *= &elem_power.clone();
-                tensor_layers.push(layer);
-            }
-            StructuredRow { tensor_layers }
-        }).collect();
+        let ck = v_module
+            .iter()
+            .map(|elem| {
+                let mut tensor_layers = Vec::with_capacity(nof_tensor_layers);
+                let mut elem_power = elem.clone();
+                for i in 0..nof_tensor_layers {
+                    let layer = [
+                        RingElement::one(Representation::IncompleteNTT),
+                        elem_power.clone(),
+                    ];
+                    // TODO how to optimize this?
+                    // This is not very important as CRS generation is done only once.
+                    elem_power *= &elem_power.clone();
+                    tensor_layers.push(layer);
+                }
+                StructuredRow { tensor_layers }
+            })
+            .collect();
 
         CRS { ck }
     }
