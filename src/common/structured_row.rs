@@ -2,6 +2,18 @@ use crate::common::ring_arithmetic::{Representation, RingElement};
 
 #[derive(Debug, Clone)]
 pub struct StructuredRow {
+    // Each layer corresponds to one dimension in the tensor product structure.
+    // Each layer has two elements, corresponding to the two choices (0 or 1) at that dimension.
+    // For example, for a 3-layer structured row, the tensor_layers might look like:
+    // [
+    //   [a0, a1],  // Layer 0
+    //   [b0, b1],  // Layer 1
+    //   [c0, c1],  // Layer 2
+    // ]
+    // Then, the entry at position 5 (binary 100) would be computed as:
+    // a0 * b0 * c1.
+    // Notably, the order of layers corresponds to the inverse order of bits in the index,
+    // (i.e. with the first layer corresponding to the least significant bit.)
     pub tensor_layers: Vec<[RingElement; 2]>,
 }
 

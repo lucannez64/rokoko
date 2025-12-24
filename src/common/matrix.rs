@@ -67,6 +67,7 @@ impl<T> VerticallyAlignedMatrix<T> {
     }
 }
 
+#[derive(Clone, Debug, PartialEq)]
 pub struct HorizontallyAlignedMatrix<T> {
     pub data: Vec<T>,
     pub width: usize,  // number of cols
