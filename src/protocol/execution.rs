@@ -1,7 +1,7 @@
 use crate::{
     common::{
-        ring_arithmetic::Representation, sampling::sample_random_short_vector,
-        vertically_aligned_matrix::VerticallyAlignedMatrix,
+        matrix::VerticallyAlignedMatrix, ring_arithmetic::Representation,
+        sampling::sample_random_short_vector,
     },
     protocol::{
         commitment::{self, commit},

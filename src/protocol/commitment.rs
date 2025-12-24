@@ -2,21 +2,22 @@ use std::ops::IndexMut;
 
 use crate::{
     common::{
+        matrix::{HorizontallyAlignedMatrix, VerticallyAlignedMatrix, ZeroNew},
         ring_arithmetic::{Representation, RingElement},
         structured_row::{PreprocessedRow, StructuredRow},
-        vertically_aligned_matrix::VerticallyAlignedMatrix,
     },
     protocol::crs::CRS,
 };
 
 pub struct Commitment {
     // TODO: add recursive layers of commitments
-    pub(crate) commitment: VerticallyAlignedMatrix<RingElement>,
+    pub(crate) commitment: HorizontallyAlignedMatrix<RingElement>,
 }
 
+// TODO: allow commitment to the prefix of the CK
 pub fn commit(crs: &CRS, witness: &VerticallyAlignedMatrix<RingElement>) -> Commitment {
     assert_eq!(crs.ck[0].preprocessed_row.len(), witness.height);
-    let mut commitment = VerticallyAlignedMatrix::<RingElement>::new(
+    let mut commitment = HorizontallyAlignedMatrix::<RingElement>::new_zero(
         crs.ck[0].preprocessed_row.len(),
         witness.width,
         &RingElement::zero(Representation::IncompleteNTT),
@@ -98,7 +99,7 @@ fn test_commitment_computation() {
     let commitment = commit(&crs, &witness);
 
     assert_eq!(
-        commitment.commitment.get(0, 0).unwrap(),
+        &commitment.commitment[(0, 0)],
         &RingElement::constant(
             1 * 1 + 2 * 2 + 4 * 3 + 8 * 4 + 16 * 5 + 32 * 6 + 64 * 7 + 128 * 8,
             Representation::IncompleteNTT
@@ -106,7 +107,7 @@ fn test_commitment_computation() {
     );
 
     assert_eq!(
-        commitment.commitment.get(0, 1).unwrap(),
+        &commitment.commitment[(0, 1)],
         &RingElement::constant(
             1 * 9 + 2 * 10 + 4 * 11 + 8 * 12 + 16 * 13 + 32 * 14 + 64 * 15 + 128 * 16,
             Representation::IncompleteNTT
@@ -114,7 +115,7 @@ fn test_commitment_computation() {
     );
 
     assert_eq!(
-        commitment.commitment.get(1, 0).unwrap(),
+        &commitment.commitment[(1, 0)],
         &RingElement::constant(
             1 * 1 + 4 * 2 + 16 * 3 + 64 * 4 + 256 * 5 + 1024 * 6 + 4096 * 7 + 16384 * 8,
             Representation::IncompleteNTT
@@ -122,7 +123,7 @@ fn test_commitment_computation() {
     );
 
     assert_eq!(
-        commitment.commitment.get(1, 1).unwrap(),
+        &commitment.commitment[(1, 1)],
         &RingElement::constant(
             1 * 9 + 4 * 10 + 16 * 11 + 64 * 12 + 256 * 13 + 1024 * 14 + 4096 * 15 + 16384 * 16,
             Representation::IncompleteNTT
