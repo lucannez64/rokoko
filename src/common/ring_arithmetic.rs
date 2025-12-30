@@ -89,7 +89,7 @@ impl RingElement {
     pub fn random_bounded(representation: Representation, bound: u64) -> Self {
         let mut element = Self {
             v: [0; DEGREE],
-            representation,
+            representation: Representation::Coefficients,
         };
 
         RNG.with(|cell| {
@@ -109,6 +109,8 @@ impl RingElement {
                 MOD_Q,
             );
         }
+
+        element.to_representation(representation);
 
         element
     }

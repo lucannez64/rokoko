@@ -17,7 +17,7 @@ pub fn sample_random_short_vector(
     let mut vec = Vec::with_capacity(size);
 
     for i in 0..size {
-        vec.push(RingElement::random_bounded(representation, bound)); // Sample from {-1, 0, 1}
+        vec.push(RingElement::random_bounded(representation, bound));
     }
     vec
 }

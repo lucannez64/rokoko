@@ -11,11 +11,13 @@ pub fn fold(
 
     assert_eq!(witness.width, fold_challenge.len());
 
+    let mut temp = RingElement::zero(Representation::IncompleteNTT);
     for col in 0..witness.width {
         for row in 0..folded_witness.height {
             let w_el = &witness[(row, col)];
             let challenge = &fold_challenge[col];
-            folded_witness[(row, 0)] += &(challenge * w_el);
+            temp *= (challenge, w_el);
+            folded_witness[(row, 0)] += &temp;
         }
     }
     folded_witness
