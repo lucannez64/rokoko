@@ -424,8 +424,14 @@ pub fn incomplete_ntt_multiplication_in_place(result: &mut RingElement, operand:
         "Result not in Incomplete NTT representation"
     );
 
-    // TODO: figure out if the cloning is needed
-    incomplete_ntt_multiplication_in_place_inner(result, operand, false);
+    // TODO: We need a copy of the original result because the in-place routine
+    // overwrites `result` while still reading from it. Without cloning, the
+    // computation produces incorrect values.
+    // Remove this cloning by implementing a proper in-place algorithm.
+    // incomplete_ntt_multiplication_in_place_inner(result, operand, false);
+    // seems to be broken for in-place multiplication.
+    let original = result.clone();
+    incomplete_ntt_multiplication(result, &original, operand);
 }
 
 pub fn incomplete_ntt_multiplication_homogenized(

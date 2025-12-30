@@ -3,16 +3,16 @@ use num::range;
 use crate::{
     common::{
         hash::HashWrapper,
-        matrix::{new_vec_zero_preallocated, HorizontallyAlignedMatrix, VerticallyAlignedMatrix},
+        matrix::{HorizontallyAlignedMatrix, VerticallyAlignedMatrix, new_vec_zero_preallocated},
         projection_matrix::ProjectionMatrix,
         ring_arithmetic::{Representation, RingElement},
-        sampling::sample_random_short_vector,
+        sampling::sample_random_short_vector, structured_row::{self, PreprocessedRow, StructuredRow},
     },
     protocol::{
-        commitment::{commit, Commitment},
+        commitment::{Commitment, commit},
         crs::CRS,
         fold::fold,
-        open::{open_at, Opening},
+        open::{Opening, evaluation_point_to_structured_row, open_at},
         project::project,
     },
 };

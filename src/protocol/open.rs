@@ -15,7 +15,7 @@ pub struct Opening {
     pub evaluation_points_outer: Vec<PreprocessedRow>,
 }
 
-fn evaluation_point_to_structured_row(evaluation_point: &Vec<RingElement>) -> StructuredRow {
+pub fn evaluation_point_to_structured_row(evaluation_point: &Vec<RingElement>) -> StructuredRow {
     StructuredRow {
         tensor_layers: evaluation_point.clone(),
     }
