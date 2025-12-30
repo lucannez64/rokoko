@@ -160,3 +160,28 @@ fn test_preprocessed_row() {
         assert_eq!(preprocessed_row.preprocessed_row[i], structured_row.at(i));
     }
 }
+
+#[test]
+fn test_at_matches_preprocessed_row_random() {
+    // Validate that StructuredRow::at stays consistent with the preprocessing logic
+    // for a handful of random evaluation points.
+    for _ in 0..5 {
+        let tensor_layers = (0..4)
+            .map(|_| RingElement::random(Representation::IncompleteNTT))
+            .collect::<Vec<_>>();
+        let structured_row = StructuredRow {
+            tensor_layers: tensor_layers.clone(),
+        };
+        let preprocessed_row = PreprocessedRow::from_structured_row(structured_row.clone());
+
+        for idx in 0..preprocessed_row.preprocessed_row.len() {
+            let from_at = structured_row.at(idx);
+            let from_pre = &preprocessed_row.preprocessed_row[idx];
+            assert_eq!(
+                &from_at, from_pre,
+                "Mismatch at idx {} for layers {:?}",
+                idx, tensor_layers
+            );
+        }
+    }
+}
