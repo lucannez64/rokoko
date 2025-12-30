@@ -1,3 +1,5 @@
+use std::process::exit;
+
 use num::range;
 
 use crate::{
@@ -11,7 +13,7 @@ use crate::{
     },
     protocol::{
         commitment::{commit, Commitment},
-        crs::CRS,
+        crs::{CK, CRS},
         fold::fold,
         open::{evaluation_point_to_structured_row, open_at, Opening},
         project::project,
@@ -60,7 +62,7 @@ pub fn prover_simple_round(
 }
 
 pub fn verifier_simple_round(
-    crs: &CRS,
+    ck: &CK,
     commitment: &Commitment,
     round_output: &RoundOutput,
     evaluation_points_inner: &Vec<Vec<RingElement>>,
@@ -82,10 +84,10 @@ pub fn verifier_simple_round(
         vec![RingElement::zero(Representation::IncompleteNTT); commitment.commitment.width];
     hash_wrapper.sample_biased_ternary_ring_element_vec_into(&mut fold_challenge);
 
-    let commitment_of_folded_witness = commit(crs, &round_output.folded_witness);
-    let mut folded_commitment = HorizontallyAlignedMatrix::new_zero_preallocated(crs.ck.len(), 1);
+    let commitment_of_folded_witness = commit(ck, &round_output.folded_witness);
+    let mut folded_commitment = HorizontallyAlignedMatrix::new_zero_preallocated(ck.len(), 1);
 
-    for i in 0..crs.ck.len() {
+    for i in 0..ck.len() {
         for col in 0..commitment.commitment.width {
             let mut temp = RingElement::zero(Representation::IncompleteNTT);
             temp *= (&commitment.commitment[(i, col)], &fold_challenge[col]);
@@ -162,7 +164,15 @@ pub fn execute() {
         data: sample_random_short_vector(256 * 16, 10, Representation::IncompleteNTT),
     };
 
-    let commitment = commit(&crs, &witness);
+    let ck = &crs.ck_for_wit_dim(witness.height);
+
+    println!("ck len: {}", crs.cks[2][0].preprocessed_row.len());
+    println!(
+        "ck tl: {}",
+        crs.cks[2][0].structured_row.tensor_layers.len()
+    );
+
+    let commitment = commit(&ck, &witness);
 
     let evaluation_points_inner = vec![range(0, witness.height.ilog2() as usize)
         .map(|_| RingElement::random_bounded(Representation::IncompleteNTT, 2))
@@ -180,7 +190,7 @@ pub fn execute() {
     );
 
     verifier_simple_round(
-        &crs,
+        &ck,
         &commitment,
         &round_output,
         &evaluation_points_inner,

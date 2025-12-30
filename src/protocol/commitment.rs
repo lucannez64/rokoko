@@ -6,7 +6,7 @@ use crate::{
         ring_arithmetic::{Representation, RingElement},
         structured_row::{PreprocessedRow, StructuredRow},
     },
-    protocol::crs::CRS,
+    protocol::crs::{CK, CRS},
 };
 
 pub struct Commitment {
@@ -21,11 +21,11 @@ pub fn init_prover_commitment(height: usize, width: usize) -> Commitment {
 }
 
 // TODO: allow commitment to the prefix of the CK
-pub fn commit(crs: &CRS, witness: &VerticallyAlignedMatrix<RingElement>) -> Commitment {
-    let mut commitment = init_prover_commitment(crs.ck.len(), witness.width);
-    assert_eq!(crs.ck[0].preprocessed_row.len(), witness.height);
+pub fn commit(ck: &CK, witness: &VerticallyAlignedMatrix<RingElement>) -> Commitment {
+    let mut commitment = init_prover_commitment(ck.len(), witness.width);
+    assert_eq!(ck[0].preprocessed_row.len(), witness.height);
 
-    for (i, row) in crs.ck.iter().enumerate() {
+    for (i, row) in ck.iter().enumerate() {
         let mut temp = RingElement::zero(Representation::IncompleteNTT);
         for col in 0..witness.width {
             for (elem, w_elem) in row.preprocessed_row.iter().zip(witness.col(col).iter()) {
@@ -39,40 +39,38 @@ pub fn commit(crs: &CRS, witness: &VerticallyAlignedMatrix<RingElement>) -> Comm
 
 #[test]
 fn test_commitment_computation() {
-    let crs = CRS {
-        ck: vec![
-            PreprocessedRow {
-                preprocessed_row: vec![
-                    RingElement::constant(1, Representation::IncompleteNTT),
-                    RingElement::constant(2, Representation::IncompleteNTT),
-                    RingElement::constant(4, Representation::IncompleteNTT),
-                    RingElement::constant(8, Representation::IncompleteNTT),
-                    RingElement::constant(16, Representation::IncompleteNTT),
-                    RingElement::constant(32, Representation::IncompleteNTT),
-                    RingElement::constant(64, Representation::IncompleteNTT),
-                    RingElement::constant(128, Representation::IncompleteNTT),
-                ],
-                structured_row: StructuredRow {
-                    tensor_layers: vec![], // incorrect but not used here
-                },
+    let ck: CK = vec![
+        PreprocessedRow {
+            preprocessed_row: vec![
+                RingElement::constant(1, Representation::IncompleteNTT),
+                RingElement::constant(2, Representation::IncompleteNTT),
+                RingElement::constant(4, Representation::IncompleteNTT),
+                RingElement::constant(8, Representation::IncompleteNTT),
+                RingElement::constant(16, Representation::IncompleteNTT),
+                RingElement::constant(32, Representation::IncompleteNTT),
+                RingElement::constant(64, Representation::IncompleteNTT),
+                RingElement::constant(128, Representation::IncompleteNTT),
+            ],
+            structured_row: StructuredRow {
+                tensor_layers: vec![], // incorrect but not used here
             },
-            PreprocessedRow {
-                preprocessed_row: vec![
-                    RingElement::constant(1, Representation::IncompleteNTT),
-                    RingElement::constant(4, Representation::IncompleteNTT),
-                    RingElement::constant(16, Representation::IncompleteNTT),
-                    RingElement::constant(64, Representation::IncompleteNTT),
-                    RingElement::constant(256, Representation::IncompleteNTT),
-                    RingElement::constant(1024, Representation::IncompleteNTT),
-                    RingElement::constant(4096, Representation::IncompleteNTT),
-                    RingElement::constant(16384, Representation::IncompleteNTT),
-                ],
-                structured_row: StructuredRow {
-                    tensor_layers: vec![], // incorrect but not used here
-                },
+        },
+        PreprocessedRow {
+            preprocessed_row: vec![
+                RingElement::constant(1, Representation::IncompleteNTT),
+                RingElement::constant(4, Representation::IncompleteNTT),
+                RingElement::constant(16, Representation::IncompleteNTT),
+                RingElement::constant(64, Representation::IncompleteNTT),
+                RingElement::constant(256, Representation::IncompleteNTT),
+                RingElement::constant(1024, Representation::IncompleteNTT),
+                RingElement::constant(4096, Representation::IncompleteNTT),
+                RingElement::constant(16384, Representation::IncompleteNTT),
+            ],
+            structured_row: StructuredRow {
+                tensor_layers: vec![], // incorrect but not used here
             },
-        ],
-    };
+        },
+    ];
 
     let witness = VerticallyAlignedMatrix {
         data: vec![
@@ -97,7 +95,7 @@ fn test_commitment_computation() {
         height: 8,
     };
 
-    let commitment = commit(&crs, &witness);
+    let commitment = commit(&ck, &witness);
 
     assert_eq!(
         &commitment.commitment[(0, 0)],
