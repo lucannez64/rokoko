@@ -24,7 +24,7 @@ static ZERO_REP_INCOMPLETE_NTT: LazyLock<RingElement> =
 // I envision the program running in 3 modes
 // 1) Default mode: no preallocation, just allocate as needed
 // 2) Warmup mode: no preallocation, but monitor the sizes of matrices being allocated and save the dimensions in a file
-// 3) Preallocation mode: preallocate a number of zero matrices of given sizes at the start of the program (based on the data from warmup mode). 
+// 3) Preallocation mode: preallocate a number of zero matrices of given sizes at the start of the program (based on the data from warmup mode).
 static PREALLOCATED_MATRICES: LazyLock<Mutex<HashMap<(usize, usize), Vec<Vec<RingElement>>>>> =
     LazyLock::new(|| Mutex::new(HashMap::new()));
 

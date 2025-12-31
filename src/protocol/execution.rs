@@ -38,7 +38,7 @@ pub fn prover_simple_round(
 
     let opening = open_at(&witness, &evaluation_points_inner, &evaluation_points_outer);
 
-    hash_wrapper.update_with_ring_element_slice(&opening.rhs.data);
+    hash_wrapper.update_with_ring_element_slice(&opening.rhs.commitment.data);
 
     let mut projection_matrix = ProjectionMatrix::new(8);
 
@@ -75,7 +75,7 @@ pub fn verifier_simple_round(
 
     let mut hash_wrapper = HashWrapper::new();
     hash_wrapper.update_with_ring_element_slice(&commitment.commitment.data);
-    hash_wrapper.update_with_ring_element_slice(&round_output.opening.rhs.data);
+    hash_wrapper.update_with_ring_element_slice(&round_output.opening.rhs.commitment.data);
 
     let mut projection_matrix = ProjectionMatrix::new(8);
     projection_matrix.sample(&mut hash_wrapper);
@@ -84,7 +84,7 @@ pub fn verifier_simple_round(
         vec![RingElement::zero(Representation::IncompleteNTT); commitment.commitment.width];
     hash_wrapper.sample_biased_ternary_ring_element_vec_into(&mut fold_challenge);
 
-    let commitment_of_folded_witness = commit(ck, &round_output.folded_witness);
+    let commitment_of_folded_witness = commit(ck, &round_output.folded_witness, &[]);
     let mut folded_commitment = VerticallyAlignedMatrix::new_zero_preallocated(ck.len(), 1);
 
     for i in 0..ck.len() {
@@ -103,18 +103,23 @@ pub fn verifier_simple_round(
         &vec![],
     );
 
-    let mut folded_opening =
-        VerticallyAlignedMatrix::new_zero_preallocated(round_output.opening.rhs.height, 1);
+    let mut folded_opening = VerticallyAlignedMatrix::new_zero_preallocated(
+        round_output.opening.rhs.commitment.height,
+        1,
+    );
 
-    for i in 0..round_output.opening.rhs.height {
+    for i in 0..round_output.opening.rhs.commitment.height {
         let mut temp = RingElement::zero(Representation::IncompleteNTT);
         for col in 0..commitment.commitment.width {
-            temp *= (&round_output.opening.rhs[(i, col)], &fold_challenge[col]);
+            temp *= (
+                &round_output.opening.rhs.commitment[(i, col)],
+                &fold_challenge[col],
+            );
             folded_opening[(i, 0)] += &temp;
         }
     }
 
-    assert_eq!(opening_to_folded_witness.rhs, folded_opening);
+    assert_eq!(opening_to_folded_witness.rhs.commitment, folded_opening);
 
     let projection_of_folded_witness = project(&round_output.folded_witness, &projection_matrix);
 
@@ -143,9 +148,9 @@ pub fn verifier_simple_round(
         .enumerate()
     {
         let mut temp = RingElement::zero(Representation::IncompleteNTT);
-        for col in 0..round_output.opening.rhs.width {
+        for col in 0..round_output.opening.rhs.commitment.width {
             temp *= (
-                &round_output.opening.rhs[(i, col)],
+                &round_output.opening.rhs.commitment[(i, col)],
                 &preprocessed_row_outer.preprocessed_row[col],
             );
             evaluation[i] += &temp;
@@ -166,7 +171,7 @@ pub fn execute() {
 
     let ck = &crs.ck_for_wit_dim(witness.height);
 
-    let commitment = commit(&ck, &witness);
+    let commitment = commit(&ck, &witness, &[]);
 
     let evaluation_points_inner = vec![range(0, witness.height.ilog2() as usize)
         .map(|_| RingElement::random_bounded(Representation::IncompleteNTT, 2))
