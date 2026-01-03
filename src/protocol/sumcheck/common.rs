@@ -21,7 +21,7 @@ pub trait HighOrderSumcheckData {
     // this is similar to univariate_polynomial_into but evaluates the polynomial at a given point
     fn univariate_polynomial_at_point_into(
         &self,
-        point: &HypercubePoint,
+        point: HypercubePoint, // this is just the usize so we pass it by value
         polynomial: &mut Polynomial,
     );
 }

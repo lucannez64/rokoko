@@ -50,14 +50,14 @@ impl HighOrderSumcheckData for ProductSumcheck<'_> {
         let half = len / 2;
         for i in 0..half {
             let point = HypercubePoint::new(i);
-            self.univariate_polynomial_at_point_into(&point, &mut temp_poly_0);
+            self.univariate_polynomial_at_point_into(point, &mut temp_poly_0);
             add_poly_in_place(polynomial, &temp_poly_0);
         }
     }
 
     fn univariate_polynomial_at_point_into(
         &self,
-        point: &HypercubePoint,
+        point: HypercubePoint,
         polynomial: &mut Polynomial,
     ) {
         // reset accumulator for this point
