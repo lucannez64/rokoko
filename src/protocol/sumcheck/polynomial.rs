@@ -87,3 +87,11 @@ pub fn add_poly_in_place(result: &mut Polynomial, poly: &Polynomial) {
 
     result.nof_coefficients = max(result.nof_coefficients, poly.nof_coefficients);
 }
+
+pub fn sub_poly_in_place(result: &mut Polynomial, poly: &Polynomial) {
+    for i in 0..poly.nof_coefficients {
+        result.coefficients[i] -= &poly.coefficients[i];
+    }
+
+    result.nof_coefficients = max(result.nof_coefficients, poly.nof_coefficients);
+}

@@ -6,13 +6,17 @@ use crate::{
         common::{HighOrderSumcheckData, SumcheckBaseData},
         hypercube_point::HypercubePoint,
         linear::LinearSumcheck,
-        polynomial::{add_poly_in_place, Polynomial},
+        polynomial::{add_poly_in_place, sub_poly_in_place, Polynomial},
     },
 };
 
 pub struct DiffSumcheck<'a> {
     pub sumcheck_0: &'a RefCell<dyn HighOrderSumcheckData + 'a>,
     pub sumcheck_1: &'a RefCell<dyn HighOrderSumcheckData + 'a>,
+
+    temp_poly_0: RefCell<Polynomial>,
+    temp_poly_1: RefCell<Polynomial>,
+    scratch_poly: RefCell<Polynomial>,
 }
 
 impl DiffSumcheck<'_> {
@@ -29,11 +33,17 @@ impl DiffSumcheck<'_> {
         DiffSumcheck {
             sumcheck_0,
             sumcheck_1,
+            temp_poly_0: RefCell::new(Polynomial::new(0, Representation::IncompleteNTT)),
+            temp_poly_1: RefCell::new(Polynomial::new(0, Representation::IncompleteNTT)),
+            scratch_poly: RefCell::new(Polynomial::new(0, Representation::IncompleteNTT)),
         }
     }
 }
 
 impl HighOrderSumcheckData for DiffSumcheck<'_> {
+    fn get_scratch_poly(&self) -> &RefCell<Polynomial> {
+        &self.scratch_poly
+    }
     fn nof_polynomial_coefficients(&self) -> usize {
         max(
             self.sumcheck_0.borrow().nof_polynomial_coefficients(),
@@ -51,9 +61,8 @@ impl HighOrderSumcheckData for DiffSumcheck<'_> {
     ) -> bool {
         polynomial.set_zero();
 
-        // TODO: optimize allocations
-        let mut temp_poly_0 = Polynomial::new(0, Representation::IncompleteNTT);
-        let mut temp_poly_1 = Polynomial::new(0, Representation::IncompleteNTT);
+        let mut temp_poly_0 = self.temp_poly_0.borrow_mut();
+        let mut temp_poly_1 = self.temp_poly_1.borrow_mut();
 
         self.sumcheck_0
             .borrow()
@@ -63,12 +72,8 @@ impl HighOrderSumcheckData for DiffSumcheck<'_> {
             .borrow()
             .univariate_polynomial_at_point_into(point, &mut temp_poly_1);
 
-        let max_deg = std::cmp::max(temp_poly_0.nof_coefficients, temp_poly_1.nof_coefficients);
-        for i in 0..max_deg {
-            polynomial.coefficients[i] =
-                &temp_poly_0.coefficients[i] - &temp_poly_1.coefficients[i];
-        }
-        polynomial.nof_coefficients = max_deg;
+        add_poly_in_place(polynomial, &temp_poly_0);
+        sub_poly_in_place(polynomial, &temp_poly_1);
 
         true
     }
@@ -90,9 +95,9 @@ fn test_diff_sumcheck_basic() {
         RingElement::constant(4, Representation::IncompleteNTT),
     ];
 
-    let sumcheck_0 = RefCell::new(LinearSumcheck::new(data_0.len(), data_0[0].representation));
+    let sumcheck_0 = RefCell::new(LinearSumcheck::new(data_0.len()));
     sumcheck_0.borrow_mut().from(&data_0);
-    let sumcheck_1 = RefCell::new(LinearSumcheck::new(data_1.len(), data_1[0].representation));
+    let sumcheck_1 = RefCell::new(LinearSumcheck::new(data_1.len()));
     sumcheck_1.borrow_mut().from(&data_1);
 
     let diff_sumcheck = DiffSumcheck::new(&sumcheck_0, &sumcheck_1);

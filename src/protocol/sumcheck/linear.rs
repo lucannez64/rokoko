@@ -1,4 +1,4 @@
-use std::ops::Index;
+use std::{cell::RefCell, ops::Index};
 
 use crate::{
     common::{
@@ -17,16 +17,16 @@ pub struct LinearSumcheck {
     pub data: Vec<RingElement>,
     variable_count: usize,
     mask: usize,
+    poly_scratch: RefCell<Polynomial>,
 }
 
 impl LinearSumcheck {
-    // TODO: think if the pattern is right here
-    // The idea is that we first create an empty sumcheck object and then fill it from a source vector
-    pub fn new(count: usize, representation: Representation) -> Self {
+    pub fn new(count: usize) -> Self {
         LinearSumcheck {
             data: new_vec_zero_preallocated(count),
             variable_count: count.ilog2() as usize,
             mask: count - 1, // this mask does nothing here
+            poly_scratch: RefCell::new(Polynomial::new(2, Representation::IncompleteNTT)),
         }
     }
 
@@ -49,6 +49,7 @@ impl LinearSumcheck {
             data: new_vec_zero_preallocated(count),
             variable_count: count.ilog2() as usize + preffix,
             mask: count - 1, // this mask will be used to ignore preffixed variables
+            poly_scratch: RefCell::new(Polynomial::new(2, representation)),
         }
     }
     pub fn from(&mut self, src: &Vec<RingElement>) {
@@ -66,6 +67,9 @@ impl Index<HypercubePoint> for LinearSumcheck {
 }
 
 impl HighOrderSumcheckData for LinearSumcheck {
+    fn get_scratch_poly(&self) -> &RefCell<Polynomial> {
+        &self.poly_scratch
+    }
     fn nof_polynomial_coefficients(&self) -> usize {
         2
     }
@@ -135,7 +139,7 @@ fn test_linear_sumcheck() {
         RingElement::constant(8, Representation::IncompleteNTT),
     ];
 
-    let mut sc = LinearSumcheck::new(data.len(), data[0].representation);
+    let mut sc = LinearSumcheck::new(data.len());
     sc.from(&data);
 
     // sumcheck execution
@@ -184,7 +188,7 @@ fn test_linear_sumcheck_univariate_polynomial() {
         RingElement::constant(8, Representation::IncompleteNTT),
     ];
 
-    let mut sc = LinearSumcheck::new(data.len(), data[0].representation);
+    let mut sc = LinearSumcheck::new(data.len());
     sc.from(&data);
 
     let mut poly = Polynomial::new(2, data[0].representation);

@@ -1,4 +1,4 @@
-use std::ops::Index;
+use std::{cell::RefCell, ops::Index};
 
 use crate::{
     common::ring_arithmetic::{Representation, RingElement},
@@ -16,11 +16,12 @@ pub trait SumcheckBaseData: HighOrderSumcheckData {
 pub trait HighOrderSumcheckData {
     fn nof_polynomial_coefficients(&self) -> usize;
     fn variable_count(&self) -> usize;
+    fn get_scratch_poly(&self) -> &RefCell<Polynomial>;
     // this is the univariate polynomial for the current variable with the other variables summed out
     // i.e. let a = f(x_0, x_1, ..., x_{n-1}) then this function returns g(x) = sum_{x_1, ..., x_{n-1}} f(x, x_1, ..., x_{n-1})
     fn univariate_polynomial_into(&self, polynomial: &mut Polynomial) {
         // TODO: optimize this to avoid allocating a temp polynomial each time
-        let mut temp = Polynomial::new(2, Representation::IncompleteNTT);
+        let temp = self.get_scratch_poly();
 
         polynomial.set_zero();
         polynomial.nof_coefficients = self.nof_polynomial_coefficients();
@@ -29,8 +30,11 @@ pub trait HighOrderSumcheckData {
         let half = len / 2;
 
         for i in 0..half {
-            self.univariate_polynomial_at_point_into(HypercubePoint::new(i), &mut temp);
-            add_poly_in_place(polynomial, &temp);
+            self.univariate_polynomial_at_point_into(
+                HypercubePoint::new(i),
+                &mut temp.borrow_mut(),
+            );
+            add_poly_in_place(polynomial, &temp.borrow());
         }
     }
 

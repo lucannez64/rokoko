@@ -1,4 +1,4 @@
-use std::ops::Index;
+use std::{cell::RefCell, ops::Index};
 
 use crate::{
     common::{
@@ -19,6 +19,8 @@ pub struct SelectorEq {
 
     // if we do partial evaluation, we have to store the current claim
     claim_factor: RingElement,
+    temp: RefCell<RingElement>,
+    scratch_poly: RefCell<Polynomial>,
 }
 
 // Selector is a sumcheck that of eq(x, s) over all x in {0,1}^n
@@ -39,11 +41,16 @@ impl SelectorEq {
             nof_variables_for_selector,
             nof_variables,
             claim_factor: RingElement::one(Representation::IncompleteNTT),
+            temp: RefCell::new(RingElement::zero(Representation::IncompleteNTT)),
+            scratch_poly: RefCell::new(Polynomial::new(2, Representation::IncompleteNTT)),
         }
     }
 }
 
 impl HighOrderSumcheckData for SelectorEq {
+    fn get_scratch_poly(&self) -> &RefCell<Polynomial> {
+        &self.scratch_poly
+    }
     fn nof_polynomial_coefficients(&self) -> usize {
         2
     }
@@ -113,10 +120,9 @@ impl SumcheckBaseData for SelectorEq {
             } else {
                 // then we have a function which is 1 when the variable is 0, and 0 when the variable is 1. So this is (1 - x)
 
-                // TODO: optimize memory allocations
-                let mut one = RingElement::one(Representation::IncompleteNTT);
-                one -= value;
-                self.claim_factor *= &one;
+                let mut temp = self.temp.borrow_mut();
+                *temp *= (value, &self.claim_factor); // temp = claim_factor * value
+                self.claim_factor -= &*temp;
             }
             self.selector &= (1 << (self.nof_variables_for_selector - 1)) - 1;
             self.nof_variables_for_selector -= 1;
@@ -217,8 +223,10 @@ fn test_selector_eq_basic() {
 
     assert_eq!(&polynomial.at_zero() + &polynomial.at_one(), claim);
 
-
-    assert_eq!(polynomial.coefficients[1], RingElement::zero(Representation::IncompleteNTT));
+    assert_eq!(
+        polynomial.coefficients[1],
+        RingElement::zero(Representation::IncompleteNTT)
+    );
     // after partial evaluation at r1, the function is constant, so the coeff of x is 0
 
     let r2 = RingElement::constant(19, Representation::IncompleteNTT);
@@ -260,5 +268,4 @@ fn test_selector_eq_basic() {
     );
 
     assert_eq!(sumcheck.final_evaluations(), &claim);
-
 }

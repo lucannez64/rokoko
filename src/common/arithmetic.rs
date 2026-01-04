@@ -1,3 +1,5 @@
+use std::sync::LazyLock;
+
 use crate::common::{
     ring_arithmetic::{incomplete_ntt_multiplication, Representation, RingElement},
     structured_row::StructuredRow,
@@ -13,3 +15,9 @@ pub fn inner_product(a: &Vec<RingElement>, b: &Vec<RingElement>) -> RingElement 
     }
     result
 }
+
+pub static ONE: LazyLock<RingElement> =
+    LazyLock::new(|| RingElement::one(Representation::IncompleteNTT));
+
+pub static ZERO: LazyLock<RingElement> =
+    LazyLock::new(|| RingElement::zero(Representation::IncompleteNTT));

@@ -9,12 +9,17 @@ pub mod projection_matrix;
 pub mod ring_arithmetic;
 pub mod sampling;
 pub mod structured_row;
-use crate::common::ring_arithmetic::*;
+use crate::common::{
+    arithmetic::{ONE, ZERO},
+    ring_arithmetic::*,
+};
 
 pub fn init_common() {
     LazyLock::force(&SHIFT_FACTORS);
     LazyLock::force(&NORMALIZE_INCOMPLETE_NTT_FACTORS);
     LazyLock::force(&NORMALIZE_INCOMPLETE_NTT_FACTORS_INVERSE);
+    LazyLock::force(&ONE);
+    LazyLock::force(&ZERO);
     unsafe { LazyLock::force_mut(&mut crate::common::ring_arithmetic::temp_buffer) };
 
     // init some caches of HEXL

@@ -17,6 +17,10 @@ use crate::{
 pub struct ProductSumcheck<'a> {
     pub sumcheck_0: &'a RefCell<dyn HighOrderSumcheckData + 'a>, // interior mutability to share between protocols
     pub sumcheck_1: &'a RefCell<dyn HighOrderSumcheckData + 'a>,
+
+    temp_poly_0: RefCell<Polynomial>,
+    temp_poly_1: RefCell<Polynomial>,
+    scratch_poly: RefCell<Polynomial>,
 }
 
 impl ProductSumcheck<'_> {
@@ -33,11 +37,17 @@ impl ProductSumcheck<'_> {
         ProductSumcheck {
             sumcheck_0,
             sumcheck_1,
+            temp_poly_0: RefCell::new(Polynomial::new(0, Representation::IncompleteNTT)),
+            temp_poly_1: RefCell::new(Polynomial::new(0, Representation::IncompleteNTT)),
+            scratch_poly: RefCell::new(Polynomial::new(0, Representation::IncompleteNTT)),
         }
     }
 }
 
 impl HighOrderSumcheckData for ProductSumcheck<'_> {
+    fn get_scratch_poly(&self) -> &RefCell<Polynomial> {
+        &self.scratch_poly
+    }
     fn nof_polynomial_coefficients(&self) -> usize {
         self.sumcheck_0.borrow().nof_polynomial_coefficients()
             + self.sumcheck_1.borrow().nof_polynomial_coefficients()
@@ -57,8 +67,8 @@ impl HighOrderSumcheckData for ProductSumcheck<'_> {
         polynomial.set_zero();
         polynomial.nof_coefficients = 0;
 
-        let mut temp_poly_0 = Polynomial::new(0, Representation::IncompleteNTT);
-        let mut temp_poly_1 = Polynomial::new(0, Representation::IncompleteNTT);
+        let mut temp_poly_0 = self.temp_poly_0.borrow_mut();
+        let mut temp_poly_1 = self.temp_poly_1.borrow_mut();
 
         self.sumcheck_0
             .borrow()
@@ -98,9 +108,9 @@ fn test_inner_product_sumcheck() {
         RingElement::constant(16, Representation::IncompleteNTT),
     ];
 
-    let sumcheck_0 = RefCell::new(LinearSumcheck::new(data_0.len(), data_0[0].representation));
+    let sumcheck_0 = RefCell::new(LinearSumcheck::new(data_0.len()));
     sumcheck_0.borrow_mut().from(&data_0);
-    let sumcheck_1 = RefCell::new(LinearSumcheck::new(data_1.len(), data_1[0].representation));
+    let sumcheck_1 = RefCell::new(LinearSumcheck::new(data_1.len()));
     sumcheck_1.borrow_mut().from(&data_1);
 
     let inner_product_sumcheck = ProductSumcheck::new(&sumcheck_0, &sumcheck_1);
@@ -227,7 +237,7 @@ fn test_self_inner_product_sumcheck() {
         RingElement::constant(8, Representation::IncompleteNTT),
     ];
 
-    let sumcheck = RefCell::new(LinearSumcheck::new(data.len(), data[0].representation));
+    let sumcheck = RefCell::new(LinearSumcheck::new(data.len()));
     sumcheck.borrow_mut().from(&data);
 
     let inner_product_sumcheck = ProductSumcheck::new(&sumcheck, &sumcheck);
@@ -268,11 +278,11 @@ fn test_three_way_sumcheck() {
         RingElement::constant(12, Representation::IncompleteNTT),
     ];
 
-    let mut sumcheck_0 = LinearSumcheck::new(data0.len(), data0[0].representation);
+    let mut sumcheck_0 = LinearSumcheck::new(data0.len());
     sumcheck_0.from(&data0);
-    let mut sumcheck_1 = LinearSumcheck::new(data1.len(), data1[0].representation);
+    let mut sumcheck_1 = LinearSumcheck::new(data1.len());
     sumcheck_1.from(&data1);
-    let mut sumcheck_2 = LinearSumcheck::new(data2.len(), data2[0].representation);
+    let mut sumcheck_2 = LinearSumcheck::new(data2.len());
     sumcheck_2.from(&data2);
 
     let sumcheck_0_ref = RefCell::new(sumcheck_0);
