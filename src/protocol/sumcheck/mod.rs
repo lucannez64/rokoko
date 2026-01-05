@@ -62,15 +62,6 @@ mod tests {
         let witness_sc = RefCell::new(LinearSumcheck::new(witness.len()));
         witness_sc.borrow_mut().load_from(&witness);
 
-        // let witness_sc = RefCell::new(LinearSumcheck::new_with_prefixed_data(
-        //     witness.len() / 2,
-        //     repr,
-        //     1,
-        // ));
-        // witness_sc
-        //     .borrow_mut()
-        //     .load_from(&witness[witness.len() / 2..]);
-
         let lhs_coeff_sumcheck = RefCell::new(LinearSumcheck::new_with_prefixed_data(
             lhs_coeffs.len(),
             repr,

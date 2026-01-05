@@ -6,6 +6,7 @@ use crate::{
         common::HighOrderSumcheckData,
         hypercube_point::HypercubePoint,
         polynomial::{add_poly_in_place, sub_poly_in_place, Polynomial},
+        selector_eq::SelectorEq,
     },
 };
 
@@ -61,29 +62,37 @@ impl HighOrderSumcheckData for DiffSumcheck<'_> {
         self.lhs_sumcheck.borrow().variable_count()
     }
 
+    fn is_univariate_polynomial_zero_at_point(&self, point: HypercubePoint) -> bool {
+        self.lhs_sumcheck
+            .borrow()
+            .is_univariate_polynomial_zero_at_point(point)
+            && self
+                .rhs_sumcheck
+                .borrow()
+                .is_univariate_polynomial_zero_at_point(point)
+    }
+
     fn univariate_polynomial_at_point_into(
         &self,
         point: HypercubePoint,
         polynomial: &mut Polynomial,
-    ) -> bool {
+    ) {
         // Compute the per-round polynomial as the difference of the two inputs.
         polynomial.set_zero();
 
         let mut lhs_eval_poly = self.lhs_eval_poly.borrow_mut();
+        let lhs_sumcheck = self.lhs_sumcheck.borrow();
+        if !lhs_sumcheck.is_univariate_polynomial_zero_at_point(point) {
+            lhs_sumcheck.univariate_polynomial_at_point_into(point, &mut lhs_eval_poly);
+            add_poly_in_place(polynomial, &lhs_eval_poly);
+        }
+
         let mut rhs_eval_poly = self.rhs_eval_poly.borrow_mut();
-
-        self.lhs_sumcheck
-            .borrow()
-            .univariate_polynomial_at_point_into(point, &mut lhs_eval_poly);
-
-        self.rhs_sumcheck
-            .borrow()
-            .univariate_polynomial_at_point_into(point, &mut rhs_eval_poly);
-
-        add_poly_in_place(polynomial, &lhs_eval_poly);
-        sub_poly_in_place(polynomial, &rhs_eval_poly);
-
-        true
+        let rhs_sumcheck = self.rhs_sumcheck.borrow();
+        if !rhs_sumcheck.is_univariate_polynomial_zero_at_point(point) {
+            rhs_sumcheck.univariate_polynomial_at_point_into(point, &mut rhs_eval_poly);
+            sub_poly_in_place(polynomial, &rhs_eval_poly);
+        }
     }
 }
 
@@ -124,4 +133,22 @@ fn test_diff_sumcheck_basic() {
     sumcheck_1.borrow_mut().partial_evaluate(&r0);
     diff_sumcheck.univariate_polynomial_into(&mut poly);
     assert_eq!(&poly.at_zero() + &poly.at_one(), claim_r0);
+}
+
+#[test]
+fn diff_with_eqs() {
+    let lhs = RefCell::new(SelectorEq::new(0b101, 3, 5));
+    let rhs = RefCell::new(SelectorEq::new(0b011, 3, 5));
+
+    let diff = DiffSumcheck::new(&lhs, &rhs);
+
+    let claim = RingElement::constant(0, Representation::IncompleteNTT);
+
+    // Initial claim: the difference of the two selectors over the full hypercube is zero.
+    // Both selectors are 1 at exactly 4 points, so their difference sums to zero.
+
+    let mut poly = Polynomial::new(0, Representation::IncompleteNTT);
+    diff.univariate_polynomial_into(&mut poly);
+
+    assert_eq!(&poly.at_zero() + &poly.at_one(), claim);
 }

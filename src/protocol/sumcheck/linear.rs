@@ -82,7 +82,7 @@ impl HighOrderSumcheckData for LinearSumcheck {
         &self,
         point: HypercubePoint,
         polynomial: &mut Polynomial,
-    ) -> bool {
+    ) {
         // Current round splits the hypercube into two halves depending on the
         // value of the highest-order variable.
         let len = 1 << self.variable_count;
@@ -93,8 +93,10 @@ impl HighOrderSumcheckData for LinearSumcheck {
         polynomial.coefficients[1] += &self[point.moved(half)]; // coeff of x
         polynomial.coefficients[1] -= &self[point]; // coeff of x
         polynomial.num_coefficients = 2;
+    }
 
-        true
+    fn is_univariate_polynomial_zero_at_point(&self, point: HypercubePoint) -> bool {
+        false // even if the polynomial is zero, we still need to perform the folding as normal
     }
 
     fn variable_count(&self) -> usize {

@@ -32,6 +32,9 @@ pub trait HighOrderSumcheckData {
         // Enumerate over the first half of the hypercube; the polynomial at the
         // corresponding point in the second half is handled by the callee.
         for i in 0..half_hypercube {
+            if self.is_univariate_polynomial_zero_at_point(HypercubePoint::new(i)) {
+                continue;
+            }
             self.univariate_polynomial_at_point_into(
                 HypercubePoint::new(i),
                 &mut temp.borrow_mut(),
@@ -41,12 +44,13 @@ pub trait HighOrderSumcheckData {
     }
 
     // this is similar to univariate_polynomial_into but evaluates the polynomial at a given point.
-    // We ruturn `false` is the polynomial is identically zero (for efficiency in some cases)
     fn univariate_polynomial_at_point_into(
         &self,
         point: HypercubePoint, // this is just the usize so we pass it by value
         polynomial: &mut Polynomial,
-    ) -> bool;
+    );
+
+    fn is_univariate_polynomial_zero_at_point(&self, point: HypercubePoint) -> bool;
 }
 
 pub trait SumcheckBaseData: HighOrderSumcheckData {

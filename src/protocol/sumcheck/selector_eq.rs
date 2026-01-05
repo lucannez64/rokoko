@@ -65,18 +65,30 @@ impl HighOrderSumcheckData for SelectorEq {
         self.total_variable_count
     }
 
+    fn is_univariate_polynomial_zero_at_point(&self, point: HypercubePoint) -> bool {
+        if self.selector_variable_count == 0 {
+            return false; // now we have a constant function
+        }
+
+        let point_higher_bits =
+            point.shifted(self.total_variable_count - self.selector_variable_count);
+
+        let selector_bits = self.selector & ((1 << self.selector_variable_count - 1) - 1); // mask to get only the relevant bits
+        point_higher_bits.coordinates != selector_bits
+    }
+
     fn univariate_polynomial_at_point_into(
         &self,
         point: HypercubePoint,
         polynomial: &mut Polynomial,
-    ) -> bool {
+    ) {
         polynomial.set_zero();
         polynomial.num_coefficients = 2;
 
         if self.selector_variable_count == 0 {
             // now we have a constrant function which is always 1
             polynomial.coefficients[0] += &self.current_claim;
-            return true;
+            return;
         }
 
         // We evaluate from the highest order bit to the lowest order bit
@@ -87,10 +99,10 @@ impl HighOrderSumcheckData for SelectorEq {
 
         let selector_bits = self.selector & ((1 << self.selector_variable_count - 1) - 1); // mask to get only the relevant bits
 
-        if point_higher_bits.coordinates != selector_bits {
-            // the polynomial is identically zero
-            return false;
-        }
+        assert_eq!(
+            point_higher_bits.coordinates, selector_bits,
+            "the polynomial is identically zero at this point. Eval should not be called."
+        );
 
         let current_bit = (self.selector >> (self.selector_variable_count - 1)) & 1;
 
@@ -102,8 +114,6 @@ impl HighOrderSumcheckData for SelectorEq {
             polynomial.coefficients[0] += &self.current_claim;
             polynomial.coefficients[1] -= &self.current_claim;
         }
-
-        true
     }
 }
 
@@ -152,23 +162,32 @@ fn test_selector_eq_basic() {
     let mut polynomial = Polynomial::new(2, Representation::IncompleteNTT);
 
     // Irrelevant points should produce an identically-zero polynomial.
-    let result =
-        sumcheck.univariate_polynomial_at_point_into(HypercubePoint::new(0b100), &mut polynomial);
+    // let result =
+    //     sumcheck.univariate_polynomial_at_point_into(HypercubePoint::new(0b100), &mut polynomial);
 
     // 0b0100 and 0b1100 do not match the selector in the higher order bits, so the polynomial is identically zero
-    assert_eq!(result, false);
+    assert_eq!(
+        sumcheck.is_univariate_polynomial_zero_at_point(HypercubePoint::new(0b100)),
+        true
+    );
 
-    let result =
-        sumcheck.univariate_polynomial_at_point_into(HypercubePoint::new(0b101), &mut polynomial);
+    // let result =
+    // sumcheck.univariate_polynomial_at_point_into(HypercubePoint::new(0b101), &mut polynomial);
 
     // 0b0101 and 0b1101 do not match the selector in the higher order bits, so the polynomial is identically zero
-    assert_eq!(result, false);
+    assert_eq!(
+        sumcheck.is_univariate_polynomial_zero_at_point(HypercubePoint::new(0b101)),
+        true
+    );
 
     let result =
         sumcheck.univariate_polynomial_at_point_into(HypercubePoint::new(0b010), &mut polynomial);
 
     // 0b1010 matches the selector in the higher order bits
-    assert_eq!(result, true);
+    assert_eq!(
+        sumcheck.is_univariate_polynomial_zero_at_point(HypercubePoint::new(0b010)),
+        false
+    );
 
     // as selector = 0b10, the polynomial should be x as it's 1 when the variable is 1, and 0 when the variable is 0
     assert_eq!(

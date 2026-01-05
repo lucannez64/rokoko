@@ -62,11 +62,21 @@ impl HighOrderSumcheckData for ProductSumcheck<'_> {
         self.lhs_sumcheck.borrow().variable_count()
     }
 
+    fn is_univariate_polynomial_zero_at_point(&self, point: HypercubePoint) -> bool {
+        self.lhs_sumcheck
+            .borrow()
+            .is_univariate_polynomial_zero_at_point(point)
+            || self
+                .rhs_sumcheck
+                .borrow()
+                .is_univariate_polynomial_zero_at_point(point)
+    }
+
     fn univariate_polynomial_at_point_into(
         &self,
         point: HypercubePoint,
         polynomial: &mut Polynomial,
-    ) -> bool {
+    ) {
         // Reset accumulator for this point and build g(x) = g_lhs(x) * g_rhs(x).
         polynomial.set_zero();
         polynomial.num_coefficients = 0;
@@ -83,8 +93,6 @@ impl HighOrderSumcheckData for ProductSumcheck<'_> {
             .univariate_polynomial_at_point_into(point, &mut rhs_eval_poly);
 
         mul_poly_into(polynomial, &lhs_eval_poly, &rhs_eval_poly);
-
-        true
     }
 }
 
