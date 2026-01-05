@@ -52,9 +52,9 @@ impl HighOrderSumcheckData for ProductSumcheck<'_> {
     fn get_scratch_poly(&self) -> &RefCell<Polynomial> {
         &self.scratch_poly
     }
-    fn num_polynomial_coefficients(&self) -> usize {
-        self.lhs_sumcheck.borrow().num_polynomial_coefficients()
-            + self.rhs_sumcheck.borrow().num_polynomial_coefficients()
+    fn max_num_polynomial_coefficients(&self) -> usize {
+        self.lhs_sumcheck.borrow().max_num_polynomial_coefficients()
+            + self.rhs_sumcheck.borrow().max_num_polynomial_coefficients()
             - 1
     }
 

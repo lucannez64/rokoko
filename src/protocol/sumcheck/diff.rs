@@ -52,10 +52,10 @@ impl HighOrderSumcheckData for DiffSumcheck<'_> {
     fn get_scratch_poly(&self) -> &RefCell<Polynomial> {
         &self.scratch_poly
     }
-    fn num_polynomial_coefficients(&self) -> usize {
+    fn max_num_polynomial_coefficients(&self) -> usize {
         max(
-            self.lhs_sumcheck.borrow().num_polynomial_coefficients(),
-            self.rhs_sumcheck.borrow().num_polynomial_coefficients(),
+            self.lhs_sumcheck.borrow().max_num_polynomial_coefficients(),
+            self.rhs_sumcheck.borrow().max_num_polynomial_coefficients(),
         )
     }
     fn variable_count(&self) -> usize {

@@ -13,7 +13,7 @@ use crate::{
 /// composed with other sumchecks (products, differences, etc.).
 pub trait HighOrderSumcheckData {
     /// Degree + 1 of the univariate polynomial produced at each round.
-    fn num_polynomial_coefficients(&self) -> usize;
+    fn max_num_polynomial_coefficients(&self) -> usize;
     fn variable_count(&self) -> usize;
     /// Mutable scratch polynomial to avoid allocations between rounds.
     fn get_scratch_poly(&self) -> &RefCell<Polynomial>;
@@ -24,7 +24,7 @@ pub trait HighOrderSumcheckData {
         let temp = self.get_scratch_poly();
 
         polynomial.set_zero();
-        polynomial.num_coefficients = self.num_polynomial_coefficients();
+        polynomial.num_coefficients = 0; // will be updated as we add terms
 
         let hypercube_size = 1 << self.variable_count();
         let half_hypercube = hypercube_size / 2;

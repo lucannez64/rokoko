@@ -74,7 +74,7 @@ impl HighOrderSumcheckData for LinearSumcheck {
     fn get_scratch_poly(&self) -> &RefCell<Polynomial> {
         &self.poly_scratch
     }
-    fn num_polynomial_coefficients(&self) -> usize {
+    fn max_num_polynomial_coefficients(&self) -> usize {
         2
     }
 
@@ -89,6 +89,13 @@ impl HighOrderSumcheckData for LinearSumcheck {
         let half = len / 2;
         polynomial.coefficients[0].set_zero();
         polynomial.coefficients[0] += &self[point]; // constant term
+
+        if self.variable_count > self.data.len().trailing_zeros() as usize {
+            // we have some prefixed variables
+            polynomial.num_coefficients = 1;
+            return;
+        }
+
         polynomial.coefficients[1].set_zero();
         polynomial.coefficients[1] += &self[point.moved(half)]; // coeff of x
         polynomial.coefficients[1] -= &self[point]; // coeff of x
@@ -266,6 +273,8 @@ fn test_masked_sumcheck_indexing() {
         RingElement::constant(0, Representation::IncompleteNTT)
     );
 
+    assert_eq!(poly.num_coefficients, 1);
+
     let claim = RingElement::constant(
         (1 + 2 + 3 + 4 + 5 + 6 + 7 + 8) * 4,
         Representation::IncompleteNTT,
@@ -299,6 +308,8 @@ fn test_masked_sumcheck_indexing() {
         RingElement::constant(0, Representation::IncompleteNTT)
     );
 
+    assert_eq!(poly.num_coefficients, 1);
+
     assert_eq!(&poly.at_zero() + &poly.at_one(), new_claim);
 
     let r1 = RingElement::constant(1337, Representation::IncompleteNTT);
@@ -326,6 +337,8 @@ fn test_masked_sumcheck_indexing() {
             Representation::IncompleteNTT
         )
     );
+
+    assert_eq!(poly.num_coefficients, 2);
 
     // and let's run it until the end
 

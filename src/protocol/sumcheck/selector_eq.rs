@@ -58,7 +58,7 @@ impl HighOrderSumcheckData for SelectorEq {
     fn get_scratch_poly(&self) -> &RefCell<Polynomial> {
         &self.scratch_poly
     }
-    fn num_polynomial_coefficients(&self) -> usize {
+    fn max_num_polynomial_coefficients(&self) -> usize {
         2
     }
     fn variable_count(&self) -> usize {
@@ -88,6 +88,7 @@ impl HighOrderSumcheckData for SelectorEq {
         if self.selector_variable_count == 0 {
             // now we have a constrant function which is always 1
             polynomial.coefficients[0] += &self.current_claim;
+            polynomial.num_coefficients = 1;
             return;
         }
 
@@ -109,10 +110,12 @@ impl HighOrderSumcheckData for SelectorEq {
         if current_bit == 1 {
             // then we have a function which is 1 when the variable is 1, and 0 when the variable is 0. So this is an identity
             polynomial.coefficients[1] += &self.current_claim;
+            polynomial.num_coefficients = 2;
         } else {
             // then we have a function which is 1 when the variable is 0, and 0 when the variable is 1. So this is (1 - x)
             polynomial.coefficients[0] += &self.current_claim;
             polynomial.coefficients[1] -= &self.current_claim;
+            polynomial.num_coefficients = 2;
         }
     }
 }
