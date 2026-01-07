@@ -3,6 +3,7 @@ use std::ops::{AddAssign, MulAssign, SubAssign};
 use crate::common::{
     matrix::new_vec_zero_preallocated,
     ring_arithmetic::{Representation, RingElement},
+    QuadraticExtension, SHIFT_FACTORS,
 };
 
 /// Minimal operations Sumcheck and Polynomial need from a field-like element.
@@ -42,5 +43,35 @@ impl SumcheckElement for RingElement {
 
     fn allocate_zero_vec(len: usize) -> Vec<Self> {
         new_vec_zero_preallocated(len)
+    }
+}
+
+impl SumcheckElement for QuadraticExtension {
+    fn zero() -> Self {
+        QuadraticExtension {
+            coeffs: [0, 0],
+            shift: SHIFT_FACTORS[0],
+        }
+    }
+
+    fn one() -> Self {
+        QuadraticExtension {
+            coeffs: [1, 0],
+            shift: SHIFT_FACTORS[0],
+        }
+    }
+
+    fn set_zero(&mut self) {
+        self.coeffs = [0, 0];
+    }
+
+    fn allocate_zero_vec(len: usize) -> Vec<Self> {
+        vec![
+            QuadraticExtension {
+                coeffs: [0, 0],
+                shift: SHIFT_FACTORS[0],
+            };
+            len
+        ]
     }
 }

@@ -811,7 +811,7 @@ impl MulAssign<(&RingElement, &RingElement)> for RingElement {
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub struct QuadraticExtension {
     pub coeffs: [u64; 2],
-    shift: u64,
+    pub(crate) shift: u64,
 }
 
 impl Add for QuadraticExtension {
@@ -866,6 +866,51 @@ impl Mul for QuadraticExtension {
             coeffs,
             shift: self.shift, // Assuming shift remains unchanged
         }
+    }
+}
+
+impl<'a> AddAssign<&'a QuadraticExtension> for QuadraticExtension {
+    fn add_assign(&mut self, other: &'a QuadraticExtension) {
+        assert_eq!(self.shift, other.shift);
+        unsafe {
+            self.coeffs[0] = add_mod(self.coeffs[0], other.coeffs[0], MOD_Q);
+            self.coeffs[1] = add_mod(self.coeffs[1], other.coeffs[1], MOD_Q);
+        }
+    }
+}
+
+impl<'a> SubAssign<&'a QuadraticExtension> for QuadraticExtension {
+    fn sub_assign(&mut self, other: &'a QuadraticExtension) {
+        assert_eq!(self.shift, other.shift);
+        unsafe {
+            self.coeffs[0] = sub_mod(self.coeffs[0], other.coeffs[0], MOD_Q);
+            self.coeffs[1] = sub_mod(self.coeffs[1], other.coeffs[1], MOD_Q);
+        }
+    }
+}
+
+impl<'a> MulAssign<&'a QuadraticExtension> for QuadraticExtension {
+    fn mul_assign(&mut self, other: &'a QuadraticExtension) {
+        assert_eq!(self.shift, other.shift);
+        let a = self.coeffs[0];
+        let b = self.coeffs[1];
+        let c = other.coeffs[0];
+        let d = other.coeffs[1];
+        unsafe {
+            self.coeffs[0] = add_mod(
+                multiply_mod(a, c, MOD_Q),
+                multiply_mod(self.shift, multiply_mod(b, d, MOD_Q), MOD_Q),
+                MOD_Q,
+            );
+            self.coeffs[1] = add_mod(multiply_mod(a, d, MOD_Q), multiply_mod(b, c, MOD_Q), MOD_Q);
+        }
+    }
+}
+
+impl<'a> MulAssign<(&'a QuadraticExtension, &'a QuadraticExtension)> for QuadraticExtension {
+    fn mul_assign(&mut self, other: (&'a QuadraticExtension, &'a QuadraticExtension)) {
+        let (lhs, rhs) = other;
+        *self = *lhs * *rhs;
     }
 }
 
