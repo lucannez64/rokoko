@@ -1,7 +1,10 @@
 use std::cell::RefCell;
 
 use crate::{
-    common::{ring_arithmetic::Representation, sumcheck_element::SumcheckElement},
+    common::{
+        ring_arithmetic::{Representation, RingElement},
+        sumcheck_element::SumcheckElement,
+    },
     protocol::sumcheck::{
         common::HighOrderSumcheckData,
         hypercube_point::HypercubePoint,
@@ -11,14 +14,14 @@ use crate::{
 
 #[cfg(test)]
 use crate::{
-    common::{config::MOD_Q, ring_arithmetic::RingElement},
+    common::config::MOD_Q,
     protocol::sumcheck::{common::SumcheckBaseData, linear::LinearSumcheck},
 };
 
 /// Sumcheck data that represents a pointwise product of two other sumcheck polynomials.
 /// Each inner sumcheck is evaluated at the same hypercube point and the resulting
 /// univariate polynomials are multiplied together.
-pub struct ProductSumcheck<'a, E: SumcheckElement = crate::common::ring_arithmetic::RingElement> {
+pub struct ProductSumcheck<'a, E: SumcheckElement = RingElement> {
     pub lhs_sumcheck: &'a RefCell<dyn HighOrderSumcheckData<Element = E> + 'a>, // interior mutability to share between protocols
     pub rhs_sumcheck: &'a RefCell<dyn HighOrderSumcheckData<Element = E> + 'a>,
 
