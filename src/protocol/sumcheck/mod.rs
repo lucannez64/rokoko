@@ -65,11 +65,11 @@ mod tests {
         witness_sc.borrow_mut().load_from(&witness);
 
         let lhs_coeff_sumcheck =
-            RefCell::new(LinearSumcheck::new_with_prefixed_data(lhs_coeffs.len(), 1));
+            RefCell::new(LinearSumcheck::new_with_prefixed_sufixed_data(lhs_coeffs.len(), 1, 0));
         lhs_coeff_sumcheck.borrow_mut().load_from(&lhs_coeffs);
 
         let rhs_coeff_sumcheck =
-            RefCell::new(LinearSumcheck::new_with_prefixed_data(rhs_coeffs.len(), 1));
+            RefCell::new(LinearSumcheck::new_with_prefixed_sufixed_data(rhs_coeffs.len(), 1, 0));
         rhs_coeff_sumcheck.borrow_mut().load_from(&rhs_coeffs);
 
         // Selectors act as neutral scalars here (selector_variable_count = 0),

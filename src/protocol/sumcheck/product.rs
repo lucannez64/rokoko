@@ -354,3 +354,88 @@ fn test_three_way_sumcheck() {
         claim
     );
 }
+
+
+#[test]
+fn test_product_of_linear_sumchecks_over_disjoint_variables() {
+
+    // Test the product sumcheck over three linear sumchecks, each
+    // defined over disjoint sets of variables.
+    // The first sumcheck is defined over the highest-order variables,
+    // the second over the middle variables, and the third over the
+    // lowest-order variables.
+    // we make use that the univariate polynomial of a linear sumcheck is just a degree 1 polynomial
+    // since it should be a produce of two constant polys and one degree 1 poly.
+
+    use crate::common::ring_arithmetic::RingElement;
+    use crate::protocol::sumcheck::product::ProductSumcheck;
+
+    let data1 = vec![
+        RingElement::constant(1, Representation::IncompleteNTT),
+        RingElement::constant(2, Representation::IncompleteNTT),
+        RingElement::constant(3, Representation::IncompleteNTT),
+        RingElement::constant(4, Representation::IncompleteNTT),
+    ];
+
+    let data2 = vec![
+        RingElement::constant(5, Representation::IncompleteNTT),
+        RingElement::constant(6, Representation::IncompleteNTT),
+        RingElement::constant(7, Representation::IncompleteNTT),
+        RingElement::constant(8, Representation::IncompleteNTT),
+    ];
+
+    let data3 = vec![
+        RingElement::constant(9, Representation::IncompleteNTT),
+        RingElement::constant(10, Representation::IncompleteNTT),
+        RingElement::constant(11, Representation::IncompleteNTT),
+        RingElement::constant(12, Representation::IncompleteNTT),
+    ];
+
+    let sumcheck_1 = RefCell::new(LinearSumcheck::new_with_prefixed_sufixed_data(data1.len(), 0, 4));
+    sumcheck_1.borrow_mut().load_from(&data1);
+
+    // 1 x 16, 2 x 16, 3 x 16, 4 x 16, 1 x 16, 2 x 16, 3 x 16, 4 x 16, 
+
+    let sumcheck_2 = RefCell::new(LinearSumcheck::new_with_prefixed_sufixed_data(data2.len(), 2, 2));
+
+
+    // (5 x 4, 6 x 4, 7 x 4, 8 x 4, 5 x 4, 6 x 4, 7 x 4, 8 x 4) x 4
+
+    sumcheck_2.borrow_mut().load_from(&data2);
+    let sumcheck_3 = RefCell::new(LinearSumcheck::new_with_prefixed_sufixed_data(data3.len(), 4, 0));
+    sumcheck_3.borrow_mut().load_from(&data3);
+
+    
+
+    let product_12 = RefCell::new(ProductSumcheck::new(&sumcheck_1, &sumcheck_2));
+    let product_123 = RefCell::new(ProductSumcheck::new(&product_12, &sumcheck_3));
+
+    let mut univariate_poly = Polynomial::new(0);
+
+
+    let mut claim = RingElement::constant(
+        (1 + 2 + 3 + 4) * (5 + 6 + 7 + 8) * (9 + 10 + 11 + 12),
+        Representation::IncompleteNTT,
+    );
+
+    for _ in 0..5 {
+        product_123.borrow().univariate_polynomial_into(&mut univariate_poly);
+        assert_eq!(&univariate_poly.at_zero() + &univariate_poly.at_one(), claim);
+
+        assert_eq!(univariate_poly.num_coefficients, 2); // degree 1 polynomial as expected
+
+        let r = RingElement::constant(7, Representation::IncompleteNTT);
+
+        claim = univariate_poly.at(&r);
+
+        sumcheck_1.borrow_mut().partial_evaluate(&r);
+        sumcheck_2.borrow_mut().partial_evaluate(&r);
+        sumcheck_3.borrow_mut().partial_evaluate(&r);
+    }
+
+    product_123.borrow().univariate_polynomial_into(&mut univariate_poly);
+    assert_eq!(&univariate_poly.at_zero() + &univariate_poly.at_one(), claim);
+
+    assert_eq!(univariate_poly.num_coefficients, 2); // degree 1 polynomial as expected
+    
+}

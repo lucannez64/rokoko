@@ -20,12 +20,13 @@ pub struct LinearSumcheck<E: SumcheckElement = RingElement> {
     pub data: Vec<E>,
     variable_count: usize,
     index_mask: usize,
+    suffix: usize,
     poly_scratch: RefCell<Polynomial<E>>,
 }
 
 impl<E: SumcheckElement> LinearSumcheck<E> {
     pub fn new(count: usize) -> Self {
-        Self::new_with_prefixed_data(count, 0)
+        Self::new_with_prefixed_sufixed_data(count, 0  , 0)
     }
 
     // here we want to handle the case when
@@ -38,15 +39,17 @@ impl<E: SumcheckElement> LinearSumcheck<E> {
     // so we have \sum_{z \in HC^10} MLE[data](z) * eq(x_0, ... x_3, SEL) * MLE[s](x_4 ... x_9) = v
     // where SEL is the selection vector that selects the subdata from data.
     // to conveniently operate we will assume that MLE[s](x_4 ... x_9) is prefixed with 4 dummy variables x_0 ... x_3
-    pub fn new_with_prefixed_data(
+    pub fn new_with_prefixed_sufixed_data(
         count: usize,
-        prefix_size: usize, // number of extra dummy variables
+        prefix_size: usize, // number of extra most significant dummy variables
+        suffix_size: usize, // number of extra least significant dummy variables
     ) -> Self {
         LinearSumcheck {
             data: E::allocate_zero_vec(count),
-            variable_count: count.ilog2() as usize + prefix_size,
+            variable_count: count.ilog2() as usize + prefix_size + suffix_size,
             index_mask: count - 1, // this mask will be used to ignore prefixed variables
             poly_scratch: RefCell::new(Polynomial::new(2)),
+            suffix: suffix_size,
         }
     }
     /// Populate the internal buffer with the provided values.
@@ -59,7 +62,7 @@ impl<E: SumcheckElement> Index<HypercubePoint> for LinearSumcheck<E> {
     type Output = E;
 
     fn index(&self, index: HypercubePoint) -> &Self::Output {
-        let index_masked = index.masked(self.index_mask);
+        let index_masked = index.shifted(self.suffix).masked(self.index_mask);
         &self.data[index_masked.coordinates] // masking to ignore prefixed variables
     }
 }
@@ -86,8 +89,14 @@ impl<E: SumcheckElement> HighOrderSumcheckData for LinearSumcheck<E> {
         polynomial.coefficients[0].set_zero();
         polynomial.coefficients[0] += &self[point]; // constant term
 
-        if self.variable_count > self.data.len().trailing_zeros() as usize {
+        if self.variable_count > self.data.len().trailing_zeros() as usize + self.suffix {
             // we have some prefixed variables
+            polynomial.num_coefficients = 1;
+            return;
+        }
+
+        if self.data.len() == 1 && self.suffix > 0 {
+            // only suffix variables remain
             polynomial.num_coefficients = 1;
             return;
         }
@@ -112,11 +121,19 @@ impl<E: SumcheckElement> SumcheckBaseData for LinearSumcheck<E> {
         // Fold the highest-order variable using the provided random challenge.
         // When there are prefixed variables, they are ignored and the claim is
         // scaled accordingly.
-        if self.variable_count > self.data.len().trailing_zeros() as usize {
+        if self.variable_count > self.data.len().trailing_zeros() as usize + self.suffix {
             // we have some prefixed variables
             self.variable_count -= 1;
             return;
         }
+
+        if self.data.len() == 1 && self.suffix > 0 {
+            // only suffix variables remain
+            self.variable_count -= 1;
+            self.suffix -= 1;
+            return;
+        }
+
 
         let n = self.data.len();
         if n % 2 != 0 {
@@ -249,7 +266,7 @@ fn test_masked_sumcheck_indexing() {
         RingElement::constant(8, Representation::IncompleteNTT),
     ];
 
-    let mut sumcheck = LinearSumcheck::new_with_prefixed_data(data.len(), 2);
+    let mut sumcheck = LinearSumcheck::new_with_prefixed_sufixed_data(data.len(), 2, 0);
     sumcheck.load_from(&data);
 
     // Now, the sumcheck has 2 prefixed variables, so when we index with HypercubePoint.
@@ -393,4 +410,39 @@ fn test_masked_sumcheck_indexing() {
     );
 
     assert_eq!(&new_claim, sumcheck.final_evaluations());
+}
+
+#[test]
+fn test_linear_sumcheck_with_suffixed_data() {
+    use crate::common::ring_arithmetic::RingElement;
+
+    let data = vec![
+        RingElement::constant(1, Representation::IncompleteNTT),
+        RingElement::constant(2, Representation::IncompleteNTT),
+        RingElement::constant(3, Representation::IncompleteNTT),
+        RingElement::constant(4, Representation::IncompleteNTT),
+        RingElement::constant(5, Representation::IncompleteNTT),
+        RingElement::constant(6, Representation::IncompleteNTT),
+        RingElement::constant(7, Representation::IncompleteNTT),
+        RingElement::constant(8, Representation::IncompleteNTT),
+    ];
+
+    // we head with a vector that has 2 suffixed variables, i.e. (1,1,1,1, 2,2,2,2, 3,3,3,3, 4,4,4,4, 5,5,5,5, 6,6,6,6, 7,7,7,7, 8,8,8,8)
+
+    let mut sumcheck = LinearSumcheck::new_with_prefixed_sufixed_data(data.len(), 0, 2);
+    sumcheck.load_from(&data);
+
+    // Now, the sumcheck has 2 suffixed variables, so when we index with HypercubePoint.
+
+    let mut poly = Polynomial::new(0);
+
+    sumcheck.univariate_polynomial_into(&mut poly);
+
+    let claim = RingElement::constant(
+        (1 + 2 + 3 + 4 + 5 + 6 + 7 + 8) * 4,
+        Representation::IncompleteNTT,
+    );
+
+    assert_eq!(&poly.at_zero() + &poly.at_one(), claim);
+
 }
