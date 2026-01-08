@@ -91,6 +91,10 @@ fn test_ring_to_field_combiner() {
         RingElement::constant(2, Representation::IncompleteNTT),
         RingElement::constant(3, Representation::IncompleteNTT),
         RingElement::constant(4, Representation::IncompleteNTT),
+        RingElement::constant(5, Representation::IncompleteNTT),
+        RingElement::constant(6, Representation::IncompleteNTT),
+        RingElement::constant(7, Representation::IncompleteNTT),
+        RingElement::constant(8, Representation::IncompleteNTT),
     ];
 
     let sumcheck = RefCell::new(LinearSumcheck::<RingElement>::new(data.len()));
@@ -108,7 +112,7 @@ fn test_ring_to_field_combiner() {
 
     combiner.load_challenges(challenge_qe.try_into().unwrap());
 
-    let claim = (1 + 2 + 3 + 4) * (HALF_DEGREE + 1) * (HALF_DEGREE) / 2;
+    let claim = (1 + 2 + 3 + 4 + 5 + 6 + 7 + 8) * (HALF_DEGREE + 1) * (HALF_DEGREE) / 2;
 
     let mut poly = Polynomial::<QuadraticExtension>::new(0);
 
@@ -139,4 +143,51 @@ fn test_ring_to_field_combiner() {
     combiner.univariate_polynomial_into(&mut poly);
 
     assert_eq!(poly.at_zero() + poly.at_one(), claim_after_r0);
+
+    let r1qe = QuadraticExtension {
+        coeffs: [21, 37],
+        shift: SHIFT_FACTORS[0],
+    };
+
+    let mut r1 = RingElement::constant(0, Representation::HomogenizedFieldExtensions);
+
+    r1.combine_from_quadratic_extensions(&[r1qe; HALF_DEGREE]);
+
+    r1.from_homogenized_field_extensions_to_incomplete_ntt();
+
+    let claim_after_r1 = poly.at(&r1qe);
+
+    sumcheck.borrow_mut().partial_evaluate(&r1);
+    combiner.univariate_polynomial_into(&mut poly);
+
+    assert_eq!(poly.at_zero() + poly.at_one(), claim_after_r1);
+
+    let r2qe = QuadraticExtension {
+        coeffs: [53, 89],
+        shift: SHIFT_FACTORS[0],
+    };
+
+    let mut r2 = RingElement::constant(0, Representation::HomogenizedFieldExtensions);
+
+    r2.combine_from_quadratic_extensions(&[r2qe; HALF_DEGREE]);
+
+    r2.from_homogenized_field_extensions_to_incomplete_ntt();
+
+    let final_claim = poly.at(&r2qe);
+
+    sumcheck.borrow_mut().partial_evaluate(&r2);
+
+    // this API is bit awkward
+
+    let mut final_qe = sumcheck.borrow().final_evaluations().clone();
+
+    final_qe.from_incomplete_ntt_to_homogenized_field_extensions();
+
+    let mut final_qes = final_qe.split_into_quadratic_extensions();
+    let mut final_eval = QuadraticExtension::zero();
+    for i in 0..HALF_DEGREE {
+        final_qes[i] *= &combiner.challenge_vec[i];
+        final_eval += &final_qes[i];
+    }
+    assert_eq!(final_eval, final_claim);
 }
