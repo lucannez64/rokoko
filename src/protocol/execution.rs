@@ -1,21 +1,21 @@
-use std::process::exit;
+use std::{process::exit, sync::LazyLock};
 
 use num::range;
 
 use crate::{
     common::{
         hash::HashWrapper,
-        matrix::{HorizontallyAlignedMatrix, VerticallyAlignedMatrix, new_vec_zero_preallocated},
+        matrix::{new_vec_zero_preallocated, HorizontallyAlignedMatrix, VerticallyAlignedMatrix},
         projection_matrix::ProjectionMatrix,
         ring_arithmetic::{Representation, RingElement},
         sampling::sample_random_short_vector,
         structured_row::{self, PreprocessedRow, StructuredRow},
     },
     protocol::{
-        commitment::{Commitment, commit, commit_basic},
+        commitment::{commit_basic, commit_basic_internal, Commitment, RecursionConfig},
         crs::{CK, CRS},
         fold::fold,
-        open::{Opening, evaluation_point_to_structured_row, open_at},
+        open::{evaluation_point_to_structured_row, open_at, Opening},
         project::project,
     },
 };
@@ -25,6 +25,31 @@ pub struct RoundOutput {
     projection_image: VerticallyAlignedMatrix<RingElement>,
     opening: Opening,
 }
+
+pub static CONFIG: LazyLock<Config> = LazyLock::new(|| Config {
+    commitment_recursion: RecursionConfig {
+        decomposition_radix_log: 15,
+        decomposition_chunks: 4,
+        rank: 1,
+        next: None,
+    },
+    projection_opening_recursion: RecursionConfig {
+        decomposition_radix_log: 15,
+        decomposition_chunks: 4,
+        rank: 1,
+        next: None,
+    },
+});
+
+pub struct Config {
+    // This will be round config later, but for now we only have one round
+    commitment_recursion: RecursionConfig,
+    projection_opening_recursion: RecursionConfig,
+}
+
+// pub fn init_empty_recursive_commitment(config: &Vec<RecursionConfig>) -> RecursiveCommitment {
+
+// }
 
 pub fn prover_simple_round(
     commitment: &Commitment,
@@ -62,7 +87,7 @@ pub fn prover_simple_round(
 }
 
 pub fn verifier_simple_round(
-    ck: &CK,
+    crs: &CRS,
     commitment: &Commitment,
     round_output: &RoundOutput,
     evaluation_points_inner: &Vec<Vec<RingElement>>,
@@ -84,7 +109,9 @@ pub fn verifier_simple_round(
         vec![RingElement::zero(Representation::IncompleteNTT); commitment.commitment.width];
     hash_wrapper.sample_biased_ternary_ring_element_vec_into(&mut fold_challenge);
 
-    let commitment_of_folded_witness = commit(ck, &round_output.folded_witness, &[]);
+    let commitment_of_folded_witness = commit_basic(&crs, &round_output.folded_witness);
+    let ck = &crs.ck_for_wit_dim(round_output.folded_witness.height);
+
     let mut folded_commitment = VerticallyAlignedMatrix::new_zero_preallocated(ck.len(), 1);
 
     for i in 0..ck.len() {
@@ -189,7 +216,7 @@ pub fn execute() {
     );
 
     verifier_simple_round(
-        &ck,
+        &crs,
         &commitment,
         &round_output,
         &evaluation_points_inner,

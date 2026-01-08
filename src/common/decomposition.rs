@@ -15,6 +15,12 @@ impl RingElement {
     }
 }
 
+// Decomposes each element in input into radix parts of base 2^{base_log}.
+// The decomposition is smart in the sense that it's not wasteful for negative numbers.
+// Each element x is first shifted by adding 2^{base_log * radix - 1} to it, then decomposed into radix parts,
+// and then each part is shifted back by subtracting 2^{base_log - 1}.
+// This way, we ensure that each decomposed part lies in the range [-2^{base_log - 1}, 2^{base_log - 1}).
+// The input elements are not modified in the end (i.e., they retain their original values).
 pub fn decompose(input: &mut Vec<RingElement>, base_log: u64, radix: usize) -> Vec<RingElement> {
     let mut decomposed = new_vec_zero_preallocated(input.len() * radix);
 
@@ -43,6 +49,10 @@ pub fn decompose(input: &mut Vec<RingElement>, base_log: u64, radix: usize) -> V
     }
 
     decomposed
+}
+
+pub fn get_composer_offset(base_log: u64, radix: usize) -> RingElement {
+    todo!()
 }
 
 #[test]

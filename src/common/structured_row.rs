@@ -49,6 +49,7 @@ impl<E: SumcheckElement> StructuredRow<E> {
 //     }
 // }
 
+#[derive(Debug, Clone)]
 pub struct PreprocessedRow<E: SumcheckElement = RingElement> {
     pub structured_row: StructuredRow<E>,
     pub preprocessed_row: Vec<E>,

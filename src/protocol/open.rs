@@ -7,7 +7,7 @@ use crate::{
         ring_arithmetic::{Representation, RingElement},
         structured_row::{PreprocessedRow, StructuredRow},
     },
-    protocol::commitment::{commit, init_prover_commitment, Commitment},
+    protocol::commitment::{commit_basic_internal, init_prover_commitment, Commitment},
 };
 
 pub struct Opening {
@@ -71,7 +71,8 @@ pub fn open_at(
     //     }
     // }
 
-    let mut rhs = commit(&preprocessed_points_inner, witness, &[]);
+    // it's not a commitment, but we can reuse the same structure
+    let mut rhs = commit_basic_internal(&preprocessed_points_inner, witness);
 
     let mut evaluations =
         vec![RingElement::zero(Representation::IncompleteNTT); nof_evaluation_points];

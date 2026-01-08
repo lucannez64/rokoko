@@ -9,6 +9,7 @@ use crate::{
     protocol::{
         commitment,
         crs::{CK, CRS},
+        open::Opening,
     },
 };
 
@@ -36,49 +37,46 @@ pub fn init_prover_commitment(height: usize, width: usize) -> Commitment {
     }
 }
 
-pub fn commit(
+// pub fn commit(
+//     ck: &CK,
+//     witness: &VerticallyAlignedMatrix<RingElement>,
+//     descriptors: &[LevelCommitmentDescriptor],
+// ) -> Commitment {
+//     commit_internal(ck, witness, descriptors, 0)
+// }
+
+// // TODO: allow commitment to the prefix of the CK
+// pub fn commit_internal(
+//     ck: &CK,
+//     witness: &VerticallyAlignedMatrix<RingElement>,
+//     descriptors: &[LevelCommitmentDescriptor],
+//     current_level: usize,
+// ) -> Commitment {
+//     let decomposed_witness_width = if current_level < descriptors.len() {
+//         descriptors[current_level].decomposition_chunks
+//     } else {
+//         1
+//     } * witness.width;
+//     let mut commitment = init_prover_commitment(ck.len(), decomposed_witness_width);
+
+//     assert_eq!(ck[0].preprocessed_row.len(), witness.height);
+
+//     for (i, row) in ck.iter().enumerate() {
+//         let mut temp = RingElement::zero(Representation::IncompleteNTT);
+//         for col in 0..witness.width {
+//             for (elem, w_elem) in row.preprocessed_row.iter().zip(witness.col(col).iter()) {
+//                 temp *= (elem, w_elem);
+//                 *commitment.commitment.index_mut((i, col)) += &temp;
+//             }
+//         }
+//     }
+//     commitment
+// }
+
+pub fn commit_basic_internal(
     ck: &CK,
     witness: &VerticallyAlignedMatrix<RingElement>,
-    descriptors: &[LevelCommitmentDescriptor],
 ) -> Commitment {
-    commit_internal(ck, witness, descriptors, 0)
-}
-
-// TODO: allow commitment to the prefix of the CK
-pub fn commit_internal(
-    ck: &CK,
-    witness: &VerticallyAlignedMatrix<RingElement>,
-    descriptors: &[LevelCommitmentDescriptor],
-    current_level: usize,
-) -> Commitment {
-    let decomposed_witness_width = if current_level < descriptors.len() {
-        descriptors[current_level].decomposition_chunks
-    } else {
-        1
-    } * witness.width;
-    let mut commitment = init_prover_commitment(ck.len(), decomposed_witness_width);
-
-    assert_eq!(ck[0].preprocessed_row.len(), witness.height);
-
-    for (i, row) in ck.iter().enumerate() {
-        let mut temp = RingElement::zero(Representation::IncompleteNTT);
-        for col in 0..witness.width {
-            for (elem, w_elem) in row.preprocessed_row.iter().zip(witness.col(col).iter()) {
-                temp *= (elem, w_elem);
-                *commitment.commitment.index_mut((i, col)) += &temp;
-            }
-        }
-    }
-    commitment
-}
-
-
-// this is first level commit for FW = Y
-pub fn commit_basic(
-    crs: &CRS,
-    witness: &VerticallyAlignedMatrix<RingElement>,
-) -> Commitment {
-    let ck = crs.ck_for_wit_dim(witness.height);
     let mut commitment = init_prover_commitment(ck.len(), witness.width);
 
     for (i, row) in ck.iter().enumerate() {
@@ -91,6 +89,24 @@ pub fn commit_basic(
         }
     }
     commitment
+}
+
+// this is first level commit for FW = Y
+pub fn commit_basic(crs: &CRS, witness: &VerticallyAlignedMatrix<RingElement>) -> Commitment {
+    let ck = crs.ck_for_wit_dim(witness.height);
+    commit_basic_internal(ck, witness)
+}
+
+pub struct RecursionConfig {
+    pub decomposition_radix_log: usize,
+    pub decomposition_chunks: usize,
+    pub rank: usize,
+    pub next: Option<Box<RecursionConfig>>,
+}
+
+pub struct RecursiveCommitment {
+    pub commitment: Commitment,
+    pub recursion: Option<Box<RecursiveCommitment>>,
 }
 
 #[test]
@@ -151,7 +167,7 @@ fn test_commitment_computation() {
         height: 8,
     };
 
-    let commitment = commit(&ck, &witness, &[]);
+    let commitment = commit_basic_internal(&ck, &witness);
 
     assert_eq!(
         &commitment.commitment[(0, 0)],
