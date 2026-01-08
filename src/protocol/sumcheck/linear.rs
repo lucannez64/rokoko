@@ -26,7 +26,7 @@ pub struct LinearSumcheck<E: SumcheckElement = RingElement> {
 
 impl<E: SumcheckElement> LinearSumcheck<E> {
     pub fn new(count: usize) -> Self {
-        Self::new_with_prefixed_sufixed_data(count, 0  , 0)
+        Self::new_with_prefixed_sufixed_data(count, 0, 0)
     }
 
     // here we want to handle the case when
@@ -133,7 +133,6 @@ impl<E: SumcheckElement> SumcheckBaseData for LinearSumcheck<E> {
             self.suffix -= 1;
             return;
         }
-
 
         let n = self.data.len();
         if n % 2 != 0 {
@@ -444,5 +443,4 @@ fn test_linear_sumcheck_with_suffixed_data() {
     );
 
     assert_eq!(&poly.at_zero() + &poly.at_one(), claim);
-
 }

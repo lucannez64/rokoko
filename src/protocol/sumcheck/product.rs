@@ -355,10 +355,8 @@ fn test_three_way_sumcheck() {
     );
 }
 
-
 #[test]
 fn test_product_of_linear_sumchecks_over_disjoint_variables() {
-
     // Test the product sumcheck over three linear sumchecks, each
     // defined over disjoint sets of variables.
     // The first sumcheck is defined over the highest-order variables,
@@ -391,27 +389,35 @@ fn test_product_of_linear_sumchecks_over_disjoint_variables() {
         RingElement::constant(12, Representation::IncompleteNTT),
     ];
 
-    let sumcheck_1 = RefCell::new(LinearSumcheck::new_with_prefixed_sufixed_data(data1.len(), 0, 4));
+    let sumcheck_1 = RefCell::new(LinearSumcheck::new_with_prefixed_sufixed_data(
+        data1.len(),
+        0,
+        4,
+    ));
     sumcheck_1.borrow_mut().load_from(&data1);
 
-    // 1 x 16, 2 x 16, 3 x 16, 4 x 16, 1 x 16, 2 x 16, 3 x 16, 4 x 16, 
+    // 1 x 16, 2 x 16, 3 x 16, 4 x 16, 1 x 16, 2 x 16, 3 x 16, 4 x 16,
 
-    let sumcheck_2 = RefCell::new(LinearSumcheck::new_with_prefixed_sufixed_data(data2.len(), 2, 2));
-
+    let sumcheck_2 = RefCell::new(LinearSumcheck::new_with_prefixed_sufixed_data(
+        data2.len(),
+        2,
+        2,
+    ));
 
     // (5 x 4, 6 x 4, 7 x 4, 8 x 4, 5 x 4, 6 x 4, 7 x 4, 8 x 4) x 4
 
     sumcheck_2.borrow_mut().load_from(&data2);
-    let sumcheck_3 = RefCell::new(LinearSumcheck::new_with_prefixed_sufixed_data(data3.len(), 4, 0));
+    let sumcheck_3 = RefCell::new(LinearSumcheck::new_with_prefixed_sufixed_data(
+        data3.len(),
+        4,
+        0,
+    ));
     sumcheck_3.borrow_mut().load_from(&data3);
-
-    
 
     let product_12 = RefCell::new(ProductSumcheck::new(&sumcheck_1, &sumcheck_2));
     let product_123 = RefCell::new(ProductSumcheck::new(&product_12, &sumcheck_3));
 
     let mut univariate_poly = Polynomial::new(0);
-
 
     let mut claim = RingElement::constant(
         (1 + 2 + 3 + 4) * (5 + 6 + 7 + 8) * (9 + 10 + 11 + 12),
@@ -419,8 +425,13 @@ fn test_product_of_linear_sumchecks_over_disjoint_variables() {
     );
 
     for _ in 0..5 {
-        product_123.borrow().univariate_polynomial_into(&mut univariate_poly);
-        assert_eq!(&univariate_poly.at_zero() + &univariate_poly.at_one(), claim);
+        product_123
+            .borrow()
+            .univariate_polynomial_into(&mut univariate_poly);
+        assert_eq!(
+            &univariate_poly.at_zero() + &univariate_poly.at_one(),
+            claim
+        );
 
         assert_eq!(univariate_poly.num_coefficients, 2); // degree 1 polynomial as expected
 
@@ -433,9 +444,13 @@ fn test_product_of_linear_sumchecks_over_disjoint_variables() {
         sumcheck_3.borrow_mut().partial_evaluate(&r);
     }
 
-    product_123.borrow().univariate_polynomial_into(&mut univariate_poly);
-    assert_eq!(&univariate_poly.at_zero() + &univariate_poly.at_one(), claim);
+    product_123
+        .borrow()
+        .univariate_polynomial_into(&mut univariate_poly);
+    assert_eq!(
+        &univariate_poly.at_zero() + &univariate_poly.at_one(),
+        claim
+    );
 
     assert_eq!(univariate_poly.num_coefficients, 2); // degree 1 polynomial as expected
-    
 }
