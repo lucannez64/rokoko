@@ -53,8 +53,24 @@ pub fn decompose(input: &mut Vec<RingElement>, base_log: u64, radix: usize) -> V
     decomposed
 }
 
+// after decomposing a we have
+
+// (a + 2^{base_log * radix - 1}) = \sum_{i=0}^{radix-1} (a_i + 2^{base_log - 1}) * 2^{i * base_log}
+// so to get back a we do
+// a = \sum_{i=0}^{radix-1} (a_i + 2^{base_log - 1}) * 2^{i * base_log} - 2^{base_log * radix - 1}
+// also
+// a = \sum_{i=0}^{radix-1} a_i * 2^{i * base_log} + 2^{base_log - 1} * \sum_{i=0}^{radix-1} 2^{i * base_log} - 2^{base_log * radix - 1}
+
 pub fn get_composer_offset(base_log: u64, radix: usize) -> RingElement {
-    todo!()
+    // TODO: compute directly without decomposition
+    let zero = RingElement::zero(Representation::IncompleteNTT);
+    let decomposed = decompose(&mut vec![zero], base_log, radix);
+    let mut offset = RingElement::zero(Representation::IncompleteNTT);
+    for i in 0..radix {
+        offset += &(&decomposed[i]
+            * &RingElement::constant(1u64 << (i as u64 * base_log), Representation::IncompleteNTT));
+    }
+    offset
 }
 
 #[test]
@@ -88,4 +104,17 @@ fn test_decompose() {
         decomposed[3],
         RingElement::all(0, Representation::IncompleteNTT)
     );
+
+    let offset = get_composer_offset(base_log, radix);
+
+    let mut recomposed = RingElement::all(0, Representation::IncompleteNTT);
+    for i in 0..radix {
+        let mut term = decomposed[i].clone();
+        let shift =
+            RingElement::constant(1u64 << (i as u64 * base_log), Representation::IncompleteNTT);
+        term *= &shift;
+        recomposed += &term;
+    }
+    recomposed -= &offset;
+    assert_eq!(recomposed, input[0]);
 }
