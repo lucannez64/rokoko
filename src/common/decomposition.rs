@@ -56,14 +56,6 @@ pub fn decompose(input: &mut Vec<RingElement>, base_log: u64, radix: usize) -> V
 // a + big_shift = \sum_{i \in [radix]} (decomposed_i + small_shift) * (2^{i * base_log})
 // => a = \sum_{i \in [radix]} decomposed_i * (2^{i * base_log}) + (small_shift * \sum_{i \in [radix]} (2^{i * base_log}) - big_shift
 pub fn get_composer_offset(base_log: u64, radix: usize) -> u64 {
-    // TODO: compute directly without decomposition
-    // let zero = RingElement::zero(Representation::IncompleteNTT);
-    // let decomposed = decompose(&mut vec![zero], base_log, radix);
-    // let mut offset = RingElement::zero(Representation::IncompleteNTT);
-    // for i in 0..radix {
-    //     offset -= &(&decomposed[i]
-    //         * &RingElement::constant(1u64 << (i as u64 * base_log), Representation::IncompleteNTT));
-    // }
     let small_shift = 1u64 << (base_log - 1);
     let big_shift = 1u64 << (base_log * radix as u64 - 1);
     let mut offset = MOD_Q + big_shift;
