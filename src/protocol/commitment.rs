@@ -54,7 +54,7 @@ pub struct Prefix {
 }
 
 pub struct RecursionConfig {
-    pub decomposition_radix_log: usize,
+    pub decomposition_base_log: usize,
     pub decomposition_chunks: usize,
     pub rank: usize,
     pub prefix: Prefix,
@@ -62,7 +62,7 @@ pub struct RecursionConfig {
 }
 
 pub struct RecursiveCommitment {
-    pub decomposition_radix_log: usize,
+    pub decomposition_base_log: usize,
     pub decomposition_chunks: usize,
     pub committed_data: Vec<RingElement>,
     pub commitment: Vec<RingElement>,
@@ -85,7 +85,7 @@ pub fn recursive_commit(
 ) -> RecursiveCommitment {
     let committed_data = decompose(
         &data,
-        config.decomposition_radix_log as u64,
+        config.decomposition_base_log as u64,
         config.decomposition_chunks,
     );
 
@@ -107,7 +107,7 @@ pub fn recursive_commit(
     };
 
     RecursiveCommitment {
-        decomposition_radix_log: config.decomposition_radix_log,
+        decomposition_base_log: config.decomposition_base_log,
         decomposition_chunks: config.decomposition_chunks,
         committed_data,
         commitment,
@@ -130,7 +130,7 @@ fn test_recursive_commit() {
     ];
 
     let config = RecursionConfig {
-        decomposition_radix_log: 3, // base 8
+        decomposition_base_log: 3, // base 8
         decomposition_chunks: 4,
         rank: 2,
         prefix: Prefix {

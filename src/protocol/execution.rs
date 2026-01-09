@@ -4,7 +4,8 @@ use num::range;
 
 use crate::{
     common::{
-        decomposition::decompose,
+        arithmetic::inner_product,
+        decomposition::{compose_from_decomposed, decompose},
         hash::HashWrapper,
         matrix::{new_vec_zero_preallocated, HorizontallyAlignedMatrix, VerticallyAlignedMatrix},
         projection_matrix::ProjectionMatrix,
@@ -17,122 +18,14 @@ use crate::{
             commit_basic, commit_basic_internal, recursive_commit, BasicCommitment, Prefix,
             RecursionConfig, RecursiveCommitment,
         },
+        config::{paste_by_prefix, paste_recursive_commitment, slice_by_prefix, CONFIG},
         crs::{CK, CRS},
         fold::fold,
         open::{evaluation_point_to_structured_row, open_at, Opening},
         project::project,
+        sumcheck::sumcheck,
     },
 };
-
-pub struct RoundOutput {
-    folded_witness: VerticallyAlignedMatrix<RingElement>,
-    projection_image: VerticallyAlignedMatrix<RingElement>,
-    opening: Opening,
-}
-
-pub static CONFIG: LazyLock<Config> = LazyLock::new(|| Config {
-    witness_height: 512,
-    witness_width: 16,
-    projection_ratio: 32,
-    basic_commitment_rank: 2,
-    nof_openings: 1,
-
-    commitment_recursion: RecursionConfig {
-        decomposition_radix_log: 15,
-        decomposition_chunks: 4,
-        rank: 1,
-        next: None,
-        prefix: Prefix {
-            prefix: 0b1100,
-            length: 4,
-        }, // 2048 / 2^4 = 128
-    },
-    opening_recursion: RecursionConfig {
-        decomposition_radix_log: 15,
-        decomposition_chunks: 4,
-        rank: 1,
-        next: None,
-        prefix: Prefix {
-            prefix: 0b11010,
-            length: 5,
-        }, // 2048 / 2^5 = 64
-    },
-    projection_recursion: RecursionConfig {
-        decomposition_radix_log: 15,
-        decomposition_chunks: 2,
-        rank: 1,
-        next: None,
-        prefix: Prefix {
-            prefix: 0b10,
-            length: 2,
-        }, // 2048 / 2^2 = 512
-    },
-
-    folded_witness_prefix: Prefix {
-        prefix: 0b0,
-        length: 1,
-    }, // 2048 / 2^1 = 1024
-    witness_decomposition_chunks: 2,
-    witness_decomposition_radix_log: 15,
-
-    // committed basic_commitment_len = basic_commitment_rank * witness_width * commitment_recursion.decomposition_chunks = 2 * 16 * 4 = 128
-
-    // committed projection_image_len = witness_height * witness_width / projection_ratio  * projection_recursion.decomposition_chunks = (512 * 16 / 32) * 2 = 512
-
-    // committed opening_len = nof_openings * witness_width * opening_recursion.decomposition_chunks = 1 * 16 * 4 = 64
-
-    // folded_witness len is witness_height * witness_decomposition_chunks = 512 * 2 = 1024
-
-    // in total, we fit into 2048 elements per round
-    composed_witness_length: 2048,
-
-    next: None, // for multiple rounds
-});
-
-pub struct Config {
-    witness_height: usize,
-    witness_width: usize,
-    projection_ratio: usize, // shall be likely the witness_height
-    commitment_recursion: RecursionConfig,
-    opening_recursion: RecursionConfig,
-    projection_recursion: RecursionConfig,
-    nof_openings: usize,
-
-    witness_decomposition_radix_log: usize,
-    witness_decomposition_chunks: usize,
-    folded_witness_prefix: Prefix,
-
-    basic_commitment_rank: usize,
-    composed_witness_length: usize,
-
-    next: Option<Box<Config>>, // for multiple rounds
-}
-
-// pub fn init_empty_recursive_commitment(config: &Vec<RecursionConfig>) -> RecursiveCommitment {
-
-// }
-
-fn paste_by_prefix(dest: &mut Vec<RingElement>, src: &Vec<RingElement>, prefix: &Prefix) {
-    assert_eq!(src.len(), 1 << dest.len().ilog2() as usize - prefix.length);
-    // e.g. if dest.len() = 2048, prefix.length = 4, prefix.prefix = 9 (0b1001)
-    // then start = 9 << (11 - 4) = 9 << 7 = 1152 = 10010000000 index to start pasting
-    let start = prefix.prefix << (dest.len().ilog2() as usize - prefix.length);
-    unsafe {
-        std::ptr::copy_nonoverlapping(src.as_ptr(), dest.as_mut_ptr().add(start), src.len());
-    }
-}
-
-fn paste_recursive_commitment(
-    dest: &mut Vec<RingElement>,
-    commitment: &RecursiveCommitment,
-    config: &RecursionConfig,
-) {
-    paste_by_prefix(dest, &commitment.committed_data, &config.prefix);
-
-    if let (Some(next_commitment), Some(next_config)) = (&commitment.next, &config.next) {
-        paste_recursive_commitment(dest, next_commitment, next_config);
-    }
-}
 
 pub fn prover_round(
     crs: &CRS,
@@ -140,7 +33,7 @@ pub fn prover_round(
     witness: &VerticallyAlignedMatrix<RingElement>,
     evaluation_points_inner: &Vec<Vec<RingElement>>,
     evaluation_points_outer: &Vec<Vec<RingElement>>,
-) -> RoundOutput {
+) {
     let mut hash_wrapper = HashWrapper::new();
 
     hash_wrapper.update_with_ring_element_slice(&rc_commitment.most_inner_commitment());
@@ -172,7 +65,7 @@ pub fn prover_round(
 
     let folded_witness_decomposed = decompose(
         &folded_witness.data,
-        CONFIG.witness_decomposition_radix_log as u64,
+        CONFIG.witness_decomposition_base_log as u64,
         CONFIG.witness_decomposition_chunks,
     );
 
@@ -197,20 +90,19 @@ pub fn prover_round(
         &CONFIG.commitment_recursion,
     );
 
-    // SUMCHECK
-    // we want to check that
-    // ck \cdot folded_witness - commitment \cdot fold_challenge = 0
-    // outer_evaluation_points \cdot folded_witness - opening \cdot fold_challenge = 0
-    // <opening, inner_evaluation_points> - evaluations = 0
-    // I \otimes projection_matrix \cdot folded_witness - projection_image \cdot fold_challenge = 0
-    // rc_projection_image, rc_opening, rc_commitment are well-formed
-    // <w, conj(w)> + <y, conj(y)> - t = 0
-
-    RoundOutput {
-        folded_witness,
-        projection_image,
-        opening,
-    }
+    sumcheck(
+        crs,
+        &CONFIG,
+        &next_round_data,
+        &projection_matrix,
+        &fold_challenge,
+        &mut hash_wrapper,
+    );
+    // RoundOutput {
+    //     folded_witness,
+    //     projection_image,
+    //     opening,
+    // }
 }
 
 pub fn execute() {

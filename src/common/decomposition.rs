@@ -66,6 +66,30 @@ pub fn get_composer_offset(base_log: u64, radix: usize) -> u64 {
     offset
 }
 
+pub fn compose_from_decomposed(
+    decomposed: &Vec<RingElement>,
+    base_log: u64,
+    radix: usize,
+) -> Vec<RingElement> {
+    let mut recomposed = new_vec_zero_preallocated(decomposed.len() / radix);
+
+    let offset = get_composer_offset(base_log, radix);
+
+    for i in 0..recomposed.len() {
+        recomposed[i] = RingElement::all(0, Representation::IncompleteNTT);
+        for j in 0..radix {
+            let mut term = decomposed[i * radix + j].clone();
+            let shift =
+                RingElement::constant(1u64 << (j as u64 * base_log), Representation::IncompleteNTT);
+            term *= &shift;
+            recomposed[i] += &term;
+        }
+        recomposed[i] -= &RingElement::all(offset, Representation::IncompleteNTT);
+    }
+
+    recomposed
+}
+
 #[test]
 fn test_decompose() {
     let mut input = vec![RingElement::all(37, Representation::IncompleteNTT)];
@@ -146,4 +170,14 @@ fn test_random_mod_q() {
     }
 
     assert_eq!(inf_norm < (1u64 << (base_log - 1)), true);
+}
+
+#[test]
+fn test_compose_from_decomposed() {
+    let mut input = vec![RingElement::all(37, Representation::IncompleteNTT)];
+    let base_log = 3; // base 8
+    let radix = 4;
+    let decomposed = decompose(&mut input, base_log, radix);
+    let recomposed = compose_from_decomposed(&decomposed, base_log, radix);
+    assert_eq!(recomposed[0], input[0]);
 }

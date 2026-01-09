@@ -7,7 +7,7 @@ pub type CK = Vec<PreprocessedRow>;
 
 /// Struct representing the Common Reference String (CRS).
 pub struct CRS {
-    pub(crate) cks: Vec<CK>, // Commitment keys for each witness length
+    pub cks: Vec<CK>, // Commitment keys for each witness length
 }
 
 impl CRS {
