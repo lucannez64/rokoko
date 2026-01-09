@@ -45,9 +45,13 @@ pub static CONFIG: LazyLock<Config> = LazyLock::new(|| Config {
 });
 
 pub struct Config {
-    // This will be round config later, but for now we only have one round
+    witness_height: usize,
+    witness_width: usize,
+    challenge_width: usize, // shall be likely the witness width
+    projection_ratio: usize, // shall be likely the witness_height
     commitment_recursion: RecursionConfig,
     projection_opening_recursion: RecursionConfig,
+    // next: Option<Box<Config>>, // for multiple rounds
 }
 
 // pub fn init_empty_recursive_commitment(config: &Vec<RecursionConfig>) -> RecursiveCommitment {
@@ -92,6 +96,12 @@ pub fn prover_round(
     let folded_witness = fold(&witness, &fold_challenge);
 
     // SUMCHECK
+    // we want to check that
+    // ck \cdot folded_witness - commitment \cdot fold_challenge = 0
+    // outer_evaluation_points \cdot folded_witness = opening fold_challenge
+    // <opening, inner_evaluation_points> = evaluations
+    // rc_projection_image, rc_opening, rc_commitment are well-formed
+    // <w, conj(w)> + <y, conj(y)> = t
 
     RoundOutput {
         folded_witness,
