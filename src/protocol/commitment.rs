@@ -73,18 +73,20 @@ pub fn init_prover_commitment(height: usize, width: usize) -> Commitment {
 //     commitment
 // }
 
+pub type BasicCommitment = HorizontallyAlignedMatrix<RingElement>;
+
 pub fn commit_basic_internal(
     ck: &CK,
     witness: &VerticallyAlignedMatrix<RingElement>,
-) -> Commitment {
-    let mut commitment = init_prover_commitment(ck.len(), witness.width);
+) -> BasicCommitment {
+    let mut commitment = HorizontallyAlignedMatrix::new_zero_preallocated(ck.len(), witness.width);
 
     for (i, row) in ck.iter().enumerate() {
         for col in 0..witness.width {
             let mut temp = RingElement::zero(Representation::IncompleteNTT);
             for (elem, w_elem) in row.preprocessed_row.iter().zip(witness.col(col).iter()) {
                 temp *= (elem, w_elem);
-                *commitment.commitment.index_mut((i, col)) += &temp;
+                *commitment.index_mut((i, col)) += &temp;
             }
         }
     }
@@ -92,7 +94,7 @@ pub fn commit_basic_internal(
 }
 
 // this is first level commit for FW = Y
-pub fn commit_basic(crs: &CRS, witness: &VerticallyAlignedMatrix<RingElement>) -> Commitment {
+pub fn commit_basic(crs: &CRS, witness: &VerticallyAlignedMatrix<RingElement>) -> BasicCommitment {
     let ck = crs.ck_for_wit_dim(witness.height);
     commit_basic_internal(ck, witness)
 }
@@ -170,7 +172,7 @@ fn test_commitment_computation() {
     let commitment = commit_basic_internal(&ck, &witness);
 
     assert_eq!(
-        &commitment.commitment[(0, 0)],
+        &commitment[(0, 0)],
         &RingElement::constant(
             1 * 1 + 2 * 2 + 4 * 3 + 8 * 4 + 16 * 5 + 32 * 6 + 64 * 7 + 128 * 8,
             Representation::IncompleteNTT
@@ -178,7 +180,7 @@ fn test_commitment_computation() {
     );
 
     assert_eq!(
-        &commitment.commitment[(0, 1)],
+        &commitment[(0, 1)],
         &RingElement::constant(
             1 * 9 + 2 * 10 + 4 * 11 + 8 * 12 + 16 * 13 + 32 * 14 + 64 * 15 + 128 * 16,
             Representation::IncompleteNTT
@@ -186,7 +188,7 @@ fn test_commitment_computation() {
     );
 
     assert_eq!(
-        &commitment.commitment[(1, 0)],
+        &commitment[(1, 0)],
         &RingElement::constant(
             1 * 1 + 4 * 2 + 16 * 3 + 64 * 4 + 256 * 5 + 1024 * 6 + 4096 * 7 + 16384 * 8,
             Representation::IncompleteNTT
@@ -194,7 +196,7 @@ fn test_commitment_computation() {
     );
 
     assert_eq!(
-        &commitment.commitment[(1, 1)],
+        &commitment[(1, 1)],
         &RingElement::constant(
             1 * 9 + 4 * 10 + 16 * 11 + 64 * 12 + 256 * 13 + 1024 * 14 + 4096 * 15 + 16384 * 16,
             Representation::IncompleteNTT

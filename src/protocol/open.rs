@@ -7,11 +7,13 @@ use crate::{
         ring_arithmetic::{Representation, RingElement},
         structured_row::{PreprocessedRow, StructuredRow},
     },
-    protocol::commitment::{commit_basic_internal, init_prover_commitment, Commitment},
+    protocol::commitment::{
+        commit_basic_internal, init_prover_commitment, BasicCommitment, Commitment,
+    },
 };
 
 pub struct Opening {
-    pub rhs: Commitment,
+    pub rhs: BasicCommitment,
     pub evaluations: Vec<RingElement>,
     pub evaluation_points_inner: Vec<PreprocessedRow>,
     pub evaluation_points_outer: Vec<PreprocessedRow>,
@@ -79,9 +81,9 @@ pub fn open_at(
 
     for (i, preprocessed_row_outer) in preprocessed_points_outer.iter().enumerate() {
         let mut temp = RingElement::zero(Representation::IncompleteNTT);
-        for col in 0..rhs.commitment.width {
+        for col in 0..rhs.width {
             temp *= (
-                &rhs.commitment[(i, col)],
+                &rhs[(i, col)],
                 &preprocessed_row_outer.preprocessed_row[col],
             );
             evaluations[i] += &temp;
@@ -148,7 +150,7 @@ fn test_opening() {
     assert_eq!(opening.evaluations.len(), 2);
 
     assert_eq!(
-        opening.rhs.commitment[(0, 0)],
+        opening.rhs[(0, 0)],
         RingElement::constant(
             (MOD_Q as i64
                 + ((1 - 17) * (1 - 18) * 1
@@ -160,7 +162,7 @@ fn test_opening() {
         )
     );
     assert_eq!(
-        opening.rhs.commitment[(0, 1)],
+        opening.rhs[(0, 1)],
         RingElement::constant(
             (MOD_Q as i64
                 + ((1 - 17) * (1 - 18) * 5
@@ -172,7 +174,7 @@ fn test_opening() {
         )
     );
     assert_eq!(
-        opening.rhs.commitment[(0, 2)],
+        opening.rhs[(0, 2)],
         RingElement::constant(
             (MOD_Q as i64
                 + ((1 - 17) * (1 - 18) * 9
@@ -184,7 +186,7 @@ fn test_opening() {
         )
     );
     assert_eq!(
-        opening.rhs.commitment[(0, 3)],
+        opening.rhs[(0, 3)],
         RingElement::constant(
             (MOD_Q as i64
                 + ((1 - 17) * (1 - 18) * 13
@@ -196,7 +198,7 @@ fn test_opening() {
         )
     );
     assert_eq!(
-        opening.rhs.commitment[(1, 0)],
+        opening.rhs[(1, 0)],
         RingElement::constant(
             (MOD_Q as i64
                 + ((1 - 19) * (1 - 20) * 1
@@ -208,7 +210,7 @@ fn test_opening() {
         )
     );
     assert_eq!(
-        opening.rhs.commitment[(1, 1)],
+        opening.rhs[(1, 1)],
         RingElement::constant(
             (MOD_Q as i64
                 + ((1 - 19) * (1 - 20) * 5
@@ -220,7 +222,7 @@ fn test_opening() {
         )
     );
     assert_eq!(
-        opening.rhs.commitment[(1, 2)],
+        opening.rhs[(1, 2)],
         RingElement::constant(
             (MOD_Q as i64
                 + ((1 - 19) * (1 - 20) * 9
@@ -232,7 +234,7 @@ fn test_opening() {
         )
     );
     assert_eq!(
-        opening.rhs.commitment[(1, 3)],
+        opening.rhs[(1, 3)],
         RingElement::constant(
             (MOD_Q as i64
                 + ((1 - 19) * (1 - 20) * 13
@@ -248,10 +250,10 @@ fn test_opening() {
         opening.evaluations[0],
         RingElement::constant(
             (MOD_Q as i64
-                + ((1 - 21) * (1 - 22) * opening.rhs.commitment[(0, 0)].v[0] as i64
-                    + (1 - 21) * (22) * opening.rhs.commitment[(0, 1)].v[0] as i64
-                    + (21) * (1 - 22) * opening.rhs.commitment[(0, 2)].v[0] as i64
-                    + (21) * (22) * opening.rhs.commitment[(0, 3)].v[0] as i64)) as u64
+                + ((1 - 21) * (1 - 22) * opening.rhs[(0, 0)].v[0] as i64
+                    + (1 - 21) * (22) * opening.rhs[(0, 1)].v[0] as i64
+                    + (21) * (1 - 22) * opening.rhs[(0, 2)].v[0] as i64
+                    + (21) * (22) * opening.rhs[(0, 3)].v[0] as i64)) as u64
                 % MOD_Q,
             Representation::IncompleteNTT
         )
@@ -261,10 +263,10 @@ fn test_opening() {
         opening.evaluations[1],
         RingElement::constant(
             (MOD_Q as i64
-                + ((1 - 23) * (1 - 24) * opening.rhs.commitment[(1, 0)].v[0] as i64
-                    + (1 - 23) * (24) * opening.rhs.commitment[(1, 1)].v[0] as i64
-                    + (23) * (1 - 24) * opening.rhs.commitment[(1, 2)].v[0] as i64
-                    + (23) * (24) * opening.rhs.commitment[(1, 3)].v[0] as i64)) as u64
+                + ((1 - 23) * (1 - 24) * opening.rhs[(1, 0)].v[0] as i64
+                    + (1 - 23) * (24) * opening.rhs[(1, 1)].v[0] as i64
+                    + (23) * (1 - 24) * opening.rhs[(1, 2)].v[0] as i64
+                    + (23) * (24) * opening.rhs[(1, 3)].v[0] as i64)) as u64
                 % MOD_Q,
             Representation::IncompleteNTT
         )
