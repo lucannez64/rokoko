@@ -40,7 +40,13 @@ pub static CONFIG: LazyLock<Config> = LazyLock::new(|| Config {
         rank: 1,
         next: None,
     },
-    projection_opening_recursion: RecursionConfig {
+    opening_recursion: RecursionConfig {
+        decomposition_radix_log: 15,
+        decomposition_chunks: 2,
+        rank: 1,
+        next: None,
+    },
+    projection_recursion: RecursionConfig {
         decomposition_radix_log: 15,
         decomposition_chunks: 2,
         rank: 1,
@@ -54,7 +60,8 @@ pub struct Config {
     challenge_width: usize,  // shall be likely the witness width
     projection_ratio: usize, // shall be likely the witness_height
     commitment_recursion: RecursionConfig,
-    projection_opening_recursion: RecursionConfig,
+    opening_recursion: RecursionConfig,
+    projection_recursion: RecursionConfig,
     // next: Option<Box<Config>>, // for multiple rounds
 }
 
@@ -75,7 +82,7 @@ pub fn prover_round(
 
     let opening = open_at(&witness, &evaluation_points_inner, &evaluation_points_outer);
 
-    let rc_opening = recursive_commit(crs, &CONFIG.projection_opening_recursion, &opening.rhs.data);
+    let rc_opening = recursive_commit(crs, &CONFIG.opening_recursion, &opening.rhs.data);
 
     hash_wrapper.update_with_ring_element_slice(&opening.rhs.data);
 
@@ -89,11 +96,8 @@ pub fn prover_round(
     println!("{:?}", projection_image.height);
     println!("{:?}", projection_image.width);
 
-    let rc_projection_image = recursive_commit(
-        &crs,
-        &CONFIG.projection_opening_recursion,
-        &projection_image.data,
-    );
+    let rc_projection_image =
+        recursive_commit(&crs, &CONFIG.projection_recursion, &projection_image.data);
 
     hash_wrapper.update_with_ring_element_slice(&rc_projection_image.most_inner_commitment());
 
