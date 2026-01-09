@@ -98,10 +98,11 @@ pub fn prover_round(
     // SUMCHECK
     // we want to check that
     // ck \cdot folded_witness - commitment \cdot fold_challenge = 0
-    // outer_evaluation_points \cdot folded_witness = opening fold_challenge
-    // <opening, inner_evaluation_points> = evaluations
+    // outer_evaluation_points \cdot folded_witness - opening \cdot fold_challenge = 0
+    // <opening, inner_evaluation_points> - evaluations = 0
+    // I \otimes projection_matrix \cdot folded_witness - projection_image \cdot fold_challenge = 0
     // rc_projection_image, rc_opening, rc_commitment are well-formed
-    // <w, conj(w)> + <y, conj(y)> = t
+    // <w, conj(w)> + <y, conj(y)> - t = 0
 
     RoundOutput {
         folded_witness,
