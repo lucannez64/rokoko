@@ -22,10 +22,11 @@ pub type BasicCommitment = HorizontallyAlignedMatrix<RingElement>;
 pub fn commit_basic_internal(
     ck: &CK,
     witness: &VerticallyAlignedMatrix<RingElement>,
+    rank: usize,
 ) -> BasicCommitment {
     let mut commitment = HorizontallyAlignedMatrix::new_zero_preallocated(ck.len(), witness.width);
 
-    for (i, row) in ck.iter().enumerate() {
+    for (i, row) in ck.iter().take(rank).enumerate() {
         for col in 0..witness.width {
             let mut temp = RingElement::zero(Representation::IncompleteNTT);
             for (elem, w_elem) in row.preprocessed_row.iter().zip(witness.col(col).iter()) {
@@ -38,15 +39,25 @@ pub fn commit_basic_internal(
 }
 
 // this is first level commit for FW = Y
-pub fn commit_basic(crs: &CRS, witness: &VerticallyAlignedMatrix<RingElement>) -> BasicCommitment {
+pub fn commit_basic(
+    crs: &CRS,
+    witness: &VerticallyAlignedMatrix<RingElement>,
+    rank: usize,
+) -> BasicCommitment {
     let ck = crs.ck_for_wit_dim(witness.height);
-    commit_basic_internal(ck, witness)
+    commit_basic_internal(ck, witness, rank)
+}
+
+pub struct Prefix {
+    pub prefix: usize,
+    pub length: usize,
 }
 
 pub struct RecursionConfig {
     pub decomposition_radix_log: usize,
     pub decomposition_chunks: usize,
     pub rank: usize,
+    pub prefix: Prefix,
     pub next: Option<Box<RecursionConfig>>,
 }
 
@@ -122,6 +133,10 @@ fn test_recursive_commit() {
         decomposition_radix_log: 3, // base 8
         decomposition_chunks: 4,
         rank: 2,
+        prefix: Prefix {
+            prefix: 0,
+            length: 0,
+        },
         next: None,
     };
 
@@ -206,7 +221,7 @@ fn test_commitment_computation() {
         height: 8,
     };
 
-    let commitment = commit_basic_internal(&ck, &witness);
+    let commitment = commit_basic_internal(&ck, &witness, 2);
 
     assert_eq!(
         &commitment[(0, 0)],

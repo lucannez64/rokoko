@@ -34,6 +34,7 @@ pub static CONFIG: LazyLock<Config> = LazyLock::new(|| Config {
         decomposition_chunks: 4,
         rank: 1,
         next: None,
+        prefix: Prefix { prefix:0, length: 0
     },
     projection_opening_recursion: RecursionConfig {
         decomposition_radix_log: 15,

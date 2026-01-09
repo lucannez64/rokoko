@@ -70,7 +70,7 @@ pub fn open_at(
     // }
 
     // it's not a commitment, but we can reuse the same structure
-    let mut rhs = commit_basic_internal(&preprocessed_points_inner, witness);
+    let mut rhs = commit_basic_internal(&preprocessed_points_inner, witness, nof_evaluation_points);
 
     let mut evaluations =
         vec![RingElement::zero(Representation::IncompleteNTT); nof_evaluation_points];
