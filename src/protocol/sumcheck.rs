@@ -14,15 +14,89 @@ use crate::{
         ring_arithmetic::{Representation, RingElement},
     },
     protocol::{
-        commitment::Prefix,
+        commitment::{self, Prefix},
         config::{slice_by_prefix, Config},
-        crs,
+        crs::{self, CRS},
         sumcheck_utils::{
             common::HighOrderSumcheckData, diff::DiffSumcheck, linear::LinearSumcheck,
             polynomial::Polynomial, product::ProductSumcheck, selector_eq::SelectorEq,
         },
     },
 };
+
+fn composition_sumcheck(
+    base_log: u64,
+    chunks: usize,
+    total_vars: usize,
+) -> (
+    RefCell<LinearSumcheck<RingElement>>,
+    RefCell<LinearSumcheck<RingElement>>,
+) {
+    let conmposition_basis = range(0, chunks)
+        .map(|i| {
+            // Basis element corresponding to 2^{base_log * i}
+            RingElement::constant(
+                1u64 << (base_log as u64 * i as u64),
+                Representation::IncompleteNTT,
+            )
+        })
+        .collect::<Vec<RingElement>>();
+    let combiner_sumcheck = RefCell::new(
+        LinearSumcheck::<RingElement>::new_with_prefixed_sufixed_data(
+            conmposition_basis.len(),
+            total_vars - conmposition_basis.len().ilog2() as usize,
+            0,
+        ),
+    );
+
+    combiner_sumcheck
+        .borrow_mut()
+        .load_from(&conmposition_basis);
+
+    let mut witness_combiner_constant_sumcheck = RefCell::new(
+        LinearSumcheck::<RingElement>::new_with_prefixed_sufixed_data(1, total_vars, 0),
+    );
+
+    witness_combiner_constant_sumcheck
+        .borrow_mut()
+        .load_from(&vec![RingElement::all(
+            get_decomposed_offset_scaled(base_log as u64, chunks),
+            // 0,
+            Representation::IncompleteNTT,
+        )]);
+
+    (combiner_sumcheck, witness_combiner_constant_sumcheck)
+}
+
+fn sumcheck_from_prefix(prefix: &Prefix, total_vars: usize) -> RefCell<SelectorEq<RingElement>> {
+    RefCell::new(SelectorEq::<RingElement>::new(
+        prefix.prefix,
+        prefix.length,
+        total_vars,
+    ))
+}
+
+fn ck_sumcheck(
+    crs: &CRS,
+    total_vars: usize,
+    wit_dim: usize,
+    i: usize,
+    sufix: usize,
+) -> RefCell<LinearSumcheck<RingElement>> {
+    let ck = crs.ck_for_wit_dim(wit_dim);
+
+    let mut sumcheck = RefCell::new(
+        LinearSumcheck::<RingElement>::new_with_prefixed_sufixed_data(
+            wit_dim,
+            total_vars - wit_dim.ilog2() as usize - sufix,
+            sufix,
+        ),
+    );
+
+    sumcheck.borrow_mut().load_from(&ck[i].preprocessed_row);
+
+    sumcheck
+}
 
 // Computes the tensor product of two vectors of RingElements.
 // e.g. (a0, a1) ⊗ (b0, b1) = (a0*b0, a0*b1, a1*b0, a1*b1)
@@ -56,86 +130,7 @@ pub fn sumcheck(
     folding_challenges: &Vec<RingElement>,
     hash_wrapper: &mut HashWrapper,
 ) {
-    // TODO sumcheck protocol implementation
-
-    // Let's check first ck \cdot folded_witness - commitment \cdot fold_challenge = 0
-
-    let ck = crs
-        .ck_for_wit_dim(config.witness_height)
-        .iter()
-        .take(config.basic_commitment_rank)
-        .collect::<Vec<_>>();
-
-    let composition_basis_basic_commitment =
-        range(0, config.commitment_recursion.decomposition_chunks)
-            .map(|i| {
-                RingElement::constant(
-                    1u64 << (config.commitment_recursion.decomposition_base_log as u64 * i as u64),
-                    Representation::IncompleteNTT,
-                )
-            })
-            .collect::<Vec<RingElement>>();
-
-    let composition_basis_witness = range(0, config.witness_decomposition_chunks)
-        .map(|i| {
-            // Basis element corresponding to 2^{base_log * i}
-            RingElement::constant(
-                1u64 << (config.witness_decomposition_base_log as u64 * i as u64),
-                Representation::IncompleteNTT,
-            )
-        })
-        .collect::<Vec<RingElement>>();
-
-    let row_zero_commitment_prefix = Prefix {
-        prefix: config.commitment_recursion.prefix.prefix * config.basic_commitment_rank, // because we have rank 2
-        length: config.commitment_recursion.prefix.length
-            + config.basic_commitment_rank.ilog2() as usize, // if the rank is 2, then 2.ilog(2) = 1, so we add 1 to length
-    };
-
-    let mut left_2 = inner_product(
-        &tensor_product(&ck[0].preprocessed_row, &composition_basis_witness),
-        &slice_by_prefix(&combined_witness, &config.folded_witness_prefix),
-    );
-
-    let left_offset = ck[0].preprocessed_row.iter().fold(
-        RingElement::zero(Representation::IncompleteNTT),
-        |acc, x| {
-            &acc + &(x * &RingElement::all(
-                get_composer_offset(
-                    config.witness_decomposition_base_log as u64,
-                    config.witness_decomposition_chunks,
-                ),
-                Representation::IncompleteNTT,
-            ))
-        },
-    );
-
-    left_2 -= &left_offset;
-
-    let mut right_2 = inner_product(
-        &tensor_product(&folding_challenges, &composition_basis_basic_commitment),
-        &slice_by_prefix(&combined_witness, &row_zero_commitment_prefix),
-    );
-
-    let right_offset = folding_challenges.iter().fold(
-        RingElement::zero(Representation::IncompleteNTT),
-        |acc, x| {
-            &acc + &(x * &RingElement::all(
-                get_composer_offset(
-                    config.commitment_recursion.decomposition_base_log as u64,
-                    config.commitment_recursion.decomposition_chunks,
-                ),
-                Representation::IncompleteNTT,
-            ))
-        },
-    );
-
-    right_2 -= &right_offset;
-
-    assert_eq!(left_2, right_2);
-
-    assert_eq!(config.composed_witness_length, combined_witness.len());
-    // finally we write if as a sumcheck claim
+    let total_vars = config.composed_witness_length.ilog2() as usize;
 
     let mut combined_witness_sumcheck = RefCell::new(LinearSumcheck::<RingElement>::new(
         config.composed_witness_length,
@@ -145,72 +140,41 @@ pub fn sumcheck(
         .borrow_mut()
         .load_from(combined_witness);
 
-    let mut witness_selector_sumcheck = RefCell::new(SelectorEq::<RingElement>::new(
-        config.folded_witness_prefix.prefix,
-        config.folded_witness_prefix.length,
-        config.composed_witness_length.ilog2() as usize,
-    ));
+    let mut folded_witness_selector_sumcheck =
+        sumcheck_from_prefix(&config.folded_witness_prefix, total_vars);
 
-    let mut witness_combiner_sumcheck = RefCell::new(
-        LinearSumcheck::<RingElement>::new_with_prefixed_sufixed_data(
-            composition_basis_witness.len(),
-            config.composed_witness_length.ilog2() as usize
-                - composition_basis_witness.len().ilog2() as usize,
-            0,
-        ),
-    );
-
-    witness_combiner_sumcheck
-        .borrow_mut()
-        .load_from(&composition_basis_witness);
-
-    let mut commitment_zero_row_sumcheck = RefCell::new(
-        LinearSumcheck::<RingElement>::new_with_prefixed_sufixed_data(
-            config.witness_height,
-            config.composed_witness_length.ilog2() as usize
-                - config.witness_height.ilog2() as usize
-                - composition_basis_witness.len().ilog2() as usize,
-            composition_basis_witness.len().ilog2() as usize,
-        ),
-    );
-
-    commitment_zero_row_sumcheck
-        .borrow_mut()
-        .load_from(&ck[0].preprocessed_row);
-
-    let mut constant_sumcheck = RefCell::new(
-        LinearSumcheck::<RingElement>::new_with_prefixed_sufixed_data(
-            1,
+    let (mut folded_witness_combiner_sumcheck, mut witness_combiner_constant_sumcheck) =
+        composition_sumcheck(
+            config.witness_decomposition_base_log as u64,
+            config.witness_decomposition_chunks,
             config.composed_witness_length.ilog2() as usize,
-            0,
-        ),
-    );
+        );
 
-    constant_sumcheck
-        .borrow_mut()
-        .load_from(&vec![RingElement::all(
-            get_decomposed_offset_scaled(
-                config.witness_decomposition_base_log as u64,
-                config.witness_decomposition_chunks,
-            ),
-            // 0,
-            Representation::IncompleteNTT,
-        )]);
+    let mut commitment_key_zero_row_sumcheck = ck_sumcheck(
+        crs,
+        total_vars,
+        config.witness_height,
+        0,
+        config.witness_decomposition_chunks.ilog2() as usize,
+    );
 
     let mut left_sumcheck_3 = RefCell::new(ProductSumcheck::new(
         &combined_witness_sumcheck,
-        &witness_combiner_sumcheck,
+        &folded_witness_combiner_sumcheck,
     ));
 
-    let mut left_sumcheck_2 = RefCell::new(DiffSumcheck::new(&left_sumcheck_3, &constant_sumcheck));
+    let mut left_sumcheck_2 = RefCell::new(DiffSumcheck::new(
+        &left_sumcheck_3,
+        &witness_combiner_constant_sumcheck,
+    ));
 
     let mut left_sumcheck_1 = RefCell::new(ProductSumcheck::new(
         &left_sumcheck_2,
-        &commitment_zero_row_sumcheck,
+        &commitment_key_zero_row_sumcheck,
     ));
 
     let mut left_sumcheck_0 = RefCell::new(ProductSumcheck::new(
-        &witness_selector_sumcheck,
+        &folded_witness_selector_sumcheck,
         &left_sumcheck_1,
     ));
 
@@ -220,6 +184,71 @@ pub fn sumcheck(
         .borrow_mut()
         .univariate_polynomial_into(&mut poly);
 
-    assert_eq!(&poly.at_zero() + &poly.at_one(), left_2);
     assert_eq!(poly.num_coefficients, 3);
+
+    // Now, we proceed with rhs
+
+    let mut folding_challenges_sumcheck = RefCell::new(
+        LinearSumcheck::<RingElement>::new_with_prefixed_sufixed_data(
+            config.witness_width,
+            total_vars
+                - config.witness_width.ilog2() as usize
+                - config.commitment_recursion.decomposition_chunks.ilog2() as usize,
+            config.commitment_recursion.decomposition_chunks.ilog2() as usize,
+        ),
+    );
+    folding_challenges_sumcheck
+        .borrow_mut()
+        .load_from(&folding_challenges);
+
+    let commitment_zero_row_prefix = Prefix {
+        prefix: config.commitment_recursion.prefix.prefix * config.basic_commitment_rank,
+        length: config.commitment_recursion.prefix.length
+            + config.basic_commitment_rank.ilog2() as usize,
+    };
+
+    let commitment_zero_row_sumcheck =
+        sumcheck_from_prefix(&commitment_zero_row_prefix, total_vars);
+
+    let (mut commitment_combiner_sumcheck, mut commitment_combiner_constant_sumcheck) =
+        composition_sumcheck(
+            config.commitment_recursion.decomposition_base_log as u64,
+            config.commitment_recursion.decomposition_chunks,
+            config.composed_witness_length.ilog2() as usize,
+        );
+
+    let mut right_sumcheck_3 = RefCell::new(ProductSumcheck::new(
+        &combined_witness_sumcheck,
+        &commitment_combiner_sumcheck,
+    ));
+
+    let mut right_sumcheck_2 = RefCell::new(DiffSumcheck::new(
+        &right_sumcheck_3,
+        &commitment_combiner_constant_sumcheck,
+    ));
+
+    let mut right_sumcheck_1 = RefCell::new(ProductSumcheck::new(
+        &right_sumcheck_2,
+        &folding_challenges_sumcheck,
+    ));
+
+    let mut right_sumcheck_0 = RefCell::new(ProductSumcheck::new(
+        &commitment_zero_row_sumcheck,
+        &right_sumcheck_1,
+    ));
+
+    right_sumcheck_0
+        .borrow_mut()
+        .univariate_polynomial_into(&mut poly);
+
+    let constraint_sumcheck = RefCell::new(DiffSumcheck::new(&left_sumcheck_0, &right_sumcheck_0));
+
+    constraint_sumcheck
+        .borrow_mut()
+        .univariate_polynomial_into(&mut poly);
+
+    assert_eq!(
+        &poly.at_zero() + &poly.at_one(),
+        RingElement::zero(Representation::IncompleteNTT)
+    );
 }
