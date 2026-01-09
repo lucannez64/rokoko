@@ -12,9 +12,7 @@ use crate::{
         structured_row::{self, PreprocessedRow, StructuredRow},
     },
     protocol::{
-        commitment::{
-            commit_basic, commit_basic_internal, BasicCommitment, Commitment, RecursionConfig,
-        },
+        commitment::{commit_basic, commit_basic_internal, BasicCommitment, RecursionConfig},
         crs::{CK, CRS},
         fold::fold,
         open::{evaluation_point_to_structured_row, open_at, Opening},

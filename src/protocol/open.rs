@@ -7,9 +7,7 @@ use crate::{
         ring_arithmetic::{Representation, RingElement},
         structured_row::{PreprocessedRow, StructuredRow},
     },
-    protocol::commitment::{
-        commit_basic_internal, init_prover_commitment, BasicCommitment, Commitment,
-    },
+    protocol::commitment::{commit_basic_internal, BasicCommitment},
 };
 
 pub struct Opening {
@@ -56,8 +54,6 @@ pub fn open_at(
         .into_iter()
         .map(|sr| PreprocessedRow::from_structured_row(sr))
         .collect::<Vec<PreprocessedRow>>();
-
-    let mut rhs = init_prover_commitment(nof_evaluation_points, witness.width);
 
     // for (i, preprocessed_row_inner) in preprocessed_points_inner.iter().enumerate() {
     //     let mut temp = RingElement::zero(Representation::IncompleteNTT);

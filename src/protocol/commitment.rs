@@ -13,66 +13,6 @@ use crate::{
     },
 };
 
-pub struct LevelCommitmentDescriptor {
-    pub(crate) decomposition_radix: usize,
-    pub(crate) decomposition_chunks: usize,
-}
-
-pub struct LevelCommitmentWrapper {
-    pub(crate) commitment: Commitment,
-    pub(crate) decomposition_radix: usize,
-    pub(crate) decomposition_chunks: usize,
-}
-
-pub struct Commitment {
-    pub(crate) commitment: VerticallyAlignedMatrix<RingElement>,
-    pub(crate) recursion: Option<Box<LevelCommitmentWrapper>>,
-}
-
-pub fn init_prover_commitment(height: usize, width: usize) -> Commitment {
-    Commitment {
-        // TODO: think/check which alignment is more efficient
-        commitment: VerticallyAlignedMatrix::new_zero_preallocated(height, width),
-        recursion: None,
-    }
-}
-
-// pub fn commit(
-//     ck: &CK,
-//     witness: &VerticallyAlignedMatrix<RingElement>,
-//     descriptors: &[LevelCommitmentDescriptor],
-// ) -> Commitment {
-//     commit_internal(ck, witness, descriptors, 0)
-// }
-
-// // TODO: allow commitment to the prefix of the CK
-// pub fn commit_internal(
-//     ck: &CK,
-//     witness: &VerticallyAlignedMatrix<RingElement>,
-//     descriptors: &[LevelCommitmentDescriptor],
-//     current_level: usize,
-// ) -> Commitment {
-//     let decomposed_witness_width = if current_level < descriptors.len() {
-//         descriptors[current_level].decomposition_chunks
-//     } else {
-//         1
-//     } * witness.width;
-//     let mut commitment = init_prover_commitment(ck.len(), decomposed_witness_width);
-
-//     assert_eq!(ck[0].preprocessed_row.len(), witness.height);
-
-//     for (i, row) in ck.iter().enumerate() {
-//         let mut temp = RingElement::zero(Representation::IncompleteNTT);
-//         for col in 0..witness.width {
-//             for (elem, w_elem) in row.preprocessed_row.iter().zip(witness.col(col).iter()) {
-//                 temp *= (elem, w_elem);
-//                 *commitment.commitment.index_mut((i, col)) += &temp;
-//             }
-//         }
-//     }
-//     commitment
-// }
-
 pub type BasicCommitment = HorizontallyAlignedMatrix<RingElement>;
 
 pub fn commit_basic_internal(
@@ -107,7 +47,8 @@ pub struct RecursionConfig {
 }
 
 pub struct RecursiveCommitment {
-    pub commitment: Commitment,
+    pub committed_data: Vec<RingElement>,
+    pub commitment: Vec<RingElement>,
     pub recursion: Option<Box<RecursiveCommitment>>,
 }
 
