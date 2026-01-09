@@ -1,7 +1,12 @@
-use crate::common::{
-    config::MOD_Q,
-    matrix::new_vec_zero_preallocated,
-    ring_arithmetic::{Representation, RingElement},
+use num::traits::ops::inv;
+
+use crate::{
+    common::{
+        config::MOD_Q,
+        matrix::new_vec_zero_preallocated,
+        ring_arithmetic::{Representation, RingElement},
+    },
+    hexl::bindings::{inv_mod, multiply_mod},
 };
 
 impl RingElement {
@@ -64,6 +69,15 @@ pub fn get_composer_offset(base_log: u64, radix: usize) -> u64 {
         offset -= small_shift * shift;
     }
     offset
+}
+
+pub fn get_decomposed_offset_scaled(base_log: u64, radix: usize) -> u64 {
+    let mut offset = get_composer_offset(base_log, radix);
+    unsafe {
+        // TODO: cache the inverses of powers of two if used online
+        let inv_radix = inv_mod(radix as u64, MOD_Q);
+        multiply_mod(offset, inv_radix, MOD_Q)
+    }
 }
 
 pub fn compose_from_decomposed(

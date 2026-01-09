@@ -6,7 +6,9 @@ use num::range;
 use crate::{
     common::{
         arithmetic::inner_product,
-        decomposition::{compose_from_decomposed, get_composer_offset},
+        decomposition::{
+            compose_from_decomposed, get_composer_offset, get_decomposed_offset_scaled,
+        },
         hash::HashWrapper,
         projection_matrix::{self, ProjectionMatrix},
         ring_arithmetic::{Representation, RingElement},
@@ -176,7 +178,7 @@ pub fn sumcheck(
         .borrow_mut()
         .load_from(&ck[0].preprocessed_row);
 
-    let mut offset_sumcheck = RefCell::new(
+    let mut constant_sumcheck = RefCell::new(
         LinearSumcheck::<RingElement>::new_with_prefixed_sufixed_data(
             1,
             config.composed_witness_length.ilog2() as usize,
@@ -184,33 +186,40 @@ pub fn sumcheck(
         ),
     );
 
-    offset_sumcheck
+    constant_sumcheck
         .borrow_mut()
-        .load_from(&vec![left_offset.clone()]);
+        .load_from(&vec![RingElement::all(
+            get_decomposed_offset_scaled(
+                config.witness_decomposition_base_log as u64,
+                config.witness_decomposition_chunks,
+            ),
+            // 0,
+            Representation::IncompleteNTT,
+        )]);
 
-    let mut left_sumcheck_0 = RefCell::new(ProductSumcheck::new(
-        &witness_selector_sumcheck,
+    let mut left_sumcheck_3 = RefCell::new(ProductSumcheck::new(
+        &combined_witness_sumcheck,
         &witness_combiner_sumcheck,
     ));
 
+    let mut left_sumcheck_2 = RefCell::new(DiffSumcheck::new(&left_sumcheck_3, &constant_sumcheck));
+
     let mut left_sumcheck_1 = RefCell::new(ProductSumcheck::new(
-        &left_sumcheck_0,
+        &left_sumcheck_2,
         &commitment_zero_row_sumcheck,
     ));
 
-    let mut left_sumcheck = RefCell::new(ProductSumcheck::new(
+    let mut left_sumcheck_0 = RefCell::new(ProductSumcheck::new(
+        &witness_selector_sumcheck,
         &left_sumcheck_1,
-        &combined_witness_sumcheck,
     ));
 
     let mut poly = Polynomial::<RingElement>::new(1);
 
-    left_sumcheck
+    left_sumcheck_0
         .borrow_mut()
         .univariate_polynomial_into(&mut poly);
 
-    left_2 += &left_offset;
     assert_eq!(&poly.at_zero() + &poly.at_one(), left_2);
-
-    // right
+    assert_eq!(poly.num_coefficients, 3);
 }
