@@ -12,9 +12,9 @@ use crate::{
 
 pub struct Opening {
     pub rhs: BasicCommitment,
-    pub evaluations: Vec<RingElement>,
-    pub evaluation_points_inner: Vec<PreprocessedRow>,
-    pub evaluation_points_outer: Vec<PreprocessedRow>,
+    pub evaluations: Vec<RingElement>, // TODO: those are already public?
+    pub evaluation_points_inner: Vec<PreprocessedRow>, // TODO: those are unnecessarily stored like this?
+    pub evaluation_points_outer: Vec<PreprocessedRow>, // TODO: those are unnecessarily stored like this?
 }
 
 pub fn evaluation_point_to_structured_row(evaluation_point: &Vec<RingElement>) -> StructuredRow {

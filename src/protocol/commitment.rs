@@ -58,7 +58,16 @@ pub struct RecursiveCommitment {
     pub next: Option<Box<RecursiveCommitment>>,
 }
 
-fn recursive_commit(
+impl RecursiveCommitment {
+    pub fn most_inner_commitment(&self) -> &Vec<RingElement> {
+        match &self.next {
+            Some(next_config) => next_config.most_inner_commitment(),
+            None => &self.commitment,
+        }
+    }
+}
+
+pub fn recursive_commit(
     crs: &CRS,
     config: &RecursionConfig,
     data: &Vec<RingElement>,
