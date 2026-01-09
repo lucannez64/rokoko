@@ -21,7 +21,7 @@ impl RingElement {
 // and then each part is shifted back by subtracting 2^{base_log - 1}.
 // This way, we ensure that each decomposed part lies in the range [-2^{base_log - 1}, 2^{base_log - 1}).
 // The input elements are not modified in the end (i.e., they retain their original values).
-pub fn decompose(input: &mut Vec<RingElement>, base_log: u64, radix: usize) -> Vec<RingElement> {
+pub fn decompose(input: &Vec<RingElement>, base_log: u64, radix: usize) -> Vec<RingElement> {
     let mut decomposed = new_vec_zero_preallocated(input.len() * radix);
 
     let big_shift = RingElement::all(
@@ -33,7 +33,7 @@ pub fn decompose(input: &mut Vec<RingElement>, base_log: u64, radix: usize) -> V
 
     let mut temp = RingElement::all(0, Representation::EvenOddCoefficients);
 
-    for (index, el) in input.iter_mut().enumerate() {
+    for (index, el) in input.iter().enumerate() {
         temp.set_from(el);
         // TODO: mainly clone??
         temp.to_representation(Representation::EvenOddCoefficients);
@@ -110,4 +110,40 @@ fn test_decompose() {
     }
     recomposed -= &RingElement::all(offset, Representation::IncompleteNTT);
     assert_eq!(recomposed, input[0]);
+}
+
+#[test]
+fn test_random_mod_q() {
+    let r = RingElement::random(Representation::IncompleteNTT);
+    let data = vec![r];
+    let base_log = 13; // do we cover 52 bits?
+    let radix = 4;
+
+    let mut decomposed = decompose(&data, base_log, radix);
+
+    let offset = get_composer_offset(base_log, radix);
+
+    let mut recomposed = RingElement::all(0, Representation::IncompleteNTT);
+    for i in 0..radix {
+        let mut term = decomposed[i].clone();
+        let shift =
+            RingElement::constant(1u64 << (i as u64 * base_log), Representation::IncompleteNTT);
+        term *= &shift;
+        recomposed += &term;
+    }
+    recomposed -= &RingElement::all(offset, Representation::IncompleteNTT);
+    assert_eq!(recomposed, data[0]);
+
+    let mut inf_norm = 0;
+    for d in decomposed.iter_mut() {
+        d.from_incomplete_ntt_to_even_odd_coefficients();
+        for &v in d.v.iter() {
+            let abs_v = if v > MOD_Q / 2 { MOD_Q - v } else { v };
+            if abs_v > inf_norm {
+                inf_norm = abs_v;
+            }
+        }
+    }
+
+    assert_eq!(inf_norm < (1u64 << (base_log - 1)), true);
 }

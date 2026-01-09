@@ -2,7 +2,11 @@ use std::ops::IndexMut;
 
 use crate::{
     common::{
-        matrix::{HorizontallyAlignedMatrix, VerticallyAlignedMatrix, ZeroNew},
+        config::{self, MOD_Q},
+        decomposition::decompose,
+        matrix::{
+            new_vec_zero_preallocated, HorizontallyAlignedMatrix, VerticallyAlignedMatrix, ZeroNew,
+        },
         ring_arithmetic::{Representation, RingElement},
         structured_row::{PreprocessedRow, StructuredRow},
     },
@@ -47,9 +51,92 @@ pub struct RecursionConfig {
 }
 
 pub struct RecursiveCommitment {
+    pub decomposition_radix_log: usize,
+    pub decomposition_chunks: usize,
     pub committed_data: Vec<RingElement>,
     pub commitment: Vec<RingElement>,
     pub recursion: Option<Box<RecursiveCommitment>>,
+}
+
+fn recursive_commit(
+    crs: &CRS,
+    config: &RecursionConfig,
+    data: &Vec<RingElement>,
+) -> RecursiveCommitment {
+    let committed_data = decompose(
+        &data,
+        config.decomposition_radix_log as u64,
+        config.decomposition_chunks,
+    );
+
+    let ck = crs.ck_for_wit_dim(committed_data.len());
+
+    let mut commitment = new_vec_zero_preallocated(config.rank);
+
+    let mut temp = RingElement::zero(Representation::IncompleteNTT);
+    for r in 0..config.rank {
+        for (elem, data_elem) in ck[r].preprocessed_row.iter().zip(committed_data.iter()) {
+            temp *= (elem, data_elem);
+            commitment[r] += &temp;
+        }
+    }
+
+    let recursion = match &config.next {
+        Some(next_config) => Some(Box::new(recursive_commit(crs, next_config, &commitment))),
+        None => None,
+    };
+
+    RecursiveCommitment {
+        decomposition_radix_log: config.decomposition_radix_log,
+        decomposition_chunks: config.decomposition_chunks,
+        committed_data,
+        commitment,
+        recursion,
+    }
+}
+
+#[test]
+fn test_recursive_commit() {
+    let crs = CRS::gen_crs(256, 2);
+    let data = vec![
+        RingElement::all(37, Representation::IncompleteNTT),
+        RingElement::all(36, Representation::IncompleteNTT),
+        RingElement::all(37, Representation::IncompleteNTT),
+        RingElement::all(36, Representation::IncompleteNTT),
+        RingElement::all(37, Representation::IncompleteNTT),
+        RingElement::all(36, Representation::IncompleteNTT),
+        RingElement::all(37, Representation::IncompleteNTT),
+        RingElement::all(36, Representation::IncompleteNTT),
+    ];
+
+    let config = RecursionConfig {
+        decomposition_radix_log: 3, // base 8
+        decomposition_chunks: 4,
+        rank: 2,
+        next: None,
+    };
+
+    let recursive_commitment = recursive_commit(&crs, &config, &data);
+
+    assert_eq!(recursive_commitment.committed_data.len(), 32);
+    assert_eq!(recursive_commitment.commitment.len(), 2);
+    assert_eq!(
+        recursive_commitment.committed_data[0],
+        RingElement::all(1, Representation::IncompleteNTT)
+    );
+    assert_eq!(
+        recursive_commitment.committed_data[1],
+        RingElement::all(0, Representation::IncompleteNTT)
+    );
+    assert_eq!(
+        recursive_commitment.committed_data[2],
+        RingElement::all(MOD_Q - 4, Representation::IncompleteNTT)
+    );
+    assert_eq!(
+        recursive_commitment.committed_data[3],
+        RingElement::all(0, Representation::IncompleteNTT)
+    );
+    assert!(recursive_commitment.recursion.is_none());
 }
 
 #[test]
