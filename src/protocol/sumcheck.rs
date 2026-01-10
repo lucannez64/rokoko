@@ -137,6 +137,11 @@ pub struct Type1SumcheckContext {
     pub output: Rc<RefCell<DiffSumcheck<RingElement>>>,
 }
 
+pub struct Type2SumcheckContext {
+    outer_evaluation_sumcheck: Rc<RefCell<LinearSumcheck<RingElement>>>,
+    pub output: Rc<RefCell<ProductSumcheck<RingElement>>>,
+}
+
 pub struct SumcheckContext {
     pub combined_witness_sumcheck: Rc<RefCell<LinearSumcheck<RingElement>>>,
     pub folded_witness_selector_sumcheck: Rc<RefCell<SelectorEq<RingElement>>>,
@@ -152,6 +157,7 @@ pub struct SumcheckContext {
     pub opening_combiner_constant_sumcheck: Rc<RefCell<LinearSumcheck<RingElement>>>,
     pub type0sumchecks: Vec<Type0SumcheckContext>,
     pub type1sumchecks: Vec<Type1SumcheckContext>,
+    pub type2sumchecks: Vec<Type2SumcheckContext>,
 }
 
 impl SumcheckContext {
@@ -199,6 +205,12 @@ impl SumcheckContext {
                 .partial_evaluate(r);
             type1_sc
                 .opening_selector_sumcheck
+                .borrow_mut()
+                .partial_evaluate(r);
+        }
+        for type2_sc in self.type2sumchecks.iter() {
+            type2_sc
+                .outer_evaluation_sumcheck
                 .borrow_mut()
                 .partial_evaluate(r);
         }
@@ -377,6 +389,32 @@ pub fn init_sumcheck(crs: &crs::CRS, config: &Config) -> SumcheckContext {
 
     // Type2 sumchecks
     // <opening.rhs[i], outer_evaluation_points> = evaluations[i] (public)
+    let type2sumchecks = type1sumchecks
+        .iter()
+        .map(|type1_sc| {
+            let outer_evaluation_sumcheck = Rc::new(RefCell::new(
+                LinearSumcheck::<RingElement>::new_with_prefixed_sufixed_data(
+                    config.witness_width,
+                    total_vars - config.witness_width.ilog2() as usize
+                        - config.opening_recursion.decomposition_chunks.ilog2() as usize,
+                    config.opening_recursion.decomposition_chunks.ilog2() as usize,
+                ),
+            ));
+
+            let output = Rc::new(RefCell::new(ProductSumcheck::new(
+                type1_sc.opening_selector_sumcheck.clone(),
+                Rc::new(RefCell::new(ProductSumcheck::new(
+                    recomposed_opening.clone(),
+                    outer_evaluation_sumcheck.clone(),
+                ))),
+            )));
+
+            Type2SumcheckContext {
+                outer_evaluation_sumcheck,
+                output,
+            }
+        })
+        .collect::<Vec<Type2SumcheckContext>>();
 
     // type3 sumchecks
     // I \otimes projection_matrix \cdot folded_witness - projection_image \cdot fold_challenge = 0
@@ -400,6 +438,7 @@ pub fn init_sumcheck(crs: &crs::CRS, config: &Config) -> SumcheckContext {
         opening_combiner_constant_sumcheck,
         type0sumchecks,
         type1sumchecks,
+        type2sumchecks,
     }
 }
 pub fn sumcheck(
@@ -428,6 +467,12 @@ pub fn sumcheck(
             .inner_evaluation_sumcheck
             .borrow_mut()
             .load_from(&opening.evaluation_points_inner[i].preprocessed_row);
+    }
+    for (i, type2_sc) in sumcheck_context.type2sumchecks.iter().enumerate() {
+        type2_sc
+            .outer_evaluation_sumcheck
+            .borrow_mut()
+            .load_from(&opening.evaluation_points_outer[i].preprocessed_row);
     }
 
     let mut poly = Polynomial::new(0);
@@ -460,6 +505,16 @@ pub fn sumcheck(
         type1_claim_after_r0 = Some(poly.at(&r0));
     }
 
+    let mut type2_claim_after_r0 = None;
+    if let Some(type2_sc) = sumcheck_context.type2sumchecks.get(0) {
+        type2_sc
+            .output
+            .borrow_mut()
+            .univariate_polynomial_into(&mut poly);
+        assert_eq!(&poly.at_zero() + &poly.at_one(), claims[0]);
+        type2_claim_after_r0 = Some(poly.at(&r0));
+    }
+
 
     sumcheck_context.partial_evaluate_all(&r0);
     sumcheck_context.type0sumchecks[i]
@@ -476,5 +531,14 @@ pub fn sumcheck(
             .borrow_mut()
             .univariate_polynomial_into(&mut poly);
         assert_eq!(&poly.at_zero() + &poly.at_one(), type1_claim);
+    }
+    if let (Some(type2_sc), Some(type2_claim)) =
+        (sumcheck_context.type2sumchecks.get(0), type2_claim_after_r0)
+    {
+        type2_sc
+            .output
+            .borrow_mut()
+            .univariate_polynomial_into(&mut poly);
+        assert_eq!(&poly.at_zero() + &poly.at_one(), type2_claim);
     }
 }
