@@ -131,6 +131,12 @@ pub struct Type0SumcheckContext {
     pub output: Rc<RefCell<DiffSumcheck<RingElement>>>,
 }
 
+pub struct Type1SumcheckContext {
+    inner_evaluation_sumcheck: Rc<RefCell<LinearSumcheck<RingElement>>>,
+    opening_selector_sumcheck: Rc<RefCell<SelectorEq<RingElement>>>,
+    pub output: Rc<RefCell<DiffSumcheck<RingElement>>>,
+}
+
 pub struct SumcheckContext {
     pub combined_witness_sumcheck: Rc<RefCell<LinearSumcheck<RingElement>>>,
     pub folded_witness_selector_sumcheck: Rc<RefCell<SelectorEq<RingElement>>>,
@@ -142,8 +148,10 @@ pub struct SumcheckContext {
     pub basic_commitment_combiner_constant_sumcheck: Rc<RefCell<LinearSumcheck<RingElement>>>,
     // commitment_key_row_sumcheck: RefCell<LinearSumcheck<RingElement>>,
     pub commitment_key_rows_sumcheck: Vec<Rc<RefCell<LinearSumcheck<RingElement>>>>,
+    pub opening_combiner_sumcheck: Rc<RefCell<LinearSumcheck<RingElement>>>,
+    pub opening_combiner_constant_sumcheck: Rc<RefCell<LinearSumcheck<RingElement>>>,
     pub type0sumchecks: Vec<Type0SumcheckContext>,
-    // put type1sumchecks
+    pub type1sumchecks: Vec<Type1SumcheckContext>,
 }
 
 impl SumcheckContext {
@@ -175,6 +183,22 @@ impl SumcheckContext {
         for type0_sc in self.type0sumchecks.iter() {
             type0_sc
                 .basic_commitment_row_sumcheck
+                .borrow_mut()
+                .partial_evaluate(r);
+        }
+        self.opening_combiner_sumcheck
+            .borrow_mut()
+            .partial_evaluate(r);
+        self.opening_combiner_constant_sumcheck
+            .borrow_mut()
+            .partial_evaluate(r);
+        for type1_sc in self.type1sumchecks.iter() {
+            type1_sc
+                .inner_evaluation_sumcheck
+                .borrow_mut()
+                .partial_evaluate(r);
+            type1_sc
+                .opening_selector_sumcheck
                 .borrow_mut()
                 .partial_evaluate(r);
         }
@@ -219,6 +243,12 @@ pub fn init_sumcheck(crs: &crs::CRS, config: &Config) -> SumcheckContext {
             config.commitment_recursion.decomposition_chunks,
             config.composed_witness_length.ilog2() as usize,
         );
+
+    let (opening_combiner_sumcheck, opening_combiner_constant_sumcheck) = composition_sumcheck(
+        config.opening_recursion.decomposition_base_log as u64,
+        config.opening_recursion.decomposition_chunks,
+        config.composed_witness_length.ilog2() as usize,
+    );
 
     let folding_challenges_sumcheck = Rc::new(RefCell::new(
         LinearSumcheck::<RingElement>::new_with_prefixed_sufixed_data(
@@ -283,7 +313,67 @@ pub fn init_sumcheck(crs: &crs::CRS, config: &Config) -> SumcheckContext {
     // Type1 sumchecks 
     // inner_evaluation_points \cdot folded_witness - opening.rhs \cdot fold_challenge = 0
 
-    // TODO
+    let recomposed_folded_witness = Rc::new(RefCell::new(DiffSumcheck::new(
+        Rc::new(RefCell::new(ProductSumcheck::new(
+            combined_witness_sumcheck.clone(),
+            folded_witness_combiner_sumcheck.clone(),
+        ))),
+        witness_combiner_constant_sumcheck.clone(),
+    )));
+
+    let recomposed_opening = Rc::new(RefCell::new(DiffSumcheck::new(
+        Rc::new(RefCell::new(ProductSumcheck::new(
+            combined_witness_sumcheck.clone(),
+            opening_combiner_sumcheck.clone(),
+        ))),
+        opening_combiner_constant_sumcheck.clone(),
+    )));
+
+    let type1sumchecks = (0..config.nof_openings)
+        .map(|i| {
+            let opening_selector_sumcheck = sumcheck_from_prefix(
+                &Prefix {
+                    prefix: config.opening_recursion.prefix.prefix * config.nof_openings + i,
+                    length: config.opening_recursion.prefix.length
+                        + config.nof_openings.ilog2() as usize,
+                },
+                total_vars,
+            );
+
+            let inner_evaluation_sumcheck = Rc::new(RefCell::new(
+                LinearSumcheck::<RingElement>::new_with_prefixed_sufixed_data(
+                    config.witness_height,
+                    total_vars - config.witness_height.ilog2() as usize
+                        - config.witness_decomposition_chunks.ilog2() as usize,
+                    config.witness_decomposition_chunks.ilog2() as usize,
+                ),
+            ));
+
+            let lhs = Rc::new(RefCell::new(ProductSumcheck::new(
+                folded_witness_selector_sumcheck.clone(),
+                Rc::new(RefCell::new(ProductSumcheck::new(
+                    recomposed_folded_witness.clone(),
+                    inner_evaluation_sumcheck.clone(),
+                ))),
+            )));
+
+            let rhs = Rc::new(RefCell::new(ProductSumcheck::new(
+                opening_selector_sumcheck.clone(),
+                Rc::new(RefCell::new(ProductSumcheck::new(
+                    recomposed_opening.clone(),
+                    folding_challenges_sumcheck.clone(),
+                ))),
+            )));
+
+            let output = Rc::new(RefCell::new(DiffSumcheck::new(lhs, rhs)));
+
+            Type1SumcheckContext {
+                inner_evaluation_sumcheck,
+                opening_selector_sumcheck,
+                output,
+            }
+        })
+        .collect::<Vec<Type1SumcheckContext>>();
 
     // Type2 sumchecks
     // <opening.rhs[i], outer_evaluation_points> = evaluations[i] (public)
@@ -306,7 +396,10 @@ pub fn init_sumcheck(crs: &crs::CRS, config: &Config) -> SumcheckContext {
         folding_challenges_sumcheck,
         basic_commitment_combiner_sumcheck,
         basic_commitment_combiner_constant_sumcheck,
+        opening_combiner_sumcheck,
+        opening_combiner_constant_sumcheck,
         type0sumchecks,
+        type1sumchecks,
     }
 }
 pub fn sumcheck(
@@ -330,8 +423,15 @@ pub fn sumcheck(
         .borrow_mut()
         .load_from(&folding_challenges);
 
+    for (i, type1_sc) in sumcheck_context.type1sumchecks.iter().enumerate() {
+        type1_sc
+            .inner_evaluation_sumcheck
+            .borrow_mut()
+            .load_from(&opening.evaluation_points_inner[i].preprocessed_row);
+    }
+
     let mut poly = Polynomial::new(0);
-    let i = 0;
+    let i = 0; // we check only the first type0 sumcheck here for testing
     sumcheck_context.type0sumchecks[i]
         .output
         .borrow_mut()
@@ -342,13 +442,39 @@ pub fn sumcheck(
         RingElement::zero(Representation::IncompleteNTT)
     );
 
+    // check type1 sumcheck here
+
     let r0 = RingElement::constant(7, Representation::IncompleteNTT);
-    let claim_after_r0 = poly.at(&r0);
+    let type0_claim_after_r0 = poly.at(&r0);
+
+    let mut type1_claim_after_r0 = None;
+    if let Some(type1_sc) = sumcheck_context.type1sumchecks.get(0) {
+        type1_sc
+            .output
+            .borrow_mut()
+            .univariate_polynomial_into(&mut poly);
+        assert_eq!(
+            &poly.at_zero() + &poly.at_one(),
+            RingElement::zero(Representation::IncompleteNTT)
+        );
+        type1_claim_after_r0 = Some(poly.at(&r0));
+    }
+
 
     sumcheck_context.partial_evaluate_all(&r0);
     sumcheck_context.type0sumchecks[i]
         .output
         .borrow_mut()
         .univariate_polynomial_into(&mut poly);
-    assert_eq!(&poly.at_zero() + &poly.at_one(), claim_after_r0);
+    assert_eq!(&poly.at_zero() + &poly.at_one(), type0_claim_after_r0);
+
+    if let (Some(type1_sc), Some(type1_claim)) =
+        (sumcheck_context.type1sumchecks.get(0), type1_claim_after_r0)
+    {
+        type1_sc
+            .output
+            .borrow_mut()
+            .univariate_polynomial_into(&mut poly);
+        assert_eq!(&poly.at_zero() + &poly.at_one(), type1_claim);
+    }
 }
