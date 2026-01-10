@@ -15,10 +15,10 @@ use crate::{
     },
     protocol::{
         commitment::{self, Prefix},
-        config::{slice_by_prefix, Config, BASIC_COMMITMENT_RANK},
+        config::{BASIC_COMMITMENT_RANK, Config, slice_by_prefix},
         crs::{self, CRS},
         sumcheck_utils::{
-            common::HighOrderSumcheckData, diff::DiffSumcheck, linear::LinearSumcheck,
+            common::{HighOrderSumcheckData, SumcheckBaseData}, diff::DiffSumcheck, linear::LinearSumcheck,
             polynomial::Polynomial, product::ProductSumcheck, selector_eq::SelectorEq,
         },
     },
@@ -126,7 +126,7 @@ fn tensor_product(a: &Vec<RingElement>, b: &Vec<RingElement>) -> Vec<RingElement
 // <w, conj(w)> + <y, conj(y)> - t = 0
 
 pub struct Type0SumcheckContext {
-    // basic_commitment_row_sumcheck: Rc<RefCell<SelectorEq<RingElement>>>,
+    basic_commitment_row_sumcheck: Rc<RefCell<SelectorEq<RingElement>>>,
     // left3: Rc<RefCell<ProductSumcheck<RingElement>>>,
     // left2: Rc<RefCell<DiffSumcheck<RingElement>>>,
     // left1: Rc<RefCell<ProductSumcheck<RingElement>>>,
@@ -150,6 +150,40 @@ pub struct SumcheckContext {
     // commitment_key_row_sumcheck: RefCell<LinearSumcheck<RingElement>>,
     pub commitment_key_rows_sumcheck: Vec<Rc<RefCell<LinearSumcheck<RingElement>>>>,
     pub type0sumchecks: Vec<Type0SumcheckContext>,
+}
+
+impl SumcheckContext {
+    pub fn partial_evaluate_all(&mut self, r: &RingElement) {
+        self.combined_witness_sumcheck.borrow_mut().partial_evaluate(r);
+        self.folded_witness_selector_sumcheck
+            .borrow_mut()
+            .partial_evaluate(r);
+        self.folded_witness_combiner_sumcheck
+            .borrow_mut()
+            .partial_evaluate(r);
+        self.witness_combiner_constant_sumcheck
+            .borrow_mut()
+            .partial_evaluate(r);
+        self.folding_challenges_sumcheck
+            .borrow_mut()
+            .partial_evaluate(r);
+        self.basic_commitment_combiner_sumcheck
+            .borrow_mut()
+            .partial_evaluate(r);
+        self.basic_commitment_combiner_constant_sumcheck
+            .borrow_mut()
+            .partial_evaluate(r);
+        for ck_row_sc in self.commitment_key_rows_sumcheck.iter() {
+            ck_row_sc.borrow_mut().partial_evaluate(r);
+        }
+        for type0_sc in self.type0sumchecks.iter() {
+            type0_sc
+                .basic_commitment_row_sumcheck
+                .borrow_mut()
+                .partial_evaluate(r);
+        }
+    }
+    
 }
 
 // // Initialization of sumcheck protocols which happens before the rounds start
@@ -215,6 +249,7 @@ pub fn init_sumcheck(crs: &crs::CRS, config: &Config) -> SumcheckContext {
             );
 
             let ctxt = Type0SumcheckContext {
+                basic_commitment_row_sumcheck: basic_commitment_row_sumcheck.clone(),
                 output: Rc::new(RefCell::new(DiffSumcheck::new(
                     Rc::new(RefCell::new(ProductSumcheck::new(
                         folded_witness_selector_sumcheck.clone(),
@@ -280,15 +315,27 @@ pub fn sumcheck(
         .load_from(&folding_challenges);
 
     let mut poly = Polynomial::new(0);
-    for i in 0..config.basic_commitment_rank {
-        sumcheck_context.type0sumchecks[i]
-            .output
-            .borrow_mut()
-            .univariate_polynomial_into(&mut poly);
+    let i = 0;
+    sumcheck_context.type0sumchecks[i]
+        .output
+        .borrow_mut()
+        .univariate_polynomial_into(&mut poly);
 
-        assert_eq!(
-            &poly.at_zero() + &poly.at_one(),
-            RingElement::zero(Representation::IncompleteNTT)
-        );
-    }
+    assert_eq!(
+        &poly.at_zero() + &poly.at_one(),
+        RingElement::zero(Representation::IncompleteNTT)
+    );
+
+    let r0 = RingElement::constant(7, Representation::IncompleteNTT);
+    let claim_after_r0 = poly.at(&r0);
+
+    sumcheck_context.partial_evaluate_all(&r0);
+    sumcheck_context.type0sumchecks[i]
+        .output
+        .borrow_mut()
+        .univariate_polynomial_into(&mut poly);
+    assert_eq!(
+        &poly.at_zero() + &poly.at_one(),
+        claim_after_r0
+    );
 }
