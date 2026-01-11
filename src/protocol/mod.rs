@@ -5,6 +5,7 @@ pub mod execution;
 pub mod config;
 pub mod fold;
 pub mod open;
+pub mod prefix;
 pub mod project;
 pub mod prover;
 pub mod sumcheck;

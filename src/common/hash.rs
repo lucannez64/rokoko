@@ -125,7 +125,9 @@ impl HashWrapper {
     pub fn sample_ring_element_into(&mut self, output: &mut RingElement) {
         let buf = output.v.as_mut_ptr() as *mut u8;
         let len = output.v.len() * std::mem::size_of::<u64>();
-        self.fill_from_xof(b"ring-element", unsafe { std::slice::from_raw_parts_mut(buf, len) });
+        self.fill_from_xof(b"ring-element", unsafe {
+            std::slice::from_raw_parts_mut(buf, len)
+        });
     }
 
     pub fn sample_ring_element_vec_into(&mut self, output: &mut [RingElement]) {

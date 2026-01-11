@@ -14,14 +14,12 @@ use crate::{
         structured_row::{self, PreprocessedRow, StructuredRow},
     },
     protocol::{
-        commitment::{
-            commit_basic, commit_basic_internal, recursive_commit, BasicCommitment, Prefix,
-            RecursionConfig, RecursiveCommitment,
-        },
-        config::{paste_by_prefix, paste_recursive_commitment, slice_by_prefix, CONFIG},
+        commitment::{commit_basic, recursive_commit, RecursiveCommitment},
+        config::{paste_by_prefix, paste_recursive_commitment, CONFIG},
         crs::{CK, CRS},
         fold::fold,
         open::{claim, evaluation_point_to_structured_row, open_at, Opening},
+        prefix::check_prefixing_correctness,
         project::project,
         sumcheck::sumcheck,
         // sumcheck::sumcheck,
@@ -110,6 +108,7 @@ pub fn prover_round(
 }
 
 pub fn execute() {
+    check_prefixing_correctness(&CONFIG);
     let crs = CRS::gen_crs(CONFIG.witness_height * 2, 2);
 
     let witness = VerticallyAlignedMatrix {
@@ -152,6 +151,6 @@ pub fn execute() {
         &witness,
         &evaluation_points_inner,
         &evaluation_points_outer,
-        &claims
+        &claims,
     );
 }

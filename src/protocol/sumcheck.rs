@@ -5,19 +5,30 @@ use num::range;
 
 use crate::{
     common::{
-        arithmetic::inner_product, decomposition::{
+        arithmetic::inner_product,
+        decomposition::{
             compose_from_decomposed, get_composer_offset, get_decomposed_offset_scaled,
-        }, hash::HashWrapper, matrix::{new_vec_zero_preallocated, VerticallyAlignedMatrix}, projection_matrix::{self, ProjectionMatrix}, ring_arithmetic::{Representation, RingElement}, structured_row::PreprocessedRow
+        },
+        hash::HashWrapper,
+        matrix::{new_vec_zero_preallocated, VerticallyAlignedMatrix},
+        projection_matrix::{self, ProjectionMatrix},
+        ring_arithmetic::{Representation, RingElement},
+        structured_row::PreprocessedRow,
     },
     protocol::{
-        commitment::{self, Prefix}, config::{BASIC_COMMITMENT_RANK, Config, slice_by_prefix}, crs::{self, CRS}, open::{Opening, evaluation_point_to_structured_row}, project::project, sumcheck_utils::{
+        commitment::{self, Prefix},
+        config::{slice_by_prefix, Config, BASIC_COMMITMENT_RANK},
+        crs::{self, CRS},
+        open::{evaluation_point_to_structured_row, Opening},
+        project::project,
+        sumcheck_utils::{
             common::{HighOrderSumcheckData, SumcheckBaseData},
             diff::DiffSumcheck,
             linear::LinearSumcheck,
             polynomial::Polynomial,
             product::ProductSumcheck,
             selector_eq::SelectorEq,
-        }
+        },
     },
 };
 
@@ -145,7 +156,6 @@ fn projection_coefficients(
     result
 }
 
-
 // This is domain-specific sumcheck executor implementations
 // for various sumcheck protocols used in the main protocol.
 
@@ -267,14 +277,14 @@ impl SumcheckContext {
             .borrow_mut()
             .partial_evaluate(r);
         self.type3sumcheck
-                .rhs_sumcheck
-                .borrow_mut()
-                .partial_evaluate(r);
+            .rhs_sumcheck
+            .borrow_mut()
+            .partial_evaluate(r);
         self.type3sumcheck
-                .projection_selector_sumcheck
-                .borrow_mut()
-                .partial_evaluate(r);
-        }
+            .projection_selector_sumcheck
+            .borrow_mut()
+            .partial_evaluate(r);
+    }
 }
 
 // // Initialization of sumcheck protocols which happens before the rounds start
@@ -389,7 +399,7 @@ pub fn init_sumcheck(crs: &crs::CRS, config: &Config) -> SumcheckContext {
         })
         .collect::<Vec<Type0SumcheckContext>>();
 
-    // Type1 sumchecks 
+    // Type1 sumchecks
     // inner_evaluation_points \cdot folded_witness - opening.rhs \cdot fold_challenge = 0
 
     let recomposed_folded_witness = Rc::new(RefCell::new(DiffSumcheck::new(
@@ -422,7 +432,8 @@ pub fn init_sumcheck(crs: &crs::CRS, config: &Config) -> SumcheckContext {
             let inner_evaluation_sumcheck = Rc::new(RefCell::new(
                 LinearSumcheck::<RingElement>::new_with_prefixed_sufixed_data(
                     config.witness_height,
-                    total_vars - config.witness_height.ilog2() as usize
+                    total_vars
+                        - config.witness_height.ilog2() as usize
                         - config.witness_decomposition_chunks.ilog2() as usize,
                     config.witness_decomposition_chunks.ilog2() as usize,
                 ),
@@ -462,7 +473,8 @@ pub fn init_sumcheck(crs: &crs::CRS, config: &Config) -> SumcheckContext {
             let outer_evaluation_sumcheck = Rc::new(RefCell::new(
                 LinearSumcheck::<RingElement>::new_with_prefixed_sufixed_data(
                     config.witness_width,
-                    total_vars - config.witness_width.ilog2() as usize
+                    total_vars
+                        - config.witness_width.ilog2() as usize
                         - config.opening_recursion.decomposition_chunks.ilog2() as usize,
                     config.opening_recursion.decomposition_chunks.ilog2() as usize,
                 ),
@@ -501,7 +513,8 @@ pub fn init_sumcheck(crs: &crs::CRS, config: &Config) -> SumcheckContext {
         let projection_coeff_sumcheck = Rc::new(RefCell::new(
             LinearSumcheck::<RingElement>::new_with_prefixed_sufixed_data(
                 config.witness_height,
-                total_vars - config.witness_height.ilog2() as usize
+                total_vars
+                    - config.witness_height.ilog2() as usize
                     - config.witness_decomposition_chunks.ilog2() as usize,
                 config.witness_decomposition_chunks.ilog2() as usize,
             ),
@@ -541,8 +554,6 @@ pub fn init_sumcheck(crs: &crs::CRS, config: &Config) -> SumcheckContext {
         }
     };
 
-
-
     // type4 sumchecks
     // rc_projection_image, rc_opening, rc_commitment are well-formed
 
@@ -562,11 +573,11 @@ pub fn init_sumcheck(crs: &crs::CRS, config: &Config) -> SumcheckContext {
         opening_combiner_constant_sumcheck,
         projection_combiner_sumcheck,
         projection_combiner_constant_sumcheck,
-        // TODO: type 0 sumchecks and type 1 sumchecks prove the relation in form 
-        // |------------|                   |-------------| 
+        // TODO: type 0 sumchecks and type 1 sumchecks prove the relation in form
+        // |------------|                   |-------------|
         // | CK rows    |                   | commitment  |
         // |------------| folded_wit   =    |-------------| fold_chal
-        // | inner eval |                   | opening.rhs | 
+        // | inner eval |                   | opening.rhs |
         // |------------|                   |-------------|
         // I speculate it would be "better" to left-fold the two sides separately first
         // and then prove the relation on the smaller vectors.
@@ -597,15 +608,14 @@ pub fn sumcheck(
     let mut sumcheck_context = init_sumcheck(crs, config);
 
     let projection_height_flat = config.witness_height / config.projection_ratio;
-    let mut projection_matrix_flatter_base = new_vec_zero_preallocated(projection_height_flat.ilog2() as usize);
+    let mut projection_matrix_flatter_base =
+        new_vec_zero_preallocated(projection_height_flat.ilog2() as usize);
     hash_wrapper.sample_ring_element_vec_into(&mut projection_matrix_flatter_base);
 
     let projection_matrix_flatter = PreprocessedRow::from_structured_row(
         &evaluation_point_to_structured_row(&projection_matrix_flatter_base),
     );
 
-
-    
     sumcheck_context
         .combined_witness_sumcheck
         .borrow_mut()
@@ -644,10 +654,7 @@ pub fn sumcheck(
             folding_challenges,
             &projection_matrix_flatter.preprocessed_row,
         );
-        type3_sc
-            .rhs_sumcheck
-            .borrow_mut()
-            .load_from(&fold_tensor);
+        type3_sc.rhs_sumcheck.borrow_mut().load_from(&fold_tensor);
     }
 
     let mut poly = Polynomial::new(0);
@@ -691,7 +698,8 @@ pub fn sumcheck(
     }
 
     let mut type3_claim_after_r0 = None;
-    sumcheck_context.type3sumcheck
+    sumcheck_context
+        .type3sumcheck
         .output
         .borrow_mut()
         .univariate_polynomial_into(&mut poly);
@@ -700,7 +708,6 @@ pub fn sumcheck(
         RingElement::zero(Representation::IncompleteNTT)
     );
     type3_claim_after_r0 = Some(poly.at(&r0));
-
 
     sumcheck_context.partial_evaluate_all(&r0);
     sumcheck_context.type0sumchecks[i]
@@ -727,9 +734,13 @@ pub fn sumcheck(
             .univariate_polynomial_into(&mut poly);
         assert_eq!(&poly.at_zero() + &poly.at_one(), type2_claim);
     }
-    sumcheck_context.type3sumcheck
+    sumcheck_context
+        .type3sumcheck
         .output
         .borrow_mut()
         .univariate_polynomial_into(&mut poly);
-    assert_eq!(&poly.at_zero() + &poly.at_one(), type3_claim_after_r0.unwrap());
+    assert_eq!(
+        &poly.at_zero() + &poly.at_one(),
+        type3_claim_after_r0.unwrap()
+    );
 }

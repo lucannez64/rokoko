@@ -18,11 +18,20 @@ pub static CONFIG: LazyLock<Config> = LazyLock::new(|| Config {
         decomposition_base_log: 15,
         decomposition_chunks: 4,
         rank: 1,
-        next: None,
         prefix: Prefix {
             prefix: 0b1100,
             length: 4,
-        }, // 2048 / 2^4 = 128
+        },
+        next: Some(Box::new(RecursionConfig {
+            decomposition_base_log: 7,
+            decomposition_chunks: 8,
+            rank: 1,
+            prefix: Prefix {
+                prefix: 0b11011000,
+                length: 8,
+            }, // 2048 / 2^8 = 8
+            next: None,
+        })),
     },
     opening_recursion: RecursionConfig {
         decomposition_base_log: 15,
@@ -53,6 +62,8 @@ pub static CONFIG: LazyLock<Config> = LazyLock::new(|| Config {
     witness_decomposition_base_log: 15,
 
     // committed basic_commitment_len = basic_commitment_rank * witness_width * commitment_recursion.decomposition_chunks = 2 * 16 * 4 = 128
+
+    // commited basic_commitment_lev_1_len = commitment_recursion.rank * commitment_recursion.decomposition_chunks = 1 * 8 = 8
 
     // committed projection_image_len = witness_height * witness_width / projection_ratio  * projection_recursion.decomposition_chunks = (512 * 16 / 32) * 2 = 512
 

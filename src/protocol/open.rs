@@ -33,7 +33,7 @@ pub fn open_at(
     );
 
     let nof_evaluation_points = structured_points_inner.len();
- 
+
     let preprocessed_points_inner = structured_points_inner
         .into_iter()
         .map(|sr| PreprocessedRow::from_structured_row(&sr))
@@ -62,7 +62,7 @@ pub fn open_at(
     }
 
     Opening {
-        rhs, // Y
+        rhs,                                                // Y
         evaluation_points_inner: preprocessed_points_inner, // we keep it here as well for convenience so we don't have to prerocess again later
         evaluation_points_outer: preprocessed_points_outer,
     }
