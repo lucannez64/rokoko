@@ -1,3 +1,4 @@
+use crate::common::arithmetic::ZERO;
 use crate::common::config::*;
 use crate::hexl::bindings::*;
 use num::pow::Pow;
@@ -322,8 +323,9 @@ impl RingElement {
         }
     }
 
+
+    #[cfg(test)]
     pub fn conjugate_in_place_ref(&mut self) {
-        // TODO: implement
         assert_eq!(self.representation, Representation::IncompleteNTT);
         self.from_incomplete_ntt_to_even_odd_coefficients();
         self.from_even_odd_coefficients_to_coefficients();
@@ -340,11 +342,54 @@ impl RingElement {
     }
 
     pub fn conjugate_in_place(&mut self) {
-        // TODO: I think that conjugation can be done directly in Incomplete NTT representation
-        // as Rq \cong (Zq[X] / <X^2 + \alpha>)^{DEGREE/2}, and conjugation in each slot is just
-        // (X -> -X), which corresponds to negating odd coefficients in coefficient representation.
-        // I am not sure how that translates to Incomplete NTT representation, but it should be possible.
-        // You might want to use SHIFT_FACTORS for that.
+        // Conjugation sends X -> X^{-1}, which in coefficient form negates all non-constant terms.
+        // In coefficient representation: [c0, c1, c2, ...] -> [c0, -c1, -c2, ...]
+        // In EvenOdd representation: [c0, c2, c4, ...] ++ [c1, c3, c5, ...] 
+        //                        -> [c0, -c2, -c4, ...] ++ [-c1, -c3, -c5, ...]
+        // 
+        // For the odd part, NTT is linear: NTT(-x) = -NTT(x), so we just negate.
+        // For the even part, we have: NTT([c0, c2, ...]) + NTT([c0, -c2, ...]) = 2*NTT([c0, 0, 0, ...])  
+        //                                                                       = 2*c0*[1, 1, 1, ...]
+        //                                                                       = [2*c0, 2*c0, ...]
+        //
+        // To find c0 from NTT_even, we use: c0 = (1/n) * sum_k NTT_even[k]
+        // Therefore: NTT([c0, -c2, ...]) = 2*c0 - NTT([c0, c2, ...])
+        
+        assert_eq!(self.representation, Representation::IncompleteNTT);
+        
+        unsafe {
+            // Compute 2*c0 = (2/HALF_DEGREE) * sum(NTT_even)
+            let mut sum = 0u64;
+            for i in 0..HALF_DEGREE {
+                sum += self.v[i];
+            }
+            
+            let two_c0 = multiply_mod(sum, *TWO_INV_HALF_DEGREE, MOD_Q);
+            
+            // Create a temporary buffer filled with 2*c0
+            let mut temp = get_temp_buffer();
+            for i in 0..HALF_DEGREE {
+                temp[i] = two_c0;
+            }
+            
+            // Transform even part: result[k] = 2*c0 - original[k]
+            eltwise_sub_mod(
+                self.v.as_mut_ptr(),
+                temp.as_ptr(),
+                self.v.as_ptr(),
+                HALF_DEGREE as u64,
+                MOD_Q,
+            );
+            
+            // Transform odd part: negate using element-wise subtraction from zero
+            eltwise_sub_mod(
+                self.v.as_mut_ptr().add(HALF_DEGREE),
+                ZERO.v.as_ptr(),
+                self.v.as_ptr().add(HALF_DEGREE),
+                HALF_DEGREE as u64,
+                MOD_Q,
+            );
+        }
     }
 
 
@@ -355,6 +400,14 @@ pub static SHIFT_FACTORS: LazyLock<[u64; HALF_DEGREE]> = LazyLock::new(|| {
     factors[1] = 1;
     unsafe { ntt_forward_in_place(factors.as_mut_ptr(), factors.len(), MOD_Q) };
     factors
+});
+
+pub static INV_HALF_DEGREE: LazyLock<u64> = LazyLock::new(|| {
+    unsafe { power_mod(HALF_DEGREE as u64, MOD_Q - 2, MOD_Q) }
+});
+
+pub static TWO_INV_HALF_DEGREE: LazyLock<u64> = LazyLock::new(|| {
+    unsafe { multiply_mod(2, *INV_HALF_DEGREE, MOD_Q) }
 });
 
 pub static mut temp_buffer: LazyLock<[u64; DEGREE]> = LazyLock::new(|| [0u64; DEGREE]);
