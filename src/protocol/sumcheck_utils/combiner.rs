@@ -3,12 +3,14 @@ use std::cell::RefCell;
 use crate::{
     common::{
         config::MOD_Q,
+        matrix::new_vec_zero_preallocated,
         ring_arithmetic::{Representation, RingElement},
         structured_row::PreprocessedRow,
         sumcheck_element::SumcheckElement,
     },
     protocol::{
         open::evaluation_point_to_structured_row,
+        sumcheck,
         sumcheck_utils::{
             common::{HighOrderSumcheckData, SumcheckBaseData},
             hypercube_point::HypercubePoint,
@@ -28,12 +30,9 @@ pub struct Combiner<'a, E: SumcheckElement = RingElement> {
 impl<'a, E: SumcheckElement> Combiner<'a, E> {
     pub fn new(
         sumchecks: Vec<&'a RefCell<dyn HighOrderSumcheckData<Element = E> + 'a>>,
-        challenges: Vec<E>,
+        // challenges: Vec<E>,
     ) -> Self {
-        assert_eq!(
-            sumchecks.len().next_power_of_two(),
-            challenges.len()
-        );
+        let sumchecks_len = sumchecks.len();
         // assert all variables counts are the same
         let var_count = sumchecks[0].borrow().variable_count();
         for sumcheck in &sumchecks {
@@ -41,10 +40,19 @@ impl<'a, E: SumcheckElement> Combiner<'a, E> {
         }
         Self {
             sumchecks,
-            challenges,
+            challenges: E::allocate_zero_vec(sumchecks_len),
             scratch_poly: RefCell::new(super::polynomial::Polynomial::new(0)),
             temp_poly: RefCell::new(super::polynomial::Polynomial::new(0)),
         }
+    }
+
+    pub fn load_challenges_from(&mut self, challenges: &[E]) {
+        assert_eq!(
+            challenges.len(),
+            self.sumchecks.len(),
+            "Combiner: number of challenges must match number of sumchecks"
+        );
+        self.challenges.clone_from_slice(challenges);
     }
 }
 
@@ -150,15 +158,14 @@ fn test_combiner() {
     let sumcheck2_ref = RefCell::new(sumcheck2);
     let sumcheck3_ref = RefCell::new(sumcheck3);
 
-    let combiner = Combiner::new(
-        vec![
-            &sumcheck0_ref,
-            &sumcheck1_ref,
-            &sumcheck2_ref,
-            &sumcheck3_ref,
-        ],
-        preprocessed_challenges.preprocessed_row,
-    );
+    let mut combiner = Combiner::new(vec![
+        &sumcheck0_ref,
+        &sumcheck1_ref,
+        &sumcheck2_ref,
+        &sumcheck3_ref,
+    ]);
+
+    combiner.load_challenges_from(&preprocessed_challenges.preprocessed_row);
 
     let mut poly = Polynomial::new(0);
 
