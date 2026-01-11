@@ -542,7 +542,7 @@ pub fn init_sumcheck(crs: &crs::CRS, config: &Config) -> SumcheckContext {
     
 
     // TODO: do something smart here
-    let combiner = Combiner::new(all_outputs);
+    let combiner = Rc::new(RefCell::new(Combiner::new(all_outputs)));
     
 
     SumcheckContext {

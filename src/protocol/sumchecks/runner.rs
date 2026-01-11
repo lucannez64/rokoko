@@ -1,18 +1,20 @@
+use core::hash;
+
 use crate::{
     common::{
-        arithmetic::inner_product,
+        arithmetic::{ONE, inner_product},
         hash::HashWrapper,
         matrix::new_vec_zero_preallocated,
         projection_matrix::ProjectionMatrix,
         ring_arithmetic::{Representation, RingElement},
-        structured_row::{PreprocessedRow, StructuredRow},
+        structured_row::PreprocessedRow,
     },
     protocol::{
         config::Config,
         crs,
-        open::{evaluation_point_to_structured_row, Opening},
+        open::{Opening, evaluation_point_to_structured_row},
         sumcheck_utils::{
-            common::{HighOrderSumcheckData, SumcheckBaseData},
+            common::HighOrderSumcheckData,
             polynomial::Polynomial,
         },
     },
@@ -20,7 +22,7 @@ use crate::{
 
 use super::{
     builder::init_sumcheck,
-    helpers::{projection_coefficients, tensor_product},
+    loader::load_sumcheck_data,
 };
 /// Executes a full sumcheck protocol round for all constraints in the prover's proof.
 ///
@@ -162,7 +164,6 @@ pub fn sumcheck(
     rc_projection_inner: &Vec<RingElement>,
     hash_wrapper: &mut HashWrapper,
 ) {
-    let total_vars = config.composed_witness_length.ilog2() as usize;
     let mut sumcheck_context = init_sumcheck(crs, config);
 
     let projection_height_flat = config.witness_height / config.projection_ratio;
@@ -176,14 +177,18 @@ pub fn sumcheck(
     let projection_matrix_flatter =
         PreprocessedRow::from_structured_row(&projection_matrix_flatter_structured);
 
-    sumcheck_context
-        .combined_witness_sumcheck
-        .borrow_mut()
-        .load_from(combined_witness);
-    sumcheck_context
-        .folding_challenges_sumcheck
-        .borrow_mut()
-        .load_from(&folding_challenges);
+    // Load all data into the sumcheck context
+    load_sumcheck_data(
+        &mut sumcheck_context,
+        config,
+        combined_witness,
+        folding_challenges,
+        opening,
+        projection_matrix,
+        &projection_matrix_flatter_structured,
+        &projection_matrix_flatter,
+    );
+
 
     let mut conjugated_combined_witness = new_vec_zero_preallocated(combined_witness.len());
     combined_witness
@@ -193,169 +198,55 @@ pub fn sumcheck(
             orig.conjugate_into(conj);
         });
 
-    sumcheck_context
-        .type5sumcheck
-        .conjugated_combined_witness
-        .borrow_mut()
-        .load_from(&conjugated_combined_witness);
-
     // let norm_claim = RingElement::zero(Representation::IncompleteNTT);
     let norm_claim = inner_product(&combined_witness, &conjugated_combined_witness);
-    // TODO: add to the proof
 
-    for (type1_sc, eval_point) in sumcheck_context
-        .type1sumchecks
-        .iter()
-        .zip(opening.evaluation_points_inner.iter())
-    {
-        type1_sc
-            .inner_evaluation_sumcheck
-            .borrow_mut()
-            .load_from(&eval_point.preprocessed_row);
-    }
-    for (type2_sc, eval_point) in sumcheck_context
-        .type2sumchecks
-        .iter()
-        .zip(opening.evaluation_points_outer.iter())
-    {
-        type2_sc
-            .outer_evaluation_sumcheck
-            .borrow_mut()
-            .load_from(&eval_point.preprocessed_row);
-    }
-    let type3_sc = &mut sumcheck_context.type3sumcheck;
-    {
-        let projection_coeffs = projection_coefficients(
-            projection_matrix,
-            &projection_matrix_flatter_structured,
-            config.witness_height,
-            config.projection_ratio,
-        );
-        type3_sc
-            .lhs_sumcheck
-            .borrow_mut()
-            .load_from(&projection_coeffs);
-
-        let fold_tensor = tensor_product(
-            folding_challenges,
-            &projection_matrix_flatter.preprocessed_row,
-        );
-        type3_sc.rhs_sumcheck.borrow_mut().load_from(&fold_tensor);
-    }
 
     let mut poly = Polynomial::new(0);
-    let i = 0; // we check only the first type0 sumcheck here for testing
-    sumcheck_context.type0sumchecks[i]
-        .output
-        .borrow_mut()
-        .univariate_polynomial_into(&mut poly);
 
-    assert_eq!(
-        &poly.at_zero() + &poly.at_one(),
-        RingElement::zero(Representation::IncompleteNTT)
-    );
+    let combination = vec![ONE.clone(); sumcheck_context.combiner.borrow().sumchecks_count()]; 
+    
+    sumcheck_context.combiner.borrow_mut().load_challenges_from(&combination);
 
-    // check type1 sumcheck here
-
-    let r0 = RingElement::constant(7, Representation::IncompleteNTT);
-    let type0_claim_after_r0 = poly.at(&r0);
-
-    let mut type1_claim_after_r0 = None;
-    if let Some(type1_sc) = sumcheck_context.type1sumchecks.get(0) {
-        type1_sc
-            .output
-            .borrow_mut()
-            .univariate_polynomial_into(&mut poly);
-        assert_eq!(
-            &poly.at_zero() + &poly.at_one(),
-            RingElement::zero(Representation::IncompleteNTT)
-        );
-        type1_claim_after_r0 = Some(poly.at(&r0));
+    
+    
+    let mut batched_claim = RingElement::zero(Representation::IncompleteNTT);
+    // we need to add all claims (assuming for now that we combine with 1s)
+    for rc_inner_i in rc_commitment_inner.iter() {
+        batched_claim += rc_inner_i;
     }
 
-    let mut type2_claim_after_r0 = None;
-    if let Some(type2_sc) = sumcheck_context.type2sumchecks.get(0) {
-        type2_sc
-            .output
-            .borrow_mut()
-            .univariate_polynomial_into(&mut poly);
-        assert_eq!(&poly.at_zero() + &poly.at_one(), claims[0]);
-        type2_claim_after_r0 = Some(poly.at(&r0));
+    for rc_opening_i in rc_opening_inner.iter() {
+        batched_claim += rc_opening_i;
     }
 
-    let mut type3_claim_after_r0 = None;
-    sumcheck_context
-        .type3sumcheck
-        .output
-        .borrow_mut()
-        .univariate_polynomial_into(&mut poly);
-    assert_eq!(
-        &poly.at_zero() + &poly.at_one(),
-        RingElement::zero(Representation::IncompleteNTT)
-    );
-    type3_claim_after_r0 = Some(poly.at(&r0));
-
-    for type4cs in sumcheck_context
-        .type4sumchecks
-        .iter_mut()
-        .zip([rc_commitment_inner, rc_opening_inner, rc_projection_inner].iter())
-    {
-        let (type4cs, rc_inner) = type4cs;
-        for layer in type4cs.layers.iter_mut() {
-            layer.outputs.iter().for_each(|output_sc| {
-                output_sc.borrow_mut().univariate_polynomial_into(&mut poly);
-                assert_eq!(
-                    &poly.at_zero() + &poly.at_one(),
-                    RingElement::zero(Representation::IncompleteNTT)
-                );
-            })
-        }
-        for (i, output_sc) in type4cs.output_layer.outputs.iter_mut().enumerate() {
-            output_sc.borrow_mut().univariate_polynomial_into(&mut poly);
-            assert_eq!(&poly.at_zero() + &poly.at_one(), rc_inner[i]);
-        }
+    for rc_projection_i in rc_projection_inner.iter() {
+        batched_claim += rc_projection_i;
     }
+
+    for claim in claims.iter() {
+        batched_claim += claim;
+    }
+
+    batched_claim += &norm_claim;
 
     sumcheck_context
-        .type5sumcheck
-        .output
+        .combiner
         .borrow_mut()
         .univariate_polynomial_into(&mut poly);
+    
+    assert_eq!(&poly.at_zero() + &poly.at_one(), batched_claim);
 
-    assert_eq!(&poly.at_zero() + &poly.at_one(), norm_claim);
-
+    let mut r0 = RingElement::zero(Representation::IncompleteNTT);
+    hash_wrapper.sample_ring_element_into(&mut r0);
     sumcheck_context.partial_evaluate_all(&r0);
-    sumcheck_context.type0sumchecks[i]
-        .output
-        .borrow_mut()
-        .univariate_polynomial_into(&mut poly);
-    assert_eq!(&poly.at_zero() + &poly.at_one(), type0_claim_after_r0);
 
-    if let (Some(type1_sc), Some(type1_claim)) =
-        (sumcheck_context.type1sumchecks.get(0), type1_claim_after_r0)
-    {
-        type1_sc
-            .output
-            .borrow_mut()
-            .univariate_polynomial_into(&mut poly);
-        assert_eq!(&poly.at_zero() + &poly.at_one(), type1_claim);
-    }
-    if let (Some(type2_sc), Some(type2_claim)) =
-        (sumcheck_context.type2sumchecks.get(0), type2_claim_after_r0)
-    {
-        type2_sc
-            .output
-            .borrow_mut()
-            .univariate_polynomial_into(&mut poly);
-        assert_eq!(&poly.at_zero() + &poly.at_one(), type2_claim);
-    }
+    batched_claim = poly.at(&r0);
+
     sumcheck_context
-        .type3sumcheck
-        .output
+        .combiner
         .borrow_mut()
         .univariate_polynomial_into(&mut poly);
-    assert_eq!(
-        &poly.at_zero() + &poly.at_one(),
-        type3_claim_after_r0.unwrap()
-    );
+
+    assert_eq!(&poly.at_zero() + &poly.at_one(), batched_claim);
 }

@@ -41,7 +41,7 @@ pub struct SumcheckContext {
     pub type3sumcheck: Type3SumcheckContext,
     pub type4sumchecks: [Type4SumcheckContext; 3],
     pub type5sumcheck: Type5SumcheckContext,
-    pub combiner: Combiner<RingElement>,
+    pub combiner: Rc<RefCell<Combiner<RingElement>>>,
 }
 
 /// Encapsulates the bookkeeping required to fold every tracked sumcheck with

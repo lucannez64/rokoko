@@ -54,6 +54,10 @@ impl<E: SumcheckElement> Combiner<E> {
         );
         self.challenges.clone_from_slice(challenges);
     }
+
+    pub fn sumchecks_count(&self) -> usize {
+        self.sumchecks.len()
+    }
 }
 
 impl<E: SumcheckElement> HighOrderSumcheckData for Combiner<E> {
@@ -91,6 +95,19 @@ impl<E: SumcheckElement> HighOrderSumcheckData for Combiner<E> {
         let nof_sumchecks = self.sumchecks.len();
         for i in 0..nof_sumchecks {
             let sumcheck = &self.sumchecks[i];
+
+            if sumcheck
+                .borrow()
+                .is_univariate_polynomial_zero_at_point(point)
+            {
+                continue;
+            }
+
+            // TODO: can we optimize this with constant terms?
+            // let constant_ref = sumcheck
+            //     .borrow()
+            //     .constant_univariate_polynomial_at_point_available_by_ref(point);
+        
             let challenge = &self.challenges[i];
             sumcheck
                 .borrow()
