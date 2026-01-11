@@ -322,14 +322,32 @@ impl RingElement {
         }
     }
 
-    pub fn conjugate_in_place(&mut self) {
+    pub fn conjugate_in_place_ref(&mut self) {
         // TODO: implement
+        assert_eq!(self.representation, Representation::IncompleteNTT);
+        self.from_incomplete_ntt_to_even_odd_coefficients();
+        self.from_even_odd_coefficients_to_coefficients();
+        for i in 1..DEGREE {
+            self.v[i] = MOD_Q - self.v[i];
+        }
+        self.from_coefficients_to_even_odd_coefficients();
+        self.from_even_odd_coefficients_to_incomplete_ntt_representation();
     }
 
     pub fn set_from(&mut self, other: &RingElement) {
         self.v.copy_from_slice(&other.v);
         self.representation = other.representation;
     }
+
+    pub fn conjugate_in_place(&mut self) {
+        // TODO: I think that conjugation can be done directly in Incomplete NTT representation
+        // as Rq \cong (Zq[X] / <X^2 + \alpha>)^{DEGREE/2}, and conjugation in each slot is just
+        // (X -> -X), which corresponds to negating odd coefficients in coefficient representation.
+        // I am not sure how that translates to Incomplete NTT representation, but it should be possible.
+        // You might want to use SHIFT_FACTORS for that.
+    }
+
+
 }
 
 pub static SHIFT_FACTORS: LazyLock<[u64; HALF_DEGREE]> = LazyLock::new(|| {
@@ -1085,4 +1103,54 @@ mod tests {
         assert_eq!(result.coeffs[0], expected_c0);
         assert_eq!(result.coeffs[1], expected_c1);
     }
+
+    #[test]
+    fn test_conjugation_ref() {
+        init_common();
+        let mut a = RingElement::random(Representation::IncompleteNTT);
+        let mut a_conj = a.clone();
+        let mut b = RingElement::new(Representation::IncompleteNTT);
+        let mut b_conj  = b.clone();
+
+        a_conj.conjugate_in_place_ref();
+        // a.conjugate_in_place_ref();
+
+        b_conj.conjugate_in_place_ref();
+        // assert_eq!(a.v, a_conj.v);
+
+        let mut a_plus_b = &a + &b;
+        let mut a_times_b = &a * &b;
+
+        let mut a_plus_b_conj = a_plus_b.clone();
+        a_plus_b_conj.conjugate_in_place_ref();
+
+        let mut a_times_b_conj = a_times_b.clone();
+        a_times_b_conj.conjugate_in_place_ref();
+
+        assert_eq!(&a_conj + &b_conj, a_plus_b_conj);
+        assert_eq!(&a_conj * &b_conj, a_times_b_conj);
+    }
+
+    #[test]
+    fn test_conjugation() {
+        init_common();
+        let mut a = RingElement::random(Representation::IncompleteNTT);
+        let mut a_conj = a.clone();
+        let mut a_conj_ref = a.clone();
+        a_conj.conjugate_in_place();
+        a_conj_ref.conjugate_in_place_ref();
+        assert_eq!(a_conj.v, a_conj_ref.v);
+    }
 }
+
+// #[test]
+// fn test_conjugation() {
+//     use crate::common::init_common;
+
+//     init_common();
+//     let mut a = RingElement::random(Representation::IncompleteNTT);
+//     let mut a_conj = a.clone();
+//     a_conj.conjugate_in_place_ref();
+//     a.conjugate_in_place_ref();
+//     assert_eq!(a.v, a_conj.v);
+// }
