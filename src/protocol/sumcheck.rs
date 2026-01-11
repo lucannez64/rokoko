@@ -13,7 +13,7 @@ use crate::{
         matrix::{new_vec_zero_preallocated, VerticallyAlignedMatrix},
         projection_matrix::{self, ProjectionMatrix},
         ring_arithmetic::{Representation, RingElement},
-        structured_row::PreprocessedRow,
+        structured_row::{PreprocessedRow, StructuredRow},
     },
     protocol::{
         commitment::{self, Prefix},
@@ -118,38 +118,77 @@ fn tensor_product(a: &Vec<RingElement>, b: &Vec<RingElement>) -> Vec<RingElement
             result.push(a_elem * b_elem);
         }
     }
+    // debug_assert_eq!(blocks, 1usize << block_layers);
     result
 }
 
 fn projection_coefficients(
     projection_matrix: &ProjectionMatrix,
-    projection_flatter: &PreprocessedRow,
+    projection_flatter: &StructuredRow,
     witness_height: usize,
     projection_ratio: usize,
 ) -> Vec<RingElement> {
-    let mut result = new_vec_zero_preallocated(witness_height);
     let height = crate::common::config::PROJECTION_HEIGHT;
-    let blocks = projection_flatter.preprocessed_row.len() / height;
+    let height_log = height.ilog2() as usize;
+    let tensor_layers = &projection_flatter.tensor_layers;
+    debug_assert!(tensor_layers.len() >= height_log);
+    debug_assert_eq!(1usize << height_log, height);
+    let block_layers = tensor_layers.len() - height_log;
+    let blocks = witness_height / (projection_ratio * height);
+    debug_assert_eq!(blocks, 1usize << block_layers);
+    debug_assert_eq!(
+        witness_height,
+        projection_ratio * (1usize << tensor_layers.len())
+    );
 
-    for block in 0..blocks {
-        for inner_row in 0..height {
-            let weight = &projection_flatter.preprocessed_row[block * height + inner_row];
-            if weight == &RingElement::zero(Representation::IncompleteNTT) {
+    let projection_flatter_0 = PreprocessedRow::from_structured_row(&StructuredRow {
+        tensor_layers: tensor_layers[..block_layers].to_vec(),
+    });
+    let projection_flatter_1 = PreprocessedRow::from_structured_row(&StructuredRow {
+        tensor_layers: tensor_layers[block_layers..].to_vec(),
+    });
+
+    let inner_width = projection_ratio * height;
+    let zero = RingElement::zero(Representation::IncompleteNTT);
+
+    let mut projection_flatter_1_projection = new_vec_zero_preallocated(inner_width);
+    for inner_row in 0..height {
+        let weight = &projection_flatter_1.preprocessed_row[inner_row];
+        if weight == &zero {
+            continue;
+        }
+
+        for i in 0..inner_width {
+            let (is_positive, is_non_zero) = projection_matrix[(inner_row, i)];
+            if !is_non_zero {
                 continue;
             }
-
-            for i in 0..projection_ratio * height {
-                let (is_positive, is_non_zero) = projection_matrix[(inner_row, i)];
-                if !is_non_zero {
-                    continue;
-                }
-                let idx = block * projection_ratio * height + i;
-                if is_positive {
-                    result[idx] += weight;
-                } else {
-                    result[idx] -= weight;
-                }
+            if is_positive {
+                projection_flatter_1_projection[i] += weight;
+            } else {
+                projection_flatter_1_projection[i] -= weight;
             }
+        }
+    }
+
+    let non_zero_inner_indices = projection_flatter_1_projection
+        .iter()
+        .enumerate()
+        .filter_map(|(idx, value)| (value != &zero).then_some(idx))
+        .collect::<Vec<_>>();
+
+    let mut result = new_vec_zero_preallocated(witness_height);
+    for block in 0..blocks {
+        let coeff = &projection_flatter_0.preprocessed_row[block];
+        if coeff == &zero {
+            continue;
+        }
+
+        let offset = block * inner_width;
+        for &i in non_zero_inner_indices.iter() {
+            let mut contribution = projection_flatter_1_projection[i].clone();
+            contribution *= coeff;
+            result[offset + i] = contribution;
         }
     }
 
@@ -556,7 +595,7 @@ pub fn init_sumcheck(crs: &crs::CRS, config: &Config) -> SumcheckContext {
 
     // TODO: type4 sumchecks
     // rc_projection_image, rc_opening, rc_commitment are well-formed
-    // i.e. check that 
+    // i.e. check that
     // CK decomposed_layer_i - compose(decomposed_layer{i+1}) = 0 for each recursion layer
     // CK is of propoer size and we use only desirable rows (specified by rank)
     // (note that sumcheck for the last layer is different as CK decomposed_layer_n is public, not composed from anything (and passed as an argument to the sumcheck function))
@@ -611,9 +650,9 @@ pub fn sumcheck(
     folding_challenges: &Vec<RingElement>,
     opening: &Opening,
     claims: &Vec<RingElement>,
-    rc_commitment: &Vec<RingElement>,
-    rc_opening: &Vec<RingElement>,
-    rc_projection_image: &Vec<RingElement>,
+    // rc_commitment: &Vec<RingElement>,
+    // rc_opening: &Vec<RingElement>,
+    // rc_projection_image: &Vec<RingElement>,
     hash_wrapper: &mut HashWrapper,
 ) {
     let mut sumcheck_context = init_sumcheck(crs, config);
@@ -623,9 +662,11 @@ pub fn sumcheck(
         new_vec_zero_preallocated(projection_height_flat.ilog2() as usize);
     hash_wrapper.sample_ring_element_vec_into(&mut projection_matrix_flatter_base);
 
-    let projection_matrix_flatter = PreprocessedRow::from_structured_row(
-        &evaluation_point_to_structured_row(&projection_matrix_flatter_base),
-    );
+    let projection_matrix_flatter_structured =
+        evaluation_point_to_structured_row(&projection_matrix_flatter_base);
+
+    let projection_matrix_flatter =
+        PreprocessedRow::from_structured_row(&projection_matrix_flatter_structured);
 
     sumcheck_context
         .combined_witness_sumcheck
@@ -652,7 +693,7 @@ pub fn sumcheck(
     {
         let projection_coeffs = projection_coefficients(
             projection_matrix,
-            &projection_matrix_flatter,
+            &projection_matrix_flatter_structured,
             config.witness_height,
             config.projection_ratio,
         );
