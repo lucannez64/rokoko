@@ -237,8 +237,15 @@ pub struct Type4LayerSumcheckContext {
     pub outputs: Vec<Rc<RefCell<DiffSumcheck<RingElement>>>>,
 }
 
+pub struct Type4OutputLayerSumcheckContext {
+    selector_sumcheck: Rc<RefCell<SelectorEq<RingElement>>>,
+    ck_sumchecks: Vec<Rc<RefCell<LinearSumcheck<RingElement>>>>,
+    pub outputs: Vec<Rc<RefCell<ProductSumcheck<RingElement>>>>,
+}
+
 pub struct Type4SumcheckContext {
     pub layers: Vec<Type4LayerSumcheckContext>,
+    pub output_layer: Type4OutputLayerSumcheckContext,
 }
 
 pub struct SumcheckContext {
@@ -344,13 +351,27 @@ impl SumcheckContext {
 fn partial_evaluate_type4(ctx: &mut Type4SumcheckContext, r: &RingElement) {
     for layer in ctx.layers.iter_mut() {
         layer.selector_sumcheck.borrow_mut().partial_evaluate(r);
-            layer.child_selector_sumcheck.borrow_mut().partial_evaluate(r);
+        layer
+            .child_selector_sumcheck
+            .borrow_mut()
+            .partial_evaluate(r);
         layer.combiner_sumcheck.borrow_mut().partial_evaluate(r);
-        layer.combiner_constant_sumcheck.borrow_mut().partial_evaluate(r);
+        layer
+            .combiner_constant_sumcheck
+            .borrow_mut()
+            .partial_evaluate(r);
         for ck in layer.ck_sumchecks.iter() {
             ck.borrow_mut().partial_evaluate(r);
         }
     }
+    ctx.output_layer.ck_sumchecks.iter().for_each(|ck| {
+        ck.borrow_mut().partial_evaluate(r);
+    });
+
+    ctx.output_layer
+        .selector_sumcheck
+        .borrow_mut()
+        .partial_evaluate(r);
 }
 
 fn build_type4_sumcheck_context(
@@ -420,7 +441,41 @@ fn build_type4_sumcheck_context(
         current = next;
     }
 
-    Type4SumcheckContext { layers }
+    let selector_sumcheck = sumcheck_from_prefix(&current.prefix, total_vars);
+
+    let mut ck_sumchecks = Vec::with_capacity(current.rank);
+    for i in 0..current.rank {
+        ck_sumchecks.push(ck_sumcheck(
+            crs,
+            total_vars,
+            1 << (total_vars - current.prefix.length),
+            i,
+            0,
+        ));
+    }
+
+    let outputs = ck_sumchecks
+        .iter()
+        .map(|ck_row| {
+            let output = Rc::new(RefCell::new(ProductSumcheck::new(
+                selector_sumcheck.clone(),
+                Rc::new(RefCell::new(ProductSumcheck::new(
+                    combined_witness_sumcheck.clone(),
+                    ck_row.clone(),
+                ))),
+            )));
+            output
+        })
+        .collect::<Vec<_>>();
+
+    Type4SumcheckContext {
+        layers,
+        output_layer: Type4OutputLayerSumcheckContext {
+            selector_sumcheck,
+            ck_sumchecks,
+            outputs,
+        },
+    }
 }
 
 // // Initialization of sumcheck protocols which happens before the rounds start
@@ -775,6 +830,9 @@ pub fn sumcheck(
     folding_challenges: &Vec<RingElement>,
     opening: &Opening,
     claims: &Vec<RingElement>,
+    rc_commitment_inner: &Vec<RingElement>,
+    rc_opening_inner: &Vec<RingElement>,
+    rc_projection_inner: &Vec<RingElement>,
     hash_wrapper: &mut HashWrapper,
 ) {
     let total_vars = config.composed_witness_length.ilog2() as usize;
@@ -884,7 +942,12 @@ pub fn sumcheck(
     );
     type3_claim_after_r0 = Some(poly.at(&r0));
 
-    for type4cs in sumcheck_context.type4sumchecks.iter_mut() {
+    for type4cs in sumcheck_context
+        .type4sumchecks
+        .iter_mut()
+        .zip([rc_commitment_inner, rc_opening_inner, rc_projection_inner].iter())
+    {
+        let (type4cs, rc_inner) = type4cs;
         for layer in type4cs.layers.iter_mut() {
             layer.outputs.iter().for_each(|output_sc| {
                 output_sc.borrow_mut().univariate_polynomial_into(&mut poly);
@@ -893,6 +956,10 @@ pub fn sumcheck(
                     RingElement::zero(Representation::IncompleteNTT)
                 );
             })
+        }
+        for (i, output_sc) in type4cs.output_layer.outputs.iter_mut().enumerate() {
+            output_sc.borrow_mut().univariate_polynomial_into(&mut poly);
+            assert_eq!(&poly.at_zero() + &poly.at_one(), rc_inner[i]);
         }
     }
     /////////

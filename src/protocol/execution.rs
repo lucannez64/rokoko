@@ -98,6 +98,9 @@ pub fn prover_round(
         &fold_challenge,
         &opening,
         &claims,
+        rc_commitment.most_inner_commitment(),
+        rc_opening.most_inner_commitment(),
+        rc_projection_image.most_inner_commitment(),
         &mut hash_wrapper,
     );
     // RoundOutput {
