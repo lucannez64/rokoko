@@ -554,8 +554,15 @@ pub fn init_sumcheck(crs: &crs::CRS, config: &Config) -> SumcheckContext {
         }
     };
 
-    // type4 sumchecks
+    // TODO: type4 sumchecks
     // rc_projection_image, rc_opening, rc_commitment are well-formed
+    // i.e. check that 
+    // CK decomposed_layer_i - compose(decomposed_layer{i+1}) = 0 for each recursion layer
+    // CK is of propoer size and we use only desirable rows (specified by rank)
+    // (note that sumcheck for the last layer is different as CK decomposed_layer_n is public, not composed from anything (and passed as an argument to the sumcheck function))
+    // composition and rank are described in config.commitment_recursion and config.opening_recursion
+    // Therefore, Type5SumcheckContext shall have a recursive structure inside.
+    // there is no need to load any new data in sumcheck!!!!!!!
 
     // type5 sumchecks
     // <combined_witness, conj(combined_witness)> = t (public)
@@ -589,6 +596,7 @@ pub fn init_sumcheck(crs: &crs::CRS, config: &Config) -> SumcheckContext {
         // batch_chall   |------------|   folded_wit   =  batch_chall |-------------|  fold_chal
         //               | inner eval |                               | opening.rhs |
         //               |------------|                               |-------------|
+        // Probably this can also be done for type3 sumchecks (but not sure how much benefit it brings as type3 sumcheck might benefit more from own optimizations)
         type0sumchecks,
         type1sumchecks,
         type2sumchecks,
@@ -603,6 +611,9 @@ pub fn sumcheck(
     folding_challenges: &Vec<RingElement>,
     opening: &Opening,
     claims: &Vec<RingElement>,
+    rc_commitment: &Vec<RingElement>,
+    rc_opening: &Vec<RingElement>,
+    rc_projection_image: &Vec<RingElement>,
     hash_wrapper: &mut HashWrapper,
 ) {
     let mut sumcheck_context = init_sumcheck(crs, config);
