@@ -5,6 +5,7 @@ pub mod config;
 pub mod decomposition;
 pub mod hash;
 pub mod matrix;
+pub mod norms;
 pub mod projection_matrix;
 pub mod ring_arithmetic;
 pub mod sampling;

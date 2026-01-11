@@ -20,11 +20,11 @@ use super::{
 };
 
 /// Constructs the recursive sumcheck structure for verifying commitment well-formedness.
-/// 
+///
 /// This function builds the sumcheck gadgets needed to prove that a recursive commitment
 /// is correctly constructed—that is, each layer is properly decomposed from its parent.
 /// The construction follows a tree-like structure where:
-/// 
+///
 /// **Recursive Commitment Overview:**
 /// In our protocol, commitments are organized hierarchically to keep proof sizes manageable.
 /// Instead of committing to the full witness at once (which would require a huge CK matrix),
@@ -33,60 +33,60 @@ use super::{
 ///   - Leaves: chunks of the original witness
 ///   - Internal nodes: commitments to their children's commitments
 ///   - Root: the final public commitment
-/// 
+///
 /// **What This Function Proves:**
 /// For each internal layer i in the recursion tree, we need to prove:
 ///   CK_i · selected_witness_slice_i = compose(child_commitment_{i+1})
-/// 
+///
 /// where:
 ///   - CK_i is the commitment key for layer i (with dimension matching that layer's slice size)
 ///   - selected_witness_slice_i is the portion of the combined witness that holds layer i's data
 ///   - compose(...) reconstructs the parent value from decomposed child chunks
 ///   - child_commitment_{i+1} is the commitment at the next layer down
-/// 
+///
 /// **Layer-by-Layer Construction:**
 /// The function walks through the recursion config from root to leaves, building a
 /// `Type4LayerSumcheckContext` for each non-leaf layer. Each layer context contains:
-/// 
+///
 /// 1. **Selectors**: Two selectors that identify which slice of the combined witness belongs
 ///    to the current layer and which belongs to the child layer. These ensure we're checking
 ///    the right portions of the witness without interference from unrelated data.
-/// 
+///
 /// 2. **Combiner Sumchecks**: A pair (combiner, constant) that reconstructs the composed
 ///    value from decomposed chunks. The combiner holds the radix weights (1, base, base²,
 ///    ...) and the constant holds the signed-digit offset that needs to be subtracted.
-/// 
+///
 /// 3. **CK Sumchecks**: One sumcheck per rank, each loaded with a different row of the
 ///    commitment key. The rank determines how many constraints we're batching together
 ///    (higher rank = more security but larger proofs).
-/// 
+///
 /// 4. **Output Constraints**: For each CK row, we create a DiffSumcheck that enforces:
 ///       selector_i · (CK_row_i · witness_i) = selector_{i+1} · compose(witness_{i+1})
 ///    This is the core recursive constraint. The selectors ensure both sides are only
 ///    evaluated on their respective slices, and the compose operation on the RHS mirrors
 ///    how the child commitment is stored in decomposed form.
-/// 
+///
 /// **Why Stop at Non-Leaf Layers:**
 /// The function intentionally does NOT build a sumcheck for the leaf layer (the layer with
 /// `current.next == None`). This is because the leaf layer's commitment is assumed to be
 /// public and trusted as input to the protocol. We're only proving that the recursive
 /// structure above it is correct, not that the leaf itself satisfies any constraint. This
 /// design choice reduces proof size and verification time.
-/// 
+///
 /// **Shared References and RefCell:**
 /// All the sumcheck gadgets are wrapped in `Rc<RefCell<...>>` because:
 ///   - Multiple outputs may share the same underlying data (e.g., all rows use the same
 ///     selector sumcheck)
 ///   - The sumcheck protocol mutates the gadgets as it folds with verifier challenges
 ///   - We want to avoid copying large preprocessed structures
-/// 
+///
 /// The RefCell provides interior mutability so we can call `partial_evaluate` on shared
 /// references during the sumcheck rounds.
-/// 
+///
 /// **Returned Structure:**
 /// The function returns a `Type4SumcheckContext` containing:
 ///   - `layers`: A vector of `Type4LayerSumcheckContext`, one per internal node level
-/// 
+///
 /// This nested structure mirrors the tree topology and allows the prover/verifier to fold
 /// constraints level-by-level in a systematic way.
 fn build_type4_sumcheck_context(

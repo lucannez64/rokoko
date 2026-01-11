@@ -22,42 +22,42 @@ use super::{
     helpers::{projection_coefficients, tensor_product},
 };
 /// Executes a full sumcheck protocol round for all constraints in the prover's proof.
-/// 
+///
 /// This is the main entry point for running the sumcheck layer of the protocol. It's
 /// deliberately written as an eager, assertion-heavy simulation rather than an interactive
 /// loop, which serves several purposes:
-/// 
+///
 /// **Design Philosophy:**
 /// 1. **Testing**: By computing all polynomials and checking all claims eagerly, we can
 ///    catch bugs in the sumcheck gadget wiring before they become mysterious verification
 ///    failures. Each assertion documents an invariant that must hold.
-/// 
+///
 /// 2. **Documentation**: The flow of this function mirrors the paper's description of the
 ///    protocol. By reading the sequence of load/evaluate/assert operations, you can see
 ///    exactly which data feeds into which constraint and in what order.
-/// 
+///
 /// 3. **Debugging**: When an assertion fails, you immediately know which constraint is
 ///    broken. In an interactive protocol, failures might not manifest until the final
 ///    verification step, making it hard to pinpoint the issue.
-/// 
+///
 /// **High-Level Flow:**
-/// 
+///
 /// 1. **Initialization** (`init_sumcheck`):
 ///    - Builds all sumcheck gadgets with the correct prefix/suffix padding and loads
 ///      the CRS data (commitment keys).
 ///    - Creates the tree of product/difference sumchecks that implement each constraint.
-/// 
+///
 /// 2. **Random Sampling** (projection flattener):
 ///    - Samples a random point for flattening the projection constraint. This is the only
 ///      randomness we need from the Fiat-Shamir hash, and it's used to compress the
 ///      projection matrix check into a single inner product.
-/// 
+///
 /// 3. **Data Loading**:
 ///    - Loads the combined witness into the root linear sumcheck.
 ///    - Loads the folding challenges, which are used to fold multiple witnesses together.
 ///    - Loads the evaluation points from the opening proofs (both inner and outer).
 ///    - Computes and loads the projection coefficients (via the tensor product trick).
-/// 
+///
 /// 4. **Initial Evaluation (Round 0)**:
 ///    - For each constraint type (type0, type1, type2, type3), extracts the
 ///      univariate polynomial that the verifier will see in round 0.
@@ -66,33 +66,33 @@ use super::{
 ///      * For public claims: `poly(0) + poly(1) = claim`
 ///    - Records the claim after folding with the verifier's challenge `r0` (here, hardcoded
 ///      to 7 for testing, but in a real protocol this would come from Fiat-Shamir).
-/// 
+///
 /// 5. **Partial Evaluation (Folding)**:
 ///    - Calls `partial_evaluate_all(&r0)` to fold every sumcheck gadget with the challenge.
 ///    - This advances the protocol by one round: the hypercube dimension decreases by 1,
 ///      and each gadget's internal state is updated to reflect the evaluation at `r0`.
-/// 
+///
 /// 6. **Post-Fold Verification**:
 ///    - Re-extracts the univariate polynomials (now for round 1) and asserts that they
 ///      sum to the recorded claims from round 0.
 ///    - This confirms that the folding was done correctly and that the constraints are
 ///      still consistent after the fold.
-/// 
+///
 /// **Constraint Types Checked:**
-/// 
+///
 /// - **Type0** (basic commitment): `CK · folded_witness = commitment · fold_challenge`
 ///   We only check the first row here for brevity (index i=0), but in a full run we'd
 ///   check all ranks.
-/// 
+///
 /// - **Type1** (inner evaluation): `<inner_eval, folded_witness> = opening.rhs · fold_challenge`
 ///   This links the opening's claimed RHS to the actual witness via the evaluation point.
-/// 
+///
 /// - **Type2** (outer evaluation): `<outer_eval, opening.rhs> = claimed_evaluation`
 ///   This completes the two-level evaluation structure, tying the opening to the public claim.
-/// 
+///
 /// - **Type3** (projection): `<projection_coeffs, folded_witness> = <fold_tensor, projection_image>`
 ///   This verifies the projection image is correctly formed from the witness.
-/// 
+///
 /// - **Type4** (recursive commitments): Verifies well-formedness of recursive commitment trees.
 ///   There are three separate Type4 contexts (for commitment, opening, and projection recursions).
 ///   Each Type4 context contains multiple layers:
@@ -114,7 +114,7 @@ use super::{
 ///   correctly constructed, from the public root commitment down to the actual witness data.
 ///
 /// **Parameters:**
-/// 
+///
 /// - `crs`: Common reference string (contains commitment keys).
 /// - `config`: Protocol configuration (dimensions, decomposition parameters, etc.).
 /// - `combined_witness`: The full witness vector, containing all data (folded witness,

@@ -4,21 +4,14 @@ use num::range;
 
 use crate::{
     common::{
-        arithmetic::inner_product,
-        decomposition::{compose_from_decomposed, decompose},
-        hash::HashWrapper,
-        matrix::{new_vec_zero_preallocated, HorizontallyAlignedMatrix, VerticallyAlignedMatrix},
-        projection_matrix::ProjectionMatrix,
-        ring_arithmetic::{Representation, RingElement},
-        sampling::sample_random_short_vector,
-        structured_row::{self, PreprocessedRow, StructuredRow},
+        arithmetic::inner_product, decomposition::{compose_from_decomposed, decompose}, hash::HashWrapper, matrix::{HorizontallyAlignedMatrix, VerticallyAlignedMatrix, new_vec_zero_preallocated}, norms, projection_matrix::ProjectionMatrix, ring_arithmetic::{Representation, RingElement}, sampling::sample_random_short_vector, structured_row::{self, PreprocessedRow, StructuredRow}
     },
     protocol::{
-        commitment::{commit_basic, recursive_commit, RecursiveCommitment},
-        config::{paste_by_prefix, paste_recursive_commitment, CONFIG},
+        commitment::{RecursiveCommitment, commit_basic, recursive_commit},
+        config::{CONFIG, paste_by_prefix, paste_recursive_commitment},
         crs::{CK, CRS},
         fold::fold,
-        open::{claim, evaluation_point_to_structured_row, open_at, Opening},
+        open::{Opening, claim, evaluation_point_to_structured_row, open_at},
         prefix::check_prefixing_correctness,
         project::project,
         sumcheck::sumcheck,
@@ -88,6 +81,14 @@ pub fn prover_round(
         &mut next_round_data,
         &rc_commitment,
         &CONFIG.commitment_recursion,
+    );
+
+    let ell_inf_norm = norms::inf_norm(&next_round_data);
+    let ell_2_norm = norms::l2_norm(&next_round_data);
+
+    println!(
+        "Next round data norms: L_inf = {}, L_2 = {}",
+        ell_inf_norm, ell_2_norm
     );
 
     sumcheck(

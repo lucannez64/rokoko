@@ -126,34 +126,34 @@ impl SumcheckContext {
 }
 
 /// Type0 sumcheck context: Basic commitment correctness constraint.
-/// 
+///
 /// This sumcheck proves that the basic (non-recursive) commitment to the folded witness
 /// is consistent with how the folded witness is actually computed. Concretely, we prove:
-/// 
+///
 ///   CK · folded_witness = commitment · fold_challenge
-/// 
+///
 /// where:
 ///   - CK is a commitment key row (one row per Type0 context, rank many contexts total)
 ///   - folded_witness is the recomposed (from decomposed chunks) version of the witness
 ///     slice that we're committing to
 ///   - commitment is the claimed commitment value (part of the proof)
 ///   - fold_challenge is the random linear combination weight for folding multiple witnesses
-/// 
+///
 /// **Why This Matters:**
 /// The basic commitment is the "anchor" of the entire proof. It's what gets posted publicly
 /// and what the verifier uses to check consistency. If the prover could cheat here—claim
 /// a commitment that doesn't match the actual witness—the entire protocol would be broken.
-/// 
+///
 /// **Structure of the Constraint:**
 /// The output is a DiffSumcheck that computes:
 ///   LHS: selector · (recomposed_folded_witness · CK_row)
 ///   RHS: commitment_selector · (recomposed_commitment · fold_challenge)
-/// 
+///
 /// Both sides are selected by their respective prefixes (folded witness lives at one prefix,
 /// commitment lives at another in the combined witness vector), recomposed from decomposed
 /// form (to handle large coefficients), and then multiplied by their respective challenge
 /// vectors. The difference should sum to zero over the entire hypercube.
-/// 
+///
 /// **Field Details:**
 ///   - `basic_commitment_row_sumcheck`: Selector for picking out this commitment row's slice
 ///     from the combined witness. Each row gets its own prefix to avoid collisions.
@@ -165,35 +165,35 @@ pub struct Type0SumcheckContext {
 }
 
 /// Type1 sumcheck context: Inner evaluation point consistency for openings.
-/// 
+///
 /// This sumcheck proves that the opening's claimed inner evaluation is consistent with
 /// the folded witness. Specifically, we prove:
-/// 
+///
 ///   <inner_evaluation_points, folded_witness> = opening.rhs · fold_challenge
-/// 
+///
 /// where:
 ///   - inner_evaluation_points is a vector defining a linear evaluation of the witness
 ///     (typically computed from the MLE of some challenge point)
 ///   - folded_witness is the recomposed witness slice (same as in Type0)
 ///   - opening.rhs is the claimed evaluation result stored in the opening proof
 ///   - fold_challenge is the folding weight (same as in Type0)
-/// 
+///
 /// **Why This Matters:**
 /// Openings are how the prover reveals evaluations of the committed polynomial at
 /// specific points chosen by the verifier. The verifier can't recompute these evaluations
 /// directly (the witness is too large), so the prover must prove they're correct. Type1
 /// sumchecks enforce that the opening's claimed RHS value actually matches the inner
 /// product of the evaluation point with the witness.
-/// 
+///
 /// **Structure of the Constraint:**
 /// The output is a DiffSumcheck that computes:
 ///   LHS: folded_witness_selector · (recomposed_folded_witness · inner_eval_points)
 ///   RHS: opening_selector · (recomposed_opening_rhs · fold_challenge)
-/// 
+///
 /// The pattern is similar to Type0: both sides are selected, recomposed, and then multiplied
 /// by challenge vectors. The selector for the opening ensures we're checking the correct
 /// opening (we may have multiple openings, each at a different point).
-/// 
+///
 /// **Field Details:**
 ///   - `inner_evaluation_sumcheck`: Linear sumcheck loaded with the inner evaluation point's
 ///     coefficients. This defines "which" linear combination of the witness we're evaluating.
@@ -207,36 +207,36 @@ pub struct Type1SumcheckContext {
 }
 
 /// Type2 sumcheck context: Outer evaluation point consistency for openings.
-/// 
+///
 /// This sumcheck proves that the opening's RHS value, when further evaluated at the outer
 /// evaluation point, matches the publicly claimed evaluation. Specifically, we prove:
-/// 
+///
 ///   <outer_evaluation_points, opening.rhs> = claimed_evaluation (public)
-/// 
+///
 /// where:
 ///   - outer_evaluation_points is a vector defining a second-level evaluation (the opening
 ///     itself is a vector, and we're taking an inner product with it)
 ///   - opening.rhs is the RHS value from the opening (whose consistency was checked in Type1)
 ///   - claimed_evaluation is the final scalar value that the verifier sees (part of the
 ///     public input)
-/// 
+///
 /// **Why This Matters:**
 /// Our opening mechanism is two-level: the witness is first evaluated to produce a vector
 /// (opening.rhs), and then that vector is evaluated at a second point to produce a scalar.
 /// This two-level structure is essential for efficiency—it allows us to batch multiple
 /// point queries and to exploit the structure of the witness (which is often a matrix or
 /// a similarly structured object).
-/// 
+///
 /// Type1 checks the first level (witness → opening.rhs), and Type2 checks the second level
 /// (opening.rhs → scalar). Together, they ensure the full evaluation is correct.
-/// 
+///
 /// **Structure of the Constraint:**
 /// The output is a ProductSumcheck that computes:
 ///   opening_selector · (recomposed_opening_rhs · outer_eval_points)
-/// 
+///
 /// Unlike Type0 and Type1, this is a product rather than a difference, because the result
 /// should equal the public claimed_evaluation (which the verifier adds directly), not zero.
-/// 
+///
 /// **Field Details:**
 ///   - `outer_evaluation_sumcheck`: Linear sumcheck loaded with the outer evaluation point's
 ///     coefficients.
@@ -248,40 +248,40 @@ pub struct Type2SumcheckContext {
 }
 
 /// Type3 sumcheck context: Projection image consistency constraint.
-/// 
+///
 /// This sumcheck proves that the projection image (a compressed version of the witness)
 /// is correctly formed. Specifically, we prove:
-/// 
+///
 ///   <projection_coeffs, folded_witness> = <fold_tensor, projection_image>
-/// 
+///
 /// where:
 ///   - projection_coeffs is a vector derived from the projection matrix and a random
 ///     flattening point (computed by `projection_coefficients`)
 ///   - folded_witness is the recomposed witness slice (same as before)
 ///   - fold_tensor is the tensor product of fold_challenge and the projection flattener
 ///   - projection_image is the claimed projected value (part of the proof)
-/// 
+///
 /// **Why This Matters:**
 /// Projection is a dimension-reduction technique that lets us work with a smaller witness
 /// for efficiency. The projection matrix is structured (e.g., it might be a block matrix
 /// with copies of a smaller projection matrix along the diagonal), and we need to prove
 /// that applying this matrix to the witness gives the claimed projection image.
-/// 
+///
 /// However, we can't just prove the projection row-by-row (too many constraints). Instead,
 /// we sample a random linear combination (the projection flattener) of the rows, which
 /// gives us a single inner product constraint. This is sound because if the projection
 /// is wrong in any entry, it will (with high probability) be detected by the random
 /// linear combination.
-/// 
+///
 /// **Structure of the Constraint:**
 /// The output is a DiffSumcheck that computes:
 ///   LHS: folded_witness_selector · (recomposed_folded_witness · projection_coeffs)
 ///   RHS: projection_selector · (recomposed_projection_image · fold_tensor)
-/// 
+///
 /// The fold_tensor arises because we're folding multiple witnesses, and the projection
 /// image needs to fold compatibly. The tensor product structure ensures that the folded
 /// projection image equals the projection of the folded witness.
-/// 
+///
 /// **Field Details:**
 ///   - `lhs_sumcheck`: Linear sumcheck loaded with the projection coefficients (computed
 ///     from the projection matrix and the random flattener).
@@ -298,69 +298,69 @@ pub struct Type3SumcheckContext {
 }
 
 /// Type4 layer sumcheck context: One layer in a recursive commitment tree.
-/// 
+///
 /// This structure holds all the sumcheck gadgets needed to verify one internal layer
 /// of a recursive commitment. Each layer proves that the commitment at this level is
 /// correctly derived from the child layer's commitment via decomposition and composition.
-/// 
+///
 /// **Recursive Commitment Background:**
 /// A recursive commitment is a tree structure where:
 ///   - Leaves: commitments to chunks of the original witness
 ///   - Internal nodes: commitments to the concatenation of their children's commitments
 ///   - Root: the final public commitment
-/// 
+///
 /// Each internal layer needs to prove: "The data at my prefix, when committed with CK,
 /// equals the composed version of my child's commitment."
-/// 
+///
 /// **Field-by-Field Explanation:**
-/// 
+///
 /// - `selector_sumcheck`: Picks out this layer's data slice from the combined witness.
 ///   This ensures we're only looking at the portion of the witness that belongs to this
 ///   layer, ignoring all other prefixes.
-/// 
+///
 /// - `child_selector_sumcheck`: Picks out the child layer's data slice. This is Some(...)
 ///   for all non-leaf layers (because there's a child to check against) and None for the
 ///   leaf layer (which has no child and serves as the base case).
-/// 
+///
 /// - `combiner_sumcheck`: Linear sumcheck holding the radix weights for recomposing the
 ///   child's decomposed value. For example, if we decompose base 2^8 into 4 chunks, this
 ///   holds [1, 2^8, 2^16, 2^24]. Multiplying the decomposed chunks by these weights and
 ///   summing gives us the original value. This is Some(...) for non-leaf layers and None
 ///   for leaf layers (which don't need recomposition).
-/// 
+///
 /// - `combiner_constant_sumcheck`: Holds the constant offset that needs to be subtracted
 ///   after recomposition. This arises from signed-digit representation: to keep decomposed
 ///   chunks small, we allow negative digits, which introduces a known constant bias that
 ///   must be corrected. This is Some(...) for non-leaf layers and None for leaf layers.
-/// 
+///
 /// - `data_selected_sumcheck`: A product sumcheck that combines the selector with the
 ///   combined witness to produce "this layer's data, selected and ready to use." This is
 ///   a helper gadget that gets reused across all CK row checks, so we compute it once and
 ///   share references.
-/// 
+///
 /// - `rhs_sumcheck`: The "right-hand side" of the constraint, representing the composed
 ///   child commitment. For non-leaf layers, this is a DiffSumcheck that computes:
 ///     child_selector · (recomposed_child_commitment)
 ///   For leaf layers, this could be a LinearSumcheck directly if we're checking against
 ///   a public value. The type is boxed as `dyn HighOrderSumcheckData` to allow for this
 ///   flexibility.
-/// 
+///
 /// - `commitment_sumcheck`: Optional linear sumcheck for the public commitment value at
 ///   this layer. This is Some(...) for leaf layers (where we check against the public
 ///   commitment) and None for non-leaf layers (where we check against the child's
 ///   recomposed commitment instead).
-/// 
+///
 /// - `ck_sumchecks`: A vector of linear sumchecks, one per rank. Each holds one row of
 ///   the commitment key (CK) for this layer. The rank determines how many constraints
 ///   we're batching together—higher rank means more CK rows, which gives stronger binding
 ///   but increases proof size.
-/// 
+///
 /// - `outputs`: A vector of DiffSumchecks, one per CK row. Each output proves:
 ///     CK_row_i · selected_data = composed_child_commitment
 ///   These are the constraints that the verifier will check. All outputs share references
 ///   to the same underlying selectors, data, and child commitment, so we're efficiently
 ///   reusing computation across rows.
-/// 
+///
 /// **Why So Many Fields?**
 /// The complexity arises from the need to handle both non-leaf and leaf layers uniformly
 /// while allowing for different constraint types (difference vs. product sumchecks), and
@@ -378,20 +378,20 @@ pub struct Type4LayerSumcheckContext {
 }
 
 /// Type4 output layer sumcheck context: The leaf layer in a recursive commitment tree.
-/// 
+///
 /// This structure handles the base case of the recursive commitment tree: the leaf layer
 /// that directly checks the public commitment value. Unlike internal layers (which check
 /// that a parent layer matches the composed child layer), the leaf layer checks that the
 /// selected witness data matches the public commitment when multiplied by the CK.
-/// 
+///
 /// **Difference from Internal Layers:**
 /// - Internal layers: `CK · selected_data = compose(child_commitment)` (DiffSumcheck)
 /// - Leaf layer: `selector · (CK · witness)` should equal public commitment (ProductSumcheck)
-/// 
+///
 /// The outputs here are ProductSumchecks rather than DiffSumchecks because we're checking
 /// against a known public value (the commitment at the leaf level), not against a composed
 /// child commitment.
-/// 
+///
 /// **Field Details:**
 /// - `selector_sumcheck`: Picks out the leaf layer's data slice from the combined witness.
 /// - `ck_sumchecks`: CK rows for the leaf layer, one per rank.
@@ -404,27 +404,27 @@ pub struct Type4OutputLayerSumcheckContext {
 }
 
 /// Type4 sumcheck context: Complete recursive commitment verification structure.
-/// 
+///
 /// This is the top-level container for all Type4 (recursive commitment) sumchecks.
 /// It holds a vector of internal layers plus an output layer for the leaf level.
-/// 
+///
 /// **Structure:**
 /// - `layers`: A vector of `Type4LayerSumcheckContext`, one per internal layer. The
 ///   vector is ordered from the outermost (closest to root) to the innermost (closest
 ///   to leaves). These layers enforce parent-child consistency via DiffSumchecks.
 /// - `output_layer`: The leaf layer (`Type4OutputLayerSumcheckContext`) that checks
 ///   the base level against the public commitment via ProductSumchecks.
-/// 
+///
 /// **Why Multiple Type4 Contexts?**
 /// Our protocol actually has THREE separate recursive commitment trees:
 ///   1. Commitment recursion: for the basic commitments to the witness
 ///   2. Opening recursion: for the opening proofs (which are themselves committed)
 ///   3. Projection recursion: for the projection images (also committed recursively)
-/// 
+///
 /// Each tree has its own recursion config (depth, rank, decomposition base, etc.), so
 /// we build three separate `Type4SumcheckContext` instances. The `init_sumcheck` function
 /// constructs all three and stores them in `SumcheckContext.type4sumchecks`.
-/// 
+///
 /// **Folding:**
 /// When the verifier provides a random challenge, we need to fold all layers in all three
 /// trees, including both the internal layers and the output layer. The `partial_evaluate_type4`
@@ -455,7 +455,7 @@ fn partial_evaluate_type4(ctx: &mut Type4SumcheckContext, r: &RingElement) {
             ck.borrow_mut().partial_evaluate(r);
         }
     }
-    
+
     // Fold the output (leaf) layer
     ctx.output_layer
         .selector_sumcheck
