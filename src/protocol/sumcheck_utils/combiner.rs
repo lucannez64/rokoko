@@ -20,7 +20,7 @@ use crate::{
 
 pub struct Combiner<'a, E: SumcheckElement = RingElement> {
     sumchecks: Vec<&'a RefCell<dyn HighOrderSumcheckData<Element = E> + 'a>>,
-    challenges: PreprocessedRow<E>, // for now let's batch in ring elements
+    challenges: Vec<E>, // for now let's batch in ring elements
     temp_poly: RefCell<Polynomial<E>>,
     scratch_poly: RefCell<Polynomial<E>>,
 }
@@ -28,11 +28,11 @@ pub struct Combiner<'a, E: SumcheckElement = RingElement> {
 impl<'a, E: SumcheckElement> Combiner<'a, E> {
     pub fn new(
         sumchecks: Vec<&'a RefCell<dyn HighOrderSumcheckData<Element = E> + 'a>>,
-        challenges: PreprocessedRow<E>,
+        challenges: Vec<E>,
     ) -> Self {
         assert_eq!(
             sumchecks.len().next_power_of_two(),
-            challenges.preprocessed_row.len()
+            challenges.len()
         );
         // assert all variables counts are the same
         let var_count = sumchecks[0].borrow().variable_count();
@@ -83,7 +83,7 @@ impl<E: SumcheckElement> HighOrderSumcheckData for Combiner<'_, E> {
         let nof_sumchecks = self.sumchecks.len();
         for i in 0..nof_sumchecks {
             let sumcheck = &self.sumchecks[i];
-            let challenge = &self.challenges.preprocessed_row[i];
+            let challenge = &self.challenges[i];
             sumcheck
                 .borrow()
                 .univariate_polynomial_at_point_into(point, &mut temp_poly);
@@ -157,7 +157,7 @@ fn test_combiner() {
             &sumcheck2_ref,
             &sumcheck3_ref,
         ],
-        preprocessed_challenges,
+        preprocessed_challenges.preprocessed_row,
     );
 
     let mut poly = Polynomial::new(0);
@@ -213,19 +213,19 @@ fn test_combiner() {
     let mut final_eval = RingElement::zero(Representation::IncompleteNTT);
 
     let mut term = sumcheck0_ref.borrow().final_evaluations().clone();
-    term *= &combiner.challenges.preprocessed_row[0];
+    term *= &combiner.challenges[0];
     final_eval += &term;
 
     term = sumcheck1_ref.borrow().final_evaluations().clone();
-    term *= &combiner.challenges.preprocessed_row[1];
+    term *= &combiner.challenges[1];
     final_eval += &term;
 
     term = sumcheck2_ref.borrow().final_evaluations().clone();
-    term *= &combiner.challenges.preprocessed_row[2];
+    term *= &combiner.challenges[2];
     final_eval += &term;
 
     term = sumcheck3_ref.borrow().final_evaluations().clone();
-    term *= &combiner.challenges.preprocessed_row[3];
+    term *= &combiner.challenges[3];
     final_eval += &term;
 
     assert_eq!(final_eval, final_claim);
