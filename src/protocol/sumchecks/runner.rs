@@ -1,5 +1,6 @@
 use crate::{
     common::{
+        arithmetic::inner_product,
         hash::HashWrapper,
         matrix::new_vec_zero_preallocated,
         projection_matrix::ProjectionMatrix,
@@ -178,6 +179,24 @@ pub fn sumcheck(
         .borrow_mut()
         .load_from(&folding_challenges);
 
+    let mut conjugated_combined_witness = new_vec_zero_preallocated(combined_witness.len());
+    combined_witness
+        .iter()
+        .zip(conjugated_combined_witness.iter_mut())
+        .for_each(|(orig, conj)| {
+            orig.conjugate_into(conj);
+        });
+
+    sumcheck_context
+        .type5sumcheck
+        .conjugated_combined_witness
+        .borrow_mut()
+        .load_from(&conjugated_combined_witness);
+
+    // let norm_claim = RingElement::zero(Representation::IncompleteNTT);
+    let norm_claim = inner_product(&combined_witness, &conjugated_combined_witness);
+    // TODO: add to the proof
+
     for (type1_sc, eval_point) in sumcheck_context
         .type1sumchecks
         .iter()
@@ -290,6 +309,14 @@ pub fn sumcheck(
             assert_eq!(&poly.at_zero() + &poly.at_one(), rc_inner[i]);
         }
     }
+
+    sumcheck_context
+        .type5sumcheck
+        .output
+        .borrow_mut()
+        .univariate_polynomial_into(&mut poly);
+
+    assert_eq!(&poly.at_zero() + &poly.at_one(), norm_claim);
 
     sumcheck_context.partial_evaluate_all(&r0);
     sumcheck_context.type0sumchecks[i]

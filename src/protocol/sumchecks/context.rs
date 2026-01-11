@@ -41,7 +41,8 @@ pub struct SumcheckContext {
     pub type1sumchecks: Vec<Type1SumcheckContext>,
     pub type2sumchecks: Vec<Type2SumcheckContext>,
     pub type3sumcheck: Type3SumcheckContext,
-    pub type4sumchecks: Vec<Type4SumcheckContext>,
+    pub type4sumchecks: [Type4SumcheckContext; 3],
+    pub type5sumcheck: Type5SumcheckContext,
 }
 
 /// Encapsulates the bookkeeping required to fold every tracked sumcheck with
@@ -122,6 +123,10 @@ impl SumcheckContext {
         for type4_sc in self.type4sumchecks.iter_mut() {
             partial_evaluate_type4(type4_sc, r);
         }
+        self.type5sumcheck
+            .conjugated_combined_witness
+            .borrow_mut()
+            .partial_evaluate(r);
     }
 }
 
@@ -434,6 +439,12 @@ pub struct Type4OutputLayerSumcheckContext {
 pub struct Type4SumcheckContext {
     pub layers: Vec<Type4LayerSumcheckContext>,
     pub output_layer: Type4OutputLayerSumcheckContext,
+}
+
+// we hanhle <combined witness, conjugated combined witness> inner product to check norm
+pub struct Type5SumcheckContext {
+    pub conjugated_combined_witness: Rc<RefCell<LinearSumcheck<RingElement>>>,
+    pub output: Rc<RefCell<ProductSumcheck<RingElement>>>,
 }
 
 fn partial_evaluate_type4(ctx: &mut Type4SumcheckContext, r: &RingElement) {

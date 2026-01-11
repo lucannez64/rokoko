@@ -7,6 +7,7 @@ use crate::{
         config::Config,
         crs::{self, CRS},
         sumcheck_utils::{diff::DiffSumcheck, linear::LinearSumcheck, product::ProductSumcheck},
+        sumchecks::context::Type5SumcheckContext,
     },
 };
 
@@ -475,6 +476,18 @@ pub fn init_sumcheck(crs: &crs::CRS, config: &Config) -> SumcheckContext {
         }
     };
 
+    let conjugated_combined_witness_sumcheck = Rc::new(RefCell::new(
+        LinearSumcheck::<RingElement>::new(config.composed_witness_length),
+    ));
+
+    let type5sumcheck = Type5SumcheckContext {
+        conjugated_combined_witness: conjugated_combined_witness_sumcheck.clone(),
+        output: Rc::new(RefCell::new(ProductSumcheck::new(
+            combined_witness_sumcheck.clone(),
+            conjugated_combined_witness_sumcheck.clone(),
+        ))),
+    };
+
     SumcheckContext {
         combined_witness_sumcheck: combined_witness_sumcheck.clone(),
         folded_witness_selector_sumcheck,
@@ -497,7 +510,7 @@ pub fn init_sumcheck(crs: &crs::CRS, config: &Config) -> SumcheckContext {
         // 2. Opening recursion: verifies the opening proofs are correctly committed
         // 3. Projection recursion: verifies the projection images are correctly committed
         // Each tree has its own depth, rank, and decomposition parameters defined in config.
-        type4sumchecks: vec![
+        type4sumchecks: [
             build_type4_sumcheck_context(
                 crs,
                 total_vars,
@@ -517,5 +530,6 @@ pub fn init_sumcheck(crs: &crs::CRS, config: &Config) -> SumcheckContext {
                 &config.projection_recursion,
             ),
         ],
+        type5sumcheck,
     }
 }

@@ -4,14 +4,23 @@ use num::range;
 
 use crate::{
     common::{
-        arithmetic::inner_product, config::MOD_Q, decomposition::{compose_from_decomposed, decompose}, hash::HashWrapper, matrix::{HorizontallyAlignedMatrix, VerticallyAlignedMatrix, new_vec_zero_preallocated}, norms, projection_matrix::ProjectionMatrix, ring_arithmetic::{Representation, RingElement}, sampling::sample_random_short_vector, structured_row::{self, PreprocessedRow, StructuredRow}
+        arithmetic::inner_product,
+        config::MOD_Q,
+        decomposition::{compose_from_decomposed, decompose},
+        hash::HashWrapper,
+        matrix::{new_vec_zero_preallocated, HorizontallyAlignedMatrix, VerticallyAlignedMatrix},
+        norms,
+        projection_matrix::ProjectionMatrix,
+        ring_arithmetic::{Representation, RingElement},
+        sampling::sample_random_short_vector,
+        structured_row::{self, PreprocessedRow, StructuredRow},
     },
     protocol::{
-        commitment::{RecursiveCommitment, commit_basic, recursive_commit},
-        config::{CONFIG, paste_by_prefix, paste_recursive_commitment},
+        commitment::{commit_basic, recursive_commit, RecursiveCommitment},
+        config::{paste_by_prefix, paste_recursive_commitment, CONFIG},
         crs::{CK, CRS},
         fold::fold,
-        open::{Opening, claim, evaluation_point_to_structured_row, open_at},
+        open::{claim, evaluation_point_to_structured_row, open_at, Opening},
         prefix::check_prefixing_correctness,
         project::project,
         sumcheck::sumcheck,
@@ -62,7 +71,6 @@ pub fn prover_round(
         CONFIG.witness_decomposition_chunks,
     );
 
-
     // TODO: can we avoid those copies?
     paste_by_prefix(
         &mut next_round_data,
@@ -70,17 +78,12 @@ pub fn prover_round(
         &CONFIG.folded_witness_prefix,
     );
 
-
-
-
     paste_recursive_commitment(
         &mut next_round_data,
         &rc_projection_image,
         &CONFIG.projection_recursion,
     );
 
-
-    
     paste_recursive_commitment(&mut next_round_data, &rc_opening, &CONFIG.opening_recursion);
 
     paste_recursive_commitment(
@@ -89,21 +92,22 @@ pub fn prover_round(
         &CONFIG.commitment_recursion,
     );
 
-
     let ell_inf_norm = norms::inf_norm(&next_round_data);
     let ell_2_norm = norms::l2_norm(&next_round_data);
 
     println!(
         "Next round data norms: L_inf = {}, bit_len = {}, L_2 = {}, MOD_Q = {}",
-        ell_inf_norm, ell_inf_norm.ilog2(), ell_2_norm, MOD_Q
+        ell_inf_norm,
+        ell_inf_norm.ilog2(),
+        ell_2_norm,
+        MOD_Q
     );
 
+    assert!(
+        ell_2_norm * ell_2_norm < (MOD_Q as f64 / 2f64),
+        "norm too large, aborting"
+    );
 
-    assert!(ell_2_norm * ell_2_norm < (MOD_Q as f64 / 2f64), "norm too large, aborting");
-
-
-
-    
     sumcheck(
         crs,
         &CONFIG,

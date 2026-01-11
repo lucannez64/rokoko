@@ -417,7 +417,7 @@ impl RingElement {
         }
     }
 
-    fn conjugate_into(&self, result: &mut RingElement) {
+    pub fn conjugate_into(&self, result: &mut RingElement) {
         assert_eq!(self.representation, Representation::IncompleteNTT);
         result.representation = self.representation;
 
