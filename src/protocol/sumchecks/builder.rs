@@ -6,7 +6,7 @@ use crate::{
         commitment::{self, Prefix},
         config::Config,
         crs::{self, CRS},
-        sumcheck_utils::{diff::DiffSumcheck, linear::LinearSumcheck, product::ProductSumcheck},
+        sumcheck_utils::{combiner::Combiner, common::HighOrderSumcheckData, diff::DiffSumcheck, linear::LinearSumcheck, product::ProductSumcheck},
         sumchecks::context::Type5SumcheckContext,
     },
 };
@@ -488,6 +488,62 @@ pub fn init_sumcheck(crs: &crs::CRS, config: &Config) -> SumcheckContext {
         ))),
     };
 
+     // Type4 sumchecks: Three separate recursive commitment trees
+    // 1. Commitment recursion: verifies the basic witness commitments are well-formed
+    // 2. Opening recursion: verifies the opening proofs are correctly committed
+    // 3. Projection recursion: verifies the projection images are correctly committed
+    // Each tree has its own depth, rank, and decomposition parameters defined in config.
+    let type4sumchecks = [
+        build_type4_sumcheck_context(
+            crs,
+            total_vars,
+            combined_witness_sumcheck.clone(),
+            &config.commitment_recursion,
+        ),
+        build_type4_sumcheck_context(
+            crs,
+            total_vars,
+            combined_witness_sumcheck.clone(),
+            &config.opening_recursion,
+        ),
+        build_type4_sumcheck_context(
+            crs,
+            total_vars,
+            combined_witness_sumcheck.clone(),
+            &config.projection_recursion,
+        ),
+    ];
+
+    let mut all_outputs: Vec<Rc<RefCell<dyn HighOrderSumcheckData<Element = RingElement>>>> = vec![];
+    for type0 in &type0sumchecks {
+        all_outputs.push(type0.output.clone());
+    }
+    for type1 in &type1sumchecks {
+        all_outputs.push(type1.output.clone());
+    }
+    for type2 in &type2sumchecks {
+        all_outputs.push(type2.output.clone());
+    }
+    all_outputs.push(type3sumcheck.output.clone());
+
+    for type4 in &type4sumchecks {
+        for layer in &type4.layers {
+            for output in &layer.outputs {
+                all_outputs.push(output.clone());
+            }
+        }
+        for output in &type4.output_layer.outputs {
+            all_outputs.push(output.clone());
+        }
+    }
+
+    all_outputs.push(type5sumcheck.output.clone());
+    
+
+    // TODO: do something smart here
+    let combiner = Combiner::new(all_outputs);
+    
+
     SumcheckContext {
         combined_witness_sumcheck: combined_witness_sumcheck.clone(),
         folded_witness_selector_sumcheck,
@@ -505,31 +561,7 @@ pub fn init_sumcheck(crs: &crs::CRS, config: &Config) -> SumcheckContext {
         type1sumchecks,
         type2sumchecks,
         type3sumcheck,
-        // Type4 sumchecks: Three separate recursive commitment trees
-        // 1. Commitment recursion: verifies the basic witness commitments are well-formed
-        // 2. Opening recursion: verifies the opening proofs are correctly committed
-        // 3. Projection recursion: verifies the projection images are correctly committed
-        // Each tree has its own depth, rank, and decomposition parameters defined in config.
-        type4sumchecks: [
-            build_type4_sumcheck_context(
-                crs,
-                total_vars,
-                combined_witness_sumcheck.clone(),
-                &config.commitment_recursion,
-            ),
-            build_type4_sumcheck_context(
-                crs,
-                total_vars,
-                combined_witness_sumcheck.clone(),
-                &config.opening_recursion,
-            ),
-            build_type4_sumcheck_context(
-                crs,
-                total_vars,
-                combined_witness_sumcheck.clone(),
-                &config.projection_recursion,
-            ),
-        ],
-        type5sumcheck,
+        type4sumchecks,
+        type5sumcheck
     }
 }

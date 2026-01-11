@@ -1,4 +1,4 @@
-use std::cell::RefCell;
+use std::{cell::RefCell, rc::Rc};
 
 use crate::{
     common::{
@@ -20,16 +20,16 @@ use crate::{
     },
 };
 
-pub struct Combiner<'a, E: SumcheckElement = RingElement> {
-    sumchecks: Vec<&'a RefCell<dyn HighOrderSumcheckData<Element = E> + 'a>>,
+pub struct Combiner<E: SumcheckElement = RingElement> {
+    sumchecks: Vec<Rc<RefCell<dyn HighOrderSumcheckData<Element = E>>>>,
     challenges: Vec<E>, // for now let's batch in ring elements
     temp_poly: RefCell<Polynomial<E>>,
     scratch_poly: RefCell<Polynomial<E>>,
 }
 
-impl<'a, E: SumcheckElement> Combiner<'a, E> {
+impl<E: SumcheckElement> Combiner<E> {
     pub fn new(
-        sumchecks: Vec<&'a RefCell<dyn HighOrderSumcheckData<Element = E> + 'a>>,
+        sumchecks: Vec<Rc<RefCell<dyn HighOrderSumcheckData<Element = E>>>>,
         // challenges: Vec<E>,
     ) -> Self {
         let sumchecks_len = sumchecks.len();
@@ -56,7 +56,7 @@ impl<'a, E: SumcheckElement> Combiner<'a, E> {
     }
 }
 
-impl<E: SumcheckElement> HighOrderSumcheckData for Combiner<'_, E> {
+impl<E: SumcheckElement> HighOrderSumcheckData for Combiner<E> {
     type Element = E;
 
     fn max_num_polynomial_coefficients(&self) -> usize {
@@ -153,16 +153,16 @@ fn test_combiner() {
     let mut sumcheck3 = LinearSumcheck::new(data3.len());
     sumcheck3.load_from(&data3);
 
-    let sumcheck0_ref = RefCell::new(sumcheck0);
-    let sumcheck1_ref = RefCell::new(sumcheck1);
-    let sumcheck2_ref = RefCell::new(sumcheck2);
-    let sumcheck3_ref = RefCell::new(sumcheck3);
+    let sumcheck0_ref = Rc::new(RefCell::new(sumcheck0));
+    let sumcheck1_ref = Rc::new(RefCell::new(sumcheck1));
+    let sumcheck2_ref = Rc::new(RefCell::new(sumcheck2));
+    let sumcheck3_ref = Rc::new(RefCell::new(sumcheck3));
 
     let mut combiner = Combiner::new(vec![
-        &sumcheck0_ref,
-        &sumcheck1_ref,
-        &sumcheck2_ref,
-        &sumcheck3_ref,
+        sumcheck0_ref.clone(),
+        sumcheck1_ref.clone(),
+        sumcheck2_ref.clone(),
+        sumcheck3_ref.clone(),
     ]);
 
     combiner.load_challenges_from(&preprocessed_challenges.preprocessed_row);
