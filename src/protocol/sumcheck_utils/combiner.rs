@@ -127,6 +127,18 @@ impl<E: SumcheckElement> HighOrderSumcheckData for Combiner<E> {
     ) -> bool {
         false
     }
+
+     fn final_evaluations_test_only(&self) -> Self::Element {
+        let mut result = E::zero();
+        let nof_sumchecks = self.sumchecks.len();
+        for i in 0..nof_sumchecks {
+            let sumcheck = &self.sumchecks[i];
+            let mut term = sumcheck.borrow().final_evaluations_test_only().clone();
+            term *= &self.challenges[i];
+            result += &term;
+        }
+        result
+    }
 }
 
 #[test]

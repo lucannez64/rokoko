@@ -124,6 +124,13 @@ impl<E: SumcheckElement> HighOrderSumcheckData for SelectorEq<E> {
             polynomial.num_coefficients = 2;
         }
     }
+
+    fn final_evaluations_test_only(&self) -> E {
+        if self.total_variable_count != 0 {
+            panic!("final_evaluations called before all variables were evaluated");
+        }
+        self.current_claim.clone()
+    }
 }
 
 impl<E: SumcheckElement> SumcheckBaseData for SelectorEq<E> {

@@ -110,6 +110,12 @@ impl<E: SumcheckElement> HighOrderSumcheckData for DiffSumcheck<E> {
             sub_poly_in_place(polynomial, &rhs_eval_poly);
         }
     }
+
+    fn final_evaluations_test_only(&self) -> Self::Element {
+        let mut result = self.lhs_sumcheck.borrow().final_evaluations_test_only().clone();
+        result -= &self.rhs_sumcheck.borrow().final_evaluations_test_only();
+        result
+    }
 }
 
 #[test]

@@ -64,6 +64,8 @@ pub trait HighOrderSumcheckData {
     ) -> Option<&Self::Element> {
         None
     }
+
+    fn final_evaluations_test_only(&self) -> Self::Element;
 }
 
 pub trait SumcheckBaseData: HighOrderSumcheckData {

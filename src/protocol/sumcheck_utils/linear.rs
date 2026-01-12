@@ -138,6 +138,13 @@ impl<E: SumcheckElement> HighOrderSumcheckData for LinearSumcheck<E> {
     fn variable_count(&self) -> usize {
         self.variable_count
     }
+
+    fn final_evaluations_test_only(&self) -> Self::Element {
+        if self.data.len() != 1 {
+            panic!("Sumcheck is not fully evaluated yet");
+        }
+        self.data[0].clone()
+    }
 }
 
 impl<E: SumcheckElement> SumcheckBaseData for LinearSumcheck<E> {

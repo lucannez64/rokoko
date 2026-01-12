@@ -49,13 +49,13 @@ pub struct Type0VerifierContext {
 }
 
 pub struct Type1VerifierContext {
-    pub inner_evaluation: Rc<RefCell<BasicEvaluationLinearSumcheck<RingElement>>>,
+    pub inner_evaluation: Rc<RefCell<StructuredRowEvaluationLinearSumcheck<RingElement>>>,
     pub opening_selector_evaluation: Rc<RefCell<SelectorEqEvaluation>>,
     pub output: Rc<RefCell<DiffSumcheckEvaluation>>,
 }
 
 pub struct Type2VerifierContext {
-    pub outer_evaluation: Rc<RefCell<BasicEvaluationLinearSumcheck<RingElement>>>,
+    pub outer_evaluation: Rc<RefCell<StructuredRowEvaluationLinearSumcheck<RingElement>>>,
     pub output: Rc<RefCell<ProductSumcheckEvaluation>>,
 }
 

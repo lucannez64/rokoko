@@ -80,6 +80,19 @@ impl HighOrderSumcheckData for RingToFieldCombiner {
     ) -> bool {
         false
     }
+    fn final_evaluations_test_only(&self) -> Self::Element {
+        let mut result = QuadraticExtension::zero();
+        let final_ring_eval = self.sumcheck.borrow().final_evaluations_test_only();
+        let mut temp = final_ring_eval.clone();
+        temp.from_incomplete_ntt_to_homogenized_field_extensions();
+        let mut coeff = temp.split_into_quadratic_extensions();
+
+        for j in 0..HALF_DEGREE {
+            coeff[j] *= &self.challenge_vec[j];
+            result += &coeff[j];
+        }
+        result
+    }
 }
 
 #[test]
