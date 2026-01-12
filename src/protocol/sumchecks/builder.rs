@@ -1,4 +1,4 @@
-use std::{cell::RefCell, rc::Rc};
+use std::{cell::{Ref, RefCell}, rc::Rc};
 
 use crate::{
     common::ring_arithmetic::RingElement,
@@ -6,7 +6,7 @@ use crate::{
         commitment::{self, Prefix},
         config::Config,
         crs::{self, CRS},
-        sumcheck_utils::{combiner::Combiner, common::HighOrderSumcheckData, diff::DiffSumcheck, linear::LinearSumcheck, product::ProductSumcheck},
+        sumcheck_utils::{combiner::Combiner, common::HighOrderSumcheckData, diff::DiffSumcheck, linear::LinearSumcheck, product::ProductSumcheck, ring_to_field_combiner::RingToFieldCombiner},
         sumchecks::context::Type5SumcheckContext,
     },
 };
@@ -543,6 +543,8 @@ pub fn init_sumcheck(crs: &crs::CRS, config: &Config) -> SumcheckContext {
 
     // TODO: do something smart here
     let combiner = Rc::new(RefCell::new(Combiner::new(all_outputs)));
+
+    let field_combiner = Rc::new(RefCell::new(RingToFieldCombiner::new(combiner.clone())));
     
 
     SumcheckContext {
@@ -565,5 +567,6 @@ pub fn init_sumcheck(crs: &crs::CRS, config: &Config) -> SumcheckContext {
         type4sumchecks,
         type5sumcheck,
         combiner,
+        field_combiner,
     }
 }

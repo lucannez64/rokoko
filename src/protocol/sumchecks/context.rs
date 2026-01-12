@@ -3,7 +3,7 @@ use std::{cell::RefCell, rc::Rc};
 use crate::{
     common::ring_arithmetic::RingElement,
     protocol::sumcheck_utils::{
-        combiner::Combiner, common::{HighOrderSumcheckData, SumcheckBaseData}, diff::DiffSumcheck, linear::LinearSumcheck, product::ProductSumcheck, selector_eq::SelectorEq
+        combiner::Combiner, common::{HighOrderSumcheckData, SumcheckBaseData}, diff::DiffSumcheck, linear::LinearSumcheck, product::ProductSumcheck, ring_to_field_combiner::RingToFieldCombiner, selector_eq::SelectorEq
     },
 };
 
@@ -42,6 +42,7 @@ pub struct SumcheckContext {
     pub type4sumchecks: [Type4SumcheckContext; 3],
     pub type5sumcheck: Type5SumcheckContext,
     pub combiner: Rc<RefCell<Combiner<RingElement>>>,
+    pub field_combiner: Rc<RefCell<RingToFieldCombiner>>,
 }
 
 /// Encapsulates the bookkeeping required to fold every tracked sumcheck with

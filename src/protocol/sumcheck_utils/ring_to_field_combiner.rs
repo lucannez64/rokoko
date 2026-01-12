@@ -1,4 +1,4 @@
-use std::cell::RefCell;
+use std::{cell::RefCell, rc::Rc};
 
 use crate::{
     common::{
@@ -13,16 +13,16 @@ use crate::{
     },
 };
 
-pub struct RingToFieldCombiner<'a> {
-    sumcheck: &'a RefCell<dyn HighOrderSumcheckData<Element = RingElement> + 'a>,
+pub struct RingToFieldCombiner {
+    sumcheck: Rc<RefCell<dyn HighOrderSumcheckData<Element = RingElement>>>,
     challenge_vec: [QuadraticExtension; HALF_DEGREE],
     temp_poly: RefCell<Polynomial<RingElement>>,
     scratch_poly: RefCell<Polynomial<QuadraticExtension>>,
 }
 
-impl<'a> RingToFieldCombiner<'a> {
+impl RingToFieldCombiner {
     pub fn new(
-        sumcheck: &'a RefCell<dyn HighOrderSumcheckData<Element = RingElement> + 'a>,
+        sumcheck: Rc<RefCell<dyn HighOrderSumcheckData<Element = RingElement>>>,
     ) -> Self {
         Self {
             sumcheck,
@@ -32,12 +32,12 @@ impl<'a> RingToFieldCombiner<'a> {
         }
     }
 
-    fn load_challenges(&mut self, challenge: [QuadraticExtension; HALF_DEGREE]) {
+    pub fn load_challenges_from(&mut self, challenge: [QuadraticExtension; HALF_DEGREE]) {
         self.challenge_vec = challenge;
     }
 }
 
-impl<'a> HighOrderSumcheckData for RingToFieldCombiner<'a> {
+impl HighOrderSumcheckData for RingToFieldCombiner {
     type Element = QuadraticExtension;
 
     fn max_num_polynomial_coefficients(&self) -> usize {
@@ -97,7 +97,7 @@ fn test_ring_to_field_combiner() {
         RingElement::constant(8, Representation::IncompleteNTT),
     ];
 
-    let sumcheck = RefCell::new(LinearSumcheck::<RingElement>::new(data.len()));
+    let sumcheck = Rc::new(RefCell::new(LinearSumcheck::<RingElement>::new(data.len())));
     sumcheck.borrow_mut().load_from(&data);
 
     let mut challenge_qe = vec![];
@@ -108,9 +108,9 @@ fn test_ring_to_field_combiner() {
         });
     }
 
-    let mut combiner = RingToFieldCombiner::new(&sumcheck);
+    let mut combiner = RingToFieldCombiner::new(sumcheck.clone());
 
-    combiner.load_challenges(challenge_qe.try_into().unwrap());
+    combiner.load_challenges_from(challenge_qe.try_into().unwrap());
 
     let claim = (1 + 2 + 3 + 4 + 5 + 6 + 7 + 8) * (HALF_DEGREE + 1) * (HALF_DEGREE) / 2;
 

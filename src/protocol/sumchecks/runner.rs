@@ -1,11 +1,6 @@
 use crate::{
     common::{
-        arithmetic::inner_product,
-        hash::HashWrapper,
-        matrix::new_vec_zero_preallocated,
-        projection_matrix::ProjectionMatrix,
-        ring_arithmetic::{Representation, RingElement},
-        structured_row::PreprocessedRow,
+        arithmetic::inner_product, config::HALF_DEGREE, hash::HashWrapper, matrix::new_vec_zero_preallocated, projection_matrix::ProjectionMatrix, ring_arithmetic::{QuadraticExtension, Representation, RingElement}, structured_row::PreprocessedRow, sumcheck_element::SumcheckElement
     },
     protocol::{
         config::Config,
@@ -201,14 +196,19 @@ pub fn sumcheck(
     let norm_claim = inner_product(&combined_witness, &conjugated_combined_witness);
 
 
-    let mut poly = Polynomial::new(0);
-
     // Sample random batching coefficients from Fiat-Shamir
     let num_sumchecks = sumcheck_context.combiner.borrow().sumchecks_count();
     let mut combination = new_vec_zero_preallocated(num_sumchecks);
     hash_wrapper.sample_ring_element_vec_into(&mut combination);
     
+    let mut combination_to_field = RingElement::zero(Representation::IncompleteNTT);
+    hash_wrapper.sample_ring_element_into(&mut combination_to_field);
+    combination_to_field.from_incomplete_ntt_to_homogenized_field_extensions();
+    let qe = combination_to_field.split_into_quadratic_extensions();
     sumcheck_context.combiner.borrow_mut().load_challenges_from(&combination);
+
+    // TODO: can we avoid cloning?
+    sumcheck_context.field_combiner.borrow_mut().load_challenges_from(qe.clone());
 
     
     let mut num_vars = sumcheck_context
@@ -272,6 +272,34 @@ pub fn sumcheck(
 
     print!("Num vars before sumcheck: {}\n", num_vars);
 
+    let batched_claim_over_field = {
+        let batched_claim = {
+            let mut temp = batched_claim.clone();
+            temp.from_incomplete_ntt_to_homogenized_field_extensions();
+            temp
+        };
+        let mut temp = batched_claim.split_into_quadratic_extensions();
+        let mut result = QuadraticExtension::zero();
+        for i in 0..HALF_DEGREE {
+            temp[i] *= &qe[i];
+            result += &temp[i];
+        }
+        result
+    };
+
+
+    let mut poly = Polynomial::new(0);
+
+    let mut poly_over_field = Polynomial::<QuadraticExtension>::new(0);
+
+
+    sumcheck_context
+        .field_combiner
+        .borrow_mut()
+        .univariate_polynomial_into(&mut poly_over_field);
+
+    assert_eq!(poly_over_field.at_zero() + poly_over_field.at_one(), batched_claim_over_field);
+    //
     while num_vars > 0 {
         num_vars -= 1;
         // round 0
@@ -282,6 +310,8 @@ pub fn sumcheck(
             .univariate_polynomial_into(&mut poly);
         
         assert_eq!(&poly.at_zero() + &poly.at_one(), batched_claim);
+
+
 
         let mut r = RingElement::zero(Representation::IncompleteNTT);
         hash_wrapper.sample_ring_element_into(&mut r);
