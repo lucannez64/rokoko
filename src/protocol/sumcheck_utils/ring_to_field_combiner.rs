@@ -7,7 +7,7 @@ use crate::{
         sumcheck_element::SumcheckElement,
     },
     protocol::sumcheck_utils::{
-        common::{HighOrderSumcheckData, SumcheckBaseData},
+        common::{EvaluationSumcheckData, HighOrderSumcheckData, SumcheckBaseData},
         linear::LinearSumcheck,
         polynomial::Polynomial,
     },
@@ -188,4 +188,116 @@ fn test_ring_to_field_combiner() {
         final_eval += &final_qes[i];
     }
     assert_eq!(final_eval, final_claim);
+}
+
+/// Evaluation-only version of RingToFieldCombiner that evaluates a ring element sumcheck
+/// and combines it into a field extension element.
+/// Note: This takes RingElement points but implements EvaluationSumcheckData<Element=QuadraticExtension>
+/// because it converts the ring evaluation to field extensions.
+pub struct RingToFieldCombinerEvaluation {
+    evaluation: Box<dyn EvaluationSumcheckData<Element = RingElement>>,
+    challenge_vec: [QuadraticExtension; HALF_DEGREE],
+    result: QuadraticExtension,
+    // Store the point converted to QuadraticExtension for trait compatibility
+    qe_point: Vec<QuadraticExtension>,
+}
+
+impl RingToFieldCombinerEvaluation {
+    pub fn new(
+        evaluation: Box<dyn EvaluationSumcheckData<Element = RingElement>>,
+        challenge_vec: [QuadraticExtension; HALF_DEGREE],
+    ) -> Self {
+        RingToFieldCombinerEvaluation {
+            evaluation,
+            challenge_vec,
+            result: QuadraticExtension::zero(),
+            qe_point: Vec::new(),
+        }
+    }
+
+    /// Evaluate at a RingElement point (convenience method)
+    pub fn evaluate_at_ring_point(&mut self, point: &Vec<RingElement>) -> &QuadraticExtension {
+        // Evaluate the inner sumcheck at the given point
+        let ring_eval = self.evaluation.evaluate(point);
+
+        // Convert to field extensions and combine with challenges
+        let mut temp = ring_eval.clone();
+        temp.from_incomplete_ntt_to_homogenized_field_extensions();
+        let mut coeff = temp.split_into_quadratic_extensions();
+
+        self.result = QuadraticExtension::zero();
+        for j in 0..HALF_DEGREE {
+            coeff[j] *= &self.challenge_vec[j];
+            self.result += &coeff[j];
+        }
+
+        &self.result
+    }
+}
+
+impl EvaluationSumcheckData for RingToFieldCombinerEvaluation {
+    type Element = QuadraticExtension;
+
+    fn evaluate(&mut self, point: &Vec<QuadraticExtension>) -> &Self::Element {
+        // Convert QuadraticExtension point to RingElement
+        let mut ring_point = Vec::with_capacity(point.len());
+        for qe in point {
+            let mut r = RingElement::constant(0, Representation::HomogenizedFieldExtensions);
+            r.combine_from_quadratic_extensions(&[*qe; HALF_DEGREE]);
+            r.from_homogenized_field_extensions_to_incomplete_ntt();
+            ring_point.push(r);
+        }
+
+        self.evaluate_at_ring_point(&ring_point)
+    }
+}
+
+#[test]
+fn test_ring_to_field_combiner_evaluation() {
+    use crate::protocol::sumcheck_utils::linear::BasicEvaluationLinearSumcheck;
+
+    let data = vec![
+        RingElement::constant(1, Representation::IncompleteNTT),
+        RingElement::constant(2, Representation::IncompleteNTT),
+        RingElement::constant(3, Representation::IncompleteNTT),
+        RingElement::constant(4, Representation::IncompleteNTT),
+    ];
+
+    let mut eval_impl = BasicEvaluationLinearSumcheck::new(data.len());
+    eval_impl.load_from(&data);
+    let eval = Box::new(eval_impl);
+
+    let mut challenge_qe = [QuadraticExtension::zero(); HALF_DEGREE];
+    for i in 0..HALF_DEGREE {
+        challenge_qe[i] = QuadraticExtension {
+            coeffs: [i as u64 + 1, 0],
+            shift: SHIFT_FACTORS[0],
+        };
+    }
+
+    let mut combiner_eval = RingToFieldCombinerEvaluation::new(eval, challenge_qe);
+
+    let point = vec![
+        RingElement::constant(7, Representation::IncompleteNTT),
+        RingElement::constant(11, Representation::IncompleteNTT),
+    ];
+
+    // Create reference using the folding implementation
+    let sumcheck = Rc::new(RefCell::new(LinearSumcheck::<RingElement>::new(data.len())));
+    sumcheck.borrow_mut().load_from(&data);
+
+    for r in &point {
+        sumcheck.borrow_mut().partial_evaluate(r);
+    }
+
+    let mut final_qe = sumcheck.borrow().final_evaluations().clone();
+    final_qe.from_incomplete_ntt_to_homogenized_field_extensions();
+    let mut final_qes = final_qe.split_into_quadratic_extensions();
+    let mut expected = QuadraticExtension::zero();
+    for i in 0..HALF_DEGREE {
+        final_qes[i] *= &challenge_qe[i];
+        expected += &final_qes[i];
+    }
+
+    assert_eq!(combiner_eval.evaluate_at_ring_point(&point), &expected);
 }

@@ -12,7 +12,7 @@ use crate::{
         open::evaluation_point_to_structured_row,
         sumcheck,
         sumcheck_utils::{
-            common::{HighOrderSumcheckData, SumcheckBaseData},
+            common::{EvaluationSumcheckData, HighOrderSumcheckData, SumcheckBaseData},
             hypercube_point::HypercubePoint,
             linear::LinearSumcheck,
             polynomial::Polynomial,
@@ -253,4 +253,108 @@ fn test_combiner() {
     final_eval += &term;
 
     assert_eq!(final_eval, final_claim);
+}
+
+/// Evaluation-only version of Combiner that evaluates a linear combination of sumchecks at a point.
+pub struct CombinerEvaluation<E: SumcheckElement = RingElement> {
+    evaluations: Vec<Box<dyn EvaluationSumcheckData<Element = E>>>,
+    challenges: Vec<E>,
+    result: E,
+}
+
+impl<E: SumcheckElement> CombinerEvaluation<E> {
+    pub fn new(evaluations: Vec<Box<dyn EvaluationSumcheckData<Element = E>>>) -> Self {
+        let evaluations_len = evaluations.len();
+        CombinerEvaluation {
+            evaluations,
+            challenges: E::allocate_zero_vec(evaluations_len),
+            result: E::zero(),
+        }
+    }
+
+    pub fn load_challenges_from(&mut self, challenges: &[E]) {
+        assert_eq!(
+            challenges.len(),
+            self.evaluations.len(),
+            "CombinerEvaluation: number of challenges must match number of evaluations"
+        );
+        self.challenges.clone_from_slice(challenges);
+    }
+}
+
+impl<E: SumcheckElement> EvaluationSumcheckData for CombinerEvaluation<E> {
+    type Element = E;
+
+    fn evaluate(&mut self, point: &Vec<Self::Element>) -> &Self::Element {
+        // Compute the linear combination: sum of (evaluation[i] * challenge[i])
+        self.result = E::zero();
+
+        for i in 0..self.evaluations.len() {
+            let eval = self.evaluations[i].evaluate(point);
+            let mut term = eval.clone();
+            term *= &self.challenges[i];
+            self.result += &term;
+        }
+
+        &self.result
+    }
+}
+
+#[test]
+fn test_combiner_evaluation() {
+    use crate::protocol::sumcheck_utils::linear::BasicEvaluationLinearSumcheck;
+
+    let data0 = vec![
+        RingElement::constant(1, Representation::IncompleteNTT),
+        RingElement::constant(2, Representation::IncompleteNTT),
+        RingElement::constant(3, Representation::IncompleteNTT),
+        RingElement::constant(4, Representation::IncompleteNTT),
+    ];
+
+    let data1 = vec![
+        RingElement::constant(5, Representation::IncompleteNTT),
+        RingElement::constant(6, Representation::IncompleteNTT),
+        RingElement::constant(7, Representation::IncompleteNTT),
+        RingElement::constant(8, Representation::IncompleteNTT),
+    ];
+
+    let mut eval0_impl = BasicEvaluationLinearSumcheck::new(data0.len());
+    eval0_impl.load_from(&data0);
+    let eval0 = Box::new(eval0_impl);
+
+    let mut eval1_impl = BasicEvaluationLinearSumcheck::new(data1.len());
+    eval1_impl.load_from(&data1);
+    let eval1 = Box::new(eval1_impl);
+
+    let challenges = vec![
+        RingElement::constant(3, Representation::IncompleteNTT),
+        RingElement::constant(5, Representation::IncompleteNTT),
+    ];
+
+    let mut combiner_eval = CombinerEvaluation::new(vec![eval0, eval1]);
+    combiner_eval.load_challenges_from(&challenges);
+
+    let point = vec![
+        RingElement::constant(7, Representation::IncompleteNTT),
+        RingElement::constant(11, Representation::IncompleteNTT),
+    ];
+
+    // Create reference using the folding implementation
+    let sumcheck0 = Rc::new(RefCell::new(LinearSumcheck::new(data0.len())));
+    sumcheck0.borrow_mut().load_from(&data0);
+    let sumcheck1 = Rc::new(RefCell::new(LinearSumcheck::new(data1.len())));
+    sumcheck1.borrow_mut().load_from(&data1);
+
+    for r in &point {
+        sumcheck0.borrow_mut().partial_evaluate(r);
+        sumcheck1.borrow_mut().partial_evaluate(r);
+    }
+
+    let mut expected = sumcheck0.borrow().final_evaluations().clone();
+    expected *= &challenges[0];
+    let mut term = sumcheck1.borrow().final_evaluations().clone();
+    term *= &challenges[1];
+    expected += &term;
+
+    assert_eq!(combiner_eval.evaluate(&point), &expected);
 }
