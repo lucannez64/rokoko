@@ -130,6 +130,14 @@ impl HashWrapper {
         });
     }
 
+    pub fn sample_field_element_into(&mut self, output: &mut QuadraticExtension) {
+        let buf = output.coeffs.as_mut_ptr() as *mut u8;
+        let len = output.coeffs.len() * std::mem::size_of::<u64>();
+        self.fill_from_xof(b"field-element", unsafe {
+            std::slice::from_raw_parts_mut(buf, len)
+        });
+    }
+
     pub fn sample_ring_element_vec_into(&mut self, output: &mut [RingElement]) {
         for element in output.iter_mut() {
             self.sample_ring_element_into(element);

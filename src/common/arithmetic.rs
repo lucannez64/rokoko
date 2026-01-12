@@ -1,8 +1,7 @@
 use std::sync::LazyLock;
 
 use crate::common::{
-    ring_arithmetic::{incomplete_ntt_multiplication, Representation, RingElement},
-    structured_row::StructuredRow,
+    config::HALF_DEGREE, ring_arithmetic::{QuadraticExtension, Representation, RingElement, SHIFT_FACTORS, incomplete_ntt_multiplication}, structured_row::StructuredRow, sumcheck_element::SumcheckElement
 };
 
 pub fn inner_product(a: &Vec<RingElement>, b: &Vec<RingElement>) -> RingElement {
@@ -16,8 +15,32 @@ pub fn inner_product(a: &Vec<RingElement>, b: &Vec<RingElement>) -> RingElement 
     result
 }
 
+pub fn field_to_ring_element(fe: &QuadraticExtension) -> RingElement {
+    let mut result = RingElement::zero(Representation::HomogenizedFieldExtensions);
+    for i in 0..2 {
+        for j in 0..HALF_DEGREE {
+            result.v[j + i * HALF_DEGREE] += fe.coeffs[i];
+        }
+    }
+    result
+}
+
 pub static ONE: LazyLock<RingElement> =
     LazyLock::new(|| RingElement::one(Representation::IncompleteNTT));
 
 pub static ZERO: LazyLock<RingElement> =
     LazyLock::new(|| RingElement::zero(Representation::IncompleteNTT));
+
+
+#[test]
+fn test_field_to_ring_roundtrip() {
+    let fe = QuadraticExtension {
+        coeffs: [123456789, 987654321],
+        shift: SHIFT_FACTORS[0],
+    };
+    let re = field_to_ring_element(&fe);
+    let fes = re.split_into_quadratic_extensions();
+    for f in fes {
+        assert_eq!(f, fe);
+    }
+}
