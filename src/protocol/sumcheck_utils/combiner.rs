@@ -128,7 +128,7 @@ impl<E: SumcheckElement> HighOrderSumcheckData for Combiner<E> {
         false
     }
 
-     fn final_evaluations_test_only(&self) -> Self::Element {
+    fn final_evaluations_test_only(&self) -> Self::Element {
         let mut result = E::zero();
         let nof_sumchecks = self.sumchecks.len();
         for i in 0..nof_sumchecks {
@@ -272,7 +272,7 @@ pub struct CombinerEvaluation<E: SumcheckElement = RingElement> {
     evaluations: Vec<Rc<RefCell<dyn EvaluationSumcheckData<Element = E>>>>,
     challenges: Vec<E>,
     result: E,
-    scratch: E
+    scratch: E,
 }
 
 impl<E: SumcheckElement> CombinerEvaluation<E> {
@@ -304,7 +304,10 @@ impl<E: SumcheckElement> EvaluationSumcheckData for CombinerEvaluation<E> {
         self.result = E::zero();
 
         for i in 0..self.evaluations.len() {
-            self.scratch *= (self.evaluations[i].borrow_mut().evaluate(&point), &self.challenges[i]);
+            self.scratch *= (
+                self.evaluations[i].borrow_mut().evaluate(&point),
+                &self.challenges[i],
+            );
             self.result += &self.scratch;
         }
 

@@ -17,16 +17,14 @@ use crate::{
         open::{evaluation_point_to_structured_row, Opening},
         sumcheck::{self, SumcheckContext},
         sumcheck_utils::{
-            common::{HighOrderSumcheckData, SumcheckBaseData},
+            common::{EvaluationSumcheckData, HighOrderSumcheckData, SumcheckBaseData},
             polynomial::Polynomial,
         },
+        sumchecks::context_verifier::VerifierSumcheckContext,
     },
 };
 
-use super::{
-    builder::init_sumcheck, 
-    loader::load_sumcheck_data,
-};
+use super::{builder::init_sumcheck, loader::load_sumcheck_data};
 
 pub use crate::protocol::proof::Proof;
 /// Executes the complete sumcheck protocol for all constraints in the prover's proof.
@@ -169,6 +167,7 @@ pub fn sumcheck(
     rc_opening_inner: &Vec<RingElement>,
     rc_projection_inner: &Vec<RingElement>,
     sumcheck_context: &mut SumcheckContext,
+    verifier_sumcheck_context: &mut VerifierSumcheckContext,
     hash_wrapper: &mut HashWrapper,
 ) -> (
     RingElement,
@@ -362,9 +361,17 @@ pub fn sumcheck(
         .final_evaluations()
         .clone();
 
-        
+    // let a = sumcheck_context.commitment_key_rows_sumcheck[0]
+    //     .borrow()
+    //     .final_evaluations_test_only();
 
-    // TODO: how to avoid cloning here?
+    // let b = verifier_sumcheck_context.commitment_key_rows_evaluation[0]
+    //     .borrow_mut()
+    //     .evaluate(&evaluation_points)
+    //     .clone();
+
+    // assert_eq!(&a, &b);
+
     (
         claim_over_witness,
         claim_over_witness_conjugate,

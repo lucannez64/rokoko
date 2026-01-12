@@ -24,7 +24,12 @@ use crate::{
         prefix::check_prefixing_correctness,
         project::project,
         proof::Proof,
-        sumcheck::{self, init_sumcheck, sumcheck, SumcheckContext}, // sumcheck::sumcheck,
+        sumcheck::{self, init_sumcheck, sumcheck, SumcheckContext},
+        sumcheck_utils::{
+            common::{EvaluationSumcheckData, HighOrderSumcheckData, SumcheckBaseData},
+            linear::{LinearSumcheck, StructuredRowEvaluationLinearSumcheck},
+        },
+        sumchecks::{builder_verifier::init_verifier, context_verifier::VerifierSumcheckContext}, // sumcheck::sumcheck,
     },
 };
 
@@ -36,6 +41,7 @@ pub fn prover_round(
     evaluation_points_outer: &Vec<StructuredRow>,
     claims: &Vec<RingElement>,
     sumcheck_context: &mut SumcheckContext,
+    verifier_sumcheck_context: &mut VerifierSumcheckContext,
 ) {
     let mut hash_wrapper = HashWrapper::new();
 
@@ -108,7 +114,6 @@ pub fn prover_round(
         ell_2_norm * ell_2_norm < (MOD_Q as f64 / 2f64),
         "norm too large, aborting"
     );
-
     let (claim_over_witness, claim_over_witness_conjugate, norm_claim, sumcheck_transcript) =
         sumcheck(
             crs,
@@ -122,6 +127,7 @@ pub fn prover_round(
             rc_opening.most_inner_commitment(),
             rc_projection_image.most_inner_commitment(),
             sumcheck_context,
+            verifier_sumcheck_context,
             &mut hash_wrapper,
         );
 
@@ -146,6 +152,7 @@ pub fn execute() {
     let crs = CRS::gen_crs(CONFIG.witness_height * 2, 2);
 
     let mut sumcheck_context = init_sumcheck(&crs, &CONFIG);
+    let mut sumcheck_context_verifier = init_verifier(&crs, &CONFIG);
 
     let witness = VerticallyAlignedMatrix {
         height: CONFIG.witness_height,
@@ -189,5 +196,6 @@ pub fn execute() {
         &evaluation_points_outer,
         &claims,
         &mut sumcheck_context,
+        &mut sumcheck_context_verifier,
     );
 }

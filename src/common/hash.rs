@@ -1,5 +1,6 @@
 use crate::common::config::{DEGREE, MOD_Q};
 use crate::common::ring_arithmetic::*;
+use crate::hexl::bindings::eltwise_reduce_mod;
 use blake3::Hasher;
 
 /// Incremental transcript hash suitable for Fiat–Shamir style challenges.
@@ -134,6 +135,14 @@ impl HashWrapper {
         self.fill_from_xof(b"ring-element", unsafe {
             std::slice::from_raw_parts_mut(buf, len)
         });
+        unsafe {
+            eltwise_reduce_mod(
+                output.v.as_mut_ptr(),
+                output.v.as_mut_ptr(),
+                output.v.len() as u64,
+                MOD_Q,
+            );
+        }
     }
 
     pub fn sample_field_element_into(&mut self, output: &mut QuadraticExtension) {
@@ -142,6 +151,14 @@ impl HashWrapper {
         self.fill_from_xof(b"field-element", unsafe {
             std::slice::from_raw_parts_mut(buf, len)
         });
+        unsafe {
+            eltwise_reduce_mod(
+                output.coeffs.as_mut_ptr(),
+                output.coeffs.as_mut_ptr(),
+                output.coeffs.len() as u64,
+                MOD_Q,
+            );
+        }
     }
 
     pub fn sample_ring_element_vec_into(&mut self, output: &mut [RingElement]) {

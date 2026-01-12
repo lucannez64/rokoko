@@ -315,9 +315,8 @@ impl EvaluationSumcheckData for StructuredRowEvaluationLinearSumcheck<RingElemen
 
         let data_point = &point[prefix_size..prefix_size + data_variable_count];
 
-        for (layer, r) in data.tensor_layers.iter().rev().zip(data_point.iter().rev()) {
+        for (layer, r) in data.tensor_layers.iter().zip(data_point.iter()) {
             // Compute: (1-layer)*(1-r) + layer*r = 1 - layer - r + 2*layer*r
-            // We need to compute this term for this layer, then multiply into result
             self.scratch.set_from(layer);
             self.scratch *= r; // layer*r
             self.scratch *= &*TWO; // 2*layer*r
@@ -687,33 +686,35 @@ fn test_structured_row_evaluation_sumcheck() {
     // Create a structured row with 3 tensor layers
     // This represents 2^3 = 8 data points
     let tensor_layers = vec![
-        RingElement::constant(5, Representation::IncompleteNTT),
-        RingElement::constant(3, Representation::IncompleteNTT),
-        RingElement::constant(2, Representation::IncompleteNTT),
+        RingElement::random(Representation::IncompleteNTT),
+        RingElement::random(Representation::IncompleteNTT),
+        RingElement::random(Representation::IncompleteNTT),
     ];
 
     let structured_row = StructuredRow { tensor_layers };
 
     let mut evaluation_sumcheck =
-        StructuredRowEvaluationLinearSumcheck::new_with_prefixed_sufixed_data(8, 2, 2);
+        StructuredRowEvaluationLinearSumcheck::new_with_prefixed_sufixed_data(8, 2, 3);
 
     evaluation_sumcheck.load_from(structured_row.clone());
 
     let mut point = vec![
-        RingElement::constant(1, Representation::IncompleteNTT), // prefix 0
-        RingElement::constant(2, Representation::IncompleteNTT), // prefix 1
-        RingElement::constant(3, Representation::IncompleteNTT), // data 0
-        RingElement::constant(4, Representation::IncompleteNTT), // data 1
-        RingElement::constant(5, Representation::IncompleteNTT), // data 2
-        RingElement::constant(6, Representation::IncompleteNTT), // suffix 0
-        RingElement::constant(7, Representation::IncompleteNTT), // suffix 1
+        RingElement::random(Representation::IncompleteNTT), // prefix 0
+        RingElement::random(Representation::IncompleteNTT), // prefix 1
+        RingElement::random(Representation::IncompleteNTT), // data 0
+        RingElement::random(Representation::IncompleteNTT), // data 1
+        RingElement::random(Representation::IncompleteNTT), // data 2
+        RingElement::random(Representation::IncompleteNTT), // suffix 0
+        RingElement::random(Representation::IncompleteNTT), // suffix 1
+        RingElement::random(Representation::IncompleteNTT), // suffix 2
     ];
 
-    let mut ref_sumcheck = LinearSumcheck::new_with_prefixed_sufixed_data(8, 2, 2);
+    let mut ref_sumcheck = LinearSumcheck::new_with_prefixed_sufixed_data(8, 2, 3);
 
     let prepared_data = PreprocessedRow::from_structured_row(&structured_row);
 
     ref_sumcheck.load_from(&prepared_data.preprocessed_row);
+
     for r in point.iter() {
         ref_sumcheck.partial_evaluate(r);
     }

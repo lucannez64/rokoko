@@ -3,7 +3,15 @@ use std::{cell::RefCell, rc::Rc};
 use crate::{
     common::ring_arithmetic::{QuadraticExtension, RingElement},
     protocol::sumcheck_utils::{
-        combiner::CombinerEvaluation, diff::DiffSumcheckEvaluation, linear::{BasicEvaluationLinearSumcheck, FakeEvaluationLinearSumcheck, StructuredRowEvaluationLinearSumcheck}, product::ProductSumcheckEvaluation, ring_to_field_combiner::RingToFieldCombinerEvaluation, selector_eq::SelectorEqEvaluation
+        combiner::CombinerEvaluation,
+        diff::DiffSumcheckEvaluation,
+        linear::{
+            BasicEvaluationLinearSumcheck, FakeEvaluationLinearSumcheck,
+            StructuredRowEvaluationLinearSumcheck,
+        },
+        product::ProductSumcheckEvaluation,
+        ring_to_field_combiner::RingToFieldCombinerEvaluation,
+        selector_eq::SelectorEqEvaluation,
     },
 };
 
@@ -14,16 +22,22 @@ pub struct VerifierSumcheckContext {
     pub combined_witness_evaluation: Rc<RefCell<FakeEvaluationLinearSumcheck<RingElement>>>,
     pub folded_witness_selector_evaluation: Rc<RefCell<SelectorEqEvaluation>>,
     pub folded_witness_combiner_evaluation: Rc<RefCell<BasicEvaluationLinearSumcheck<RingElement>>>,
-    pub witness_combiner_constant_evaluation: Rc<RefCell<BasicEvaluationLinearSumcheck<RingElement>>>,
+    pub witness_combiner_constant_evaluation:
+        Rc<RefCell<BasicEvaluationLinearSumcheck<RingElement>>>,
     pub folding_challenges_evaluation: Rc<RefCell<BasicEvaluationLinearSumcheck<RingElement>>>,
-    pub basic_commitment_combiner_evaluation: Rc<RefCell<BasicEvaluationLinearSumcheck<RingElement>>>,
-    pub basic_commitment_combiner_constant_evaluation: Rc<RefCell<BasicEvaluationLinearSumcheck<RingElement>>>,
-    pub commitment_key_rows_evaluation: Vec<Rc<RefCell<StructuredRowEvaluationLinearSumcheck<RingElement>>>>,
+    pub basic_commitment_combiner_evaluation:
+        Rc<RefCell<BasicEvaluationLinearSumcheck<RingElement>>>,
+    pub basic_commitment_combiner_constant_evaluation:
+        Rc<RefCell<BasicEvaluationLinearSumcheck<RingElement>>>,
+    pub commitment_key_rows_evaluation:
+        Vec<Rc<RefCell<StructuredRowEvaluationLinearSumcheck<RingElement>>>>,
     pub opening_combiner_evaluation: Rc<RefCell<BasicEvaluationLinearSumcheck<RingElement>>>,
-    pub opening_combiner_constant_evaluation: Rc<RefCell<BasicEvaluationLinearSumcheck<RingElement>>>,
+    pub opening_combiner_constant_evaluation:
+        Rc<RefCell<BasicEvaluationLinearSumcheck<RingElement>>>,
     pub projection_combiner_evaluation: Rc<RefCell<BasicEvaluationLinearSumcheck<RingElement>>>,
-    pub projection_combiner_constant_evaluation: Rc<RefCell<BasicEvaluationLinearSumcheck<RingElement>>>,
-    
+    pub projection_combiner_constant_evaluation:
+        Rc<RefCell<BasicEvaluationLinearSumcheck<RingElement>>>,
+
     // Type-specific contexts
     pub type0evaluations: Vec<Type0VerifierContext>,
     pub type1evaluations: Vec<Type1VerifierContext>,
@@ -31,7 +45,7 @@ pub struct VerifierSumcheckContext {
     pub type3evaluation: Type3VerifierContext,
     pub type4evaluations: [Type4VerifierContext; 3],
     pub type5evaluation: Type5VerifierContext,
-    
+
     // Top-level combiners
     pub combiner_evaluation: Rc<RefCell<CombinerEvaluation<RingElement>>>,
     pub field_combiner_evaluation: Rc<RefCell<RingToFieldCombinerEvaluation>>,
@@ -39,7 +53,10 @@ pub struct VerifierSumcheckContext {
 
 impl VerifierSumcheckContext {
     pub fn evaluate_at_point(&mut self, point: &Vec<RingElement>) -> QuadraticExtension {
-        self.field_combiner_evaluation.borrow_mut().evaluate_at_ring_point(point).clone()
+        self.field_combiner_evaluation
+            .borrow_mut()
+            .evaluate_at_ring_point(point)
+            .clone()
     }
 }
 
@@ -87,7 +104,7 @@ pub struct Type4OutputLayerVerifierContext {
 }
 
 pub struct Type5VerifierContext {
-    pub conjugated_combined_witness_evaluation: Rc<RefCell<FakeEvaluationLinearSumcheck<RingElement>>>,
+    pub conjugated_combined_witness_evaluation:
+        Rc<RefCell<FakeEvaluationLinearSumcheck<RingElement>>>,
     pub output: Rc<RefCell<ProductSumcheckEvaluation>>,
 }
-
