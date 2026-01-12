@@ -1,31 +1,28 @@
+use std::{cell::RefCell, rc::Rc};
+
 use crate::{
     common::ring_arithmetic::{QuadraticExtension, RingElement},
     protocol::sumcheck_utils::{
-        diff::DiffSumcheckEvaluation,
-        linear::{BasicEvaluationLinearSumcheck, FakeEvaluationLinearSumcheck, StructuredRowEvaluationLinearSumcheck},
-        product::ProductSumcheckEvaluation,
-        ring_to_field_combiner::RingToFieldCombinerEvaluation,
-        selector_eq::SelectorEqEvaluation,
+        combiner::CombinerEvaluation, diff::DiffSumcheckEvaluation, linear::{BasicEvaluationLinearSumcheck, FakeEvaluationLinearSumcheck, StructuredRowEvaluationLinearSumcheck}, product::ProductSumcheckEvaluation, ring_to_field_combiner::RingToFieldCombinerEvaluation, selector_eq::SelectorEqEvaluation
     },
 };
 
 /// Verifier's sumcheck context - mirrors SumcheckContext but with evaluation-only types.
-/// The structure is IDENTICAL to the prover's context, but uses evaluation types instead.
-/// All the sumcheck structure is built upfront - only leaf data nodes are loaded later.
+/// Uses Rc<RefCell<>> for all evaluations to allow shared ownership, just like the prover.
 pub struct VerifierSumcheckContext {
     // Base evaluations (leaf nodes that will be loaded with data)
-    pub combined_witness_evaluation: FakeEvaluationLinearSumcheck<RingElement>,
-    pub folded_witness_selector_evaluation: SelectorEqEvaluation,
-    pub folded_witness_combiner_evaluation: BasicEvaluationLinearSumcheck<RingElement>,
-    pub witness_combiner_constant_evaluation: BasicEvaluationLinearSumcheck<RingElement>,
-    pub folding_challenges_evaluation: BasicEvaluationLinearSumcheck<RingElement>,
-    pub basic_commitment_combiner_evaluation: BasicEvaluationLinearSumcheck<RingElement>,
-    pub basic_commitment_combiner_constant_evaluation: BasicEvaluationLinearSumcheck<RingElement>,
-    pub commitment_key_rows_evaluation: Vec<StructuredRowEvaluationLinearSumcheck<RingElement>>,
-    pub opening_combiner_evaluation: BasicEvaluationLinearSumcheck<RingElement>,
-    pub opening_combiner_constant_evaluation: BasicEvaluationLinearSumcheck<RingElement>,
-    pub projection_combiner_evaluation: BasicEvaluationLinearSumcheck<RingElement>,
-    pub projection_combiner_constant_evaluation: BasicEvaluationLinearSumcheck<RingElement>,
+    pub combined_witness_evaluation: Rc<RefCell<FakeEvaluationLinearSumcheck<RingElement>>>,
+    pub folded_witness_selector_evaluation: Rc<RefCell<SelectorEqEvaluation>>,
+    pub folded_witness_combiner_evaluation: Rc<RefCell<BasicEvaluationLinearSumcheck<RingElement>>>,
+    pub witness_combiner_constant_evaluation: Rc<RefCell<BasicEvaluationLinearSumcheck<RingElement>>>,
+    pub folding_challenges_evaluation: Rc<RefCell<BasicEvaluationLinearSumcheck<RingElement>>>,
+    pub basic_commitment_combiner_evaluation: Rc<RefCell<BasicEvaluationLinearSumcheck<RingElement>>>,
+    pub basic_commitment_combiner_constant_evaluation: Rc<RefCell<BasicEvaluationLinearSumcheck<RingElement>>>,
+    pub commitment_key_rows_evaluation: Vec<Rc<RefCell<StructuredRowEvaluationLinearSumcheck<RingElement>>>>,
+    pub opening_combiner_evaluation: Rc<RefCell<BasicEvaluationLinearSumcheck<RingElement>>>,
+    pub opening_combiner_constant_evaluation: Rc<RefCell<BasicEvaluationLinearSumcheck<RingElement>>>,
+    pub projection_combiner_evaluation: Rc<RefCell<BasicEvaluationLinearSumcheck<RingElement>>>,
+    pub projection_combiner_constant_evaluation: Rc<RefCell<BasicEvaluationLinearSumcheck<RingElement>>>,
     
     // Type-specific contexts
     pub type0evaluations: Vec<Type0VerifierContext>,
@@ -35,37 +32,38 @@ pub struct VerifierSumcheckContext {
     pub type4evaluations: [Type4VerifierContext; 3],
     pub type5evaluation: Type5VerifierContext,
     
-    // Top-level combiner
-    pub field_combiner_evaluation: RingToFieldCombinerEvaluation,
+    // Top-level combiners
+    pub combiner_evaluation: Rc<RefCell<CombinerEvaluation<RingElement>>>,
+    pub field_combiner_evaluation: Rc<RefCell<RingToFieldCombinerEvaluation>>,
 }
 
 impl VerifierSumcheckContext {
-    pub fn evaluate_at_point(&mut self, point: &Vec<QuadraticExtension>) -> QuadraticExtension {
-        self.field_combiner_evaluation.evaluate(point).clone()
+    pub fn evaluate_at_point(&mut self, point: &Vec<RingElement>) -> QuadraticExtension {
+        self.field_combiner_evaluation.borrow_mut().evaluate_at_ring_point(point).clone()
     }
 }
 
 pub struct Type0VerifierContext {
-    pub basic_commitment_row_evaluation: SelectorEqEvaluation,
-    pub output: DiffSumcheckEvaluation,
+    pub basic_commitment_row_evaluation: Rc<RefCell<SelectorEqEvaluation>>,
+    pub output: Rc<RefCell<DiffSumcheckEvaluation>>,
 }
 
 pub struct Type1VerifierContext {
-    pub inner_evaluation: BasicEvaluationLinearSumcheck<RingElement>,
-    pub opening_selector_evaluation: SelectorEqEvaluation,
-    pub output: DiffSumcheckEvaluation,
+    pub inner_evaluation: Rc<RefCell<BasicEvaluationLinearSumcheck<RingElement>>>,
+    pub opening_selector_evaluation: Rc<RefCell<SelectorEqEvaluation>>,
+    pub output: Rc<RefCell<DiffSumcheckEvaluation>>,
 }
 
 pub struct Type2VerifierContext {
-    pub outer_evaluation: BasicEvaluationLinearSumcheck<RingElement>,
-    pub output: ProductSumcheckEvaluation,
+    pub outer_evaluation: Rc<RefCell<BasicEvaluationLinearSumcheck<RingElement>>>,
+    pub output: Rc<RefCell<ProductSumcheckEvaluation>>,
 }
 
 pub struct Type3VerifierContext {
-    pub lhs_evaluation: BasicEvaluationLinearSumcheck<RingElement>,
-    pub rhs_evaluation: BasicEvaluationLinearSumcheck<RingElement>,
-    pub projection_selector_evaluation: SelectorEqEvaluation,
-    pub output: DiffSumcheckEvaluation,
+    pub lhs_evaluation: Rc<RefCell<BasicEvaluationLinearSumcheck<RingElement>>>,
+    pub rhs_evaluation: Rc<RefCell<BasicEvaluationLinearSumcheck<RingElement>>>,
+    pub projection_selector_evaluation: Rc<RefCell<SelectorEqEvaluation>>,
+    pub output: Rc<RefCell<DiffSumcheckEvaluation>>,
 }
 
 pub struct Type4VerifierContext {
@@ -74,21 +72,22 @@ pub struct Type4VerifierContext {
 }
 
 pub struct Type4LayerVerifierContext {
-    pub selector_evaluation: SelectorEqEvaluation,
-    pub child_selector_evaluation: SelectorEqEvaluation,
-    pub combiner_evaluation: BasicEvaluationLinearSumcheck<RingElement>,
-    pub combiner_constant_evaluation: BasicEvaluationLinearSumcheck<RingElement>,
-    pub ck_evaluations: Vec<StructuredRowEvaluationLinearSumcheck<RingElement>>,
-    pub outputs: Vec<DiffSumcheckEvaluation>,
+    pub selector_evaluation: Rc<RefCell<SelectorEqEvaluation>>,
+    pub child_selector_evaluation: Rc<RefCell<SelectorEqEvaluation>>,
+    pub combiner_evaluation: Rc<RefCell<BasicEvaluationLinearSumcheck<RingElement>>>,
+    pub combiner_constant_evaluation: Rc<RefCell<BasicEvaluationLinearSumcheck<RingElement>>>,
+    pub ck_evaluations: Vec<Rc<RefCell<StructuredRowEvaluationLinearSumcheck<RingElement>>>>,
+    pub outputs: Vec<Rc<RefCell<DiffSumcheckEvaluation>>>,
 }
 
 pub struct Type4OutputLayerVerifierContext {
-    pub selector_evaluation: SelectorEqEvaluation,
-    pub ck_evaluations: Vec<StructuredRowEvaluationLinearSumcheck<RingElement>>,
-    pub outputs: Vec<ProductSumcheckEvaluation>,
+    pub selector_evaluation: Rc<RefCell<SelectorEqEvaluation>>,
+    pub ck_evaluations: Vec<Rc<RefCell<StructuredRowEvaluationLinearSumcheck<RingElement>>>>,
+    pub outputs: Vec<Rc<RefCell<ProductSumcheckEvaluation>>>,
 }
 
 pub struct Type5VerifierContext {
-    pub conjugated_combined_witness_evaluation: FakeEvaluationLinearSumcheck<RingElement>,
-    pub output: ProductSumcheckEvaluation,
+    pub conjugated_combined_witness_evaluation: Rc<RefCell<FakeEvaluationLinearSumcheck<RingElement>>>,
+    pub output: Rc<RefCell<ProductSumcheckEvaluation>>,
 }
+

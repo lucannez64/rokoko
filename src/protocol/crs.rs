@@ -18,6 +18,12 @@ impl CRS {
         let index = wit_dim.ilog2() as usize - 1;
         &self.cks[index]
     }
+
+    // Returns the structured commitment key for a given witness dimension.
+    pub fn structured_ck_for_wit_dim(&self, wit_dim: usize) -> &Vec<StructuredRow> {
+        let index = wit_dim.ilog2() as usize - 1;
+        &self.structured_cks[index]
+    }
 }
 
 /// Generates a Common Reference String (CRS).

@@ -23,7 +23,12 @@ use crate::{
     },
 };
 
-use super::{builder::init_sumcheck, loader::load_sumcheck_data};
+use super::{
+    builder::init_sumcheck, 
+    loader::load_sumcheck_data,
+};
+
+pub use crate::protocol::proof::Proof;
 /// Executes the complete sumcheck protocol for all constraints in the prover's proof.
 ///
 /// This is the main entry point for running the sumcheck layer of the protocol. It's
@@ -305,6 +310,9 @@ pub fn sumcheck(
         result
     };
 
+    // Collect evaluation points during sumcheck
+    let mut evaluation_points: Vec<RingElement> = vec![];
+
     while num_vars > 0 {
         num_vars -= 1;
 
@@ -329,6 +337,8 @@ pub fn sumcheck(
         field_to_ring_element_into(&mut r, &f);
         r.from_homogenized_field_extensions_to_incomplete_ntt();
 
+        evaluation_points.push(r.clone());
+
         sumcheck_context.partial_evaluate_all(&r);
 
         batched_claim_over_field = poly_over_field.at(&f);
@@ -351,6 +361,8 @@ pub fn sumcheck(
         .borrow()
         .final_evaluations()
         .clone();
+
+        
 
     // TODO: how to avoid cloning here?
     (
