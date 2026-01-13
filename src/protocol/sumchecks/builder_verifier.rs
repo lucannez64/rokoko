@@ -365,12 +365,15 @@ pub fn init_verifier(crs: &CRS, config: &Config) -> VerifierSumcheckContext {
         RingToFieldWrapperEvaluation::new(lhs_flatter_1_times_matrix_evaluation_field.clone()
     )));
 
-    // Split RHS into projection_flatter and fold_challenge
+ 
+    // we have flatter^T V  challenge 
+    // that since V is vectorised, we can write it as
+    // <\vec(v), challenge  \otimes flatter> >
     let rhs_projection_flatter_evaluation = Rc::new(RefCell::new(
         StructuredRowEvaluationLinearSumcheck::new_with_prefixed_sufixed_data(
             projection_height_flat,
             total_vars
-                - config.witness_width.ilog2() as usize
+                - projection_height_flat.ilog2() as usize
                 - config.projection_recursion.decomposition_chunks.ilog2() as usize,
             config.projection_recursion.decomposition_chunks.ilog2() as usize,
         ),
@@ -379,10 +382,10 @@ pub fn init_verifier(crs: &CRS, config: &Config) -> VerifierSumcheckContext {
     let rhs_fold_challenge_evaluation = basic_evaluation_linear(
         config.witness_width,
         total_vars
-            - projection_height_flat.ilog2() as usize
             - config.witness_width.ilog2() as usize
+            - projection_height_flat.ilog2() as usize
             - config.projection_recursion.decomposition_chunks.ilog2() as usize,
-        config.witness_width.ilog2() as usize
+        projection_height_flat.ilog2() as usize
             + config.projection_recursion.decomposition_chunks.ilog2() as usize,
     );
 

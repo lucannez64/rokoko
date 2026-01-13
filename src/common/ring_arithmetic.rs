@@ -28,6 +28,7 @@ thread_local! {
         RefCell::new(rand::thread_rng());
 }
 
+// TODO: handle better the case when ring element is zero.
 impl RingElement {
     pub const fn new(representation: Representation) -> Self {
         Self {

@@ -209,6 +209,7 @@ impl<E: SumcheckElement> BasicEvaluationLinearSumcheck<E> {
         prefix_size: usize,
         suffix_size: usize,
     ) -> Self {
+        println!("Creating BasicEvaluationLinearSumcheck with count: {}, prefix_size: {}, suffix_size: {}", count.ilog2(), prefix_size, suffix_size);
         BasicEvaluationLinearSumcheck {
             data: E::allocate_zero_vec(count),
             variable_count: count.ilog2() as usize + prefix_size + suffix_size,
@@ -325,6 +326,7 @@ pub struct StructuredRowEvaluationLinearSumcheck<E: SumcheckElement = RingElemen
     pub data: Option<StructuredRow<E>>,
     variable_count: usize,
     suffix: usize,
+    prefix: usize,
     result: RingElement,
     scratch: RingElement,
 }
@@ -339,16 +341,19 @@ impl<E: SumcheckElement> StructuredRowEvaluationLinearSumcheck<E> {
         prefix_size: usize,
         suffix_size: usize,
     ) -> Self {
+        println!("Creating StructuredRowEvaluationLinearSumcheck with count: {}, prefix_size: {}, suffix_size: {}", count.ilog2(), prefix_size, suffix_size);
         StructuredRowEvaluationLinearSumcheck {
             data: None,
             variable_count: count.ilog2() as usize + prefix_size + suffix_size,
             suffix: suffix_size,
+            prefix: prefix_size,
             result: RingElement::constant(1, Representation::IncompleteNTT),
             scratch: RingElement::constant(0, Representation::IncompleteNTT),
         }
     }
 
     pub fn load_from(&mut self, src: StructuredRow<E>) {
+        assert!(src.tensor_layers.len() == self.variable_count - self.suffix - self.prefix);
         self.data = Some(src);
     }
 }
@@ -359,7 +364,7 @@ impl EvaluationSumcheckData for StructuredRowEvaluationLinearSumcheck<RingElemen
     fn evaluate(&mut self, point: &Vec<Self::Element>) -> &Self::Element {
         self.result.set_from(&*ONE);
         if point.len() != self.variable_count {
-            panic!("Point has incorrect number of variables");
+            panic!("Point has incorrect number of variables, expected {}, got {}", self.variable_count, point.len());
         }
 
         let data = self.data.as_ref().expect("Data not loaded");

@@ -176,7 +176,7 @@ pub fn prover_round(
 
 pub fn execute() {
     check_prefixing_correctness(&CONFIG);
-    let crs = CRS::gen_crs(CONFIG.witness_height * 2, 2);
+    let crs = CRS::gen_crs(CONFIG.witness_height * 4, CONFIG.basic_commitment_rank);
 
     let mut sumcheck_context = init_sumcheck(&crs, &CONFIG);
     let mut sumcheck_context_verifier = init_verifier(&crs, &CONFIG);
@@ -186,7 +186,7 @@ pub fn execute() {
         width: CONFIG.witness_width,
         data: sample_random_short_vector(
             CONFIG.witness_height * CONFIG.witness_width,
-            10,
+            2,
             Representation::IncompleteNTT,
         ),
     };
