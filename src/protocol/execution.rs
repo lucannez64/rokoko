@@ -8,7 +8,7 @@ use crate::{
         config::MOD_Q,
         decomposition::{compose_from_decomposed, decompose},
         hash::HashWrapper,
-        matrix::{HorizontallyAlignedMatrix, VerticallyAlignedMatrix, new_vec_zero_preallocated},
+        matrix::{new_vec_zero_preallocated, HorizontallyAlignedMatrix, VerticallyAlignedMatrix},
         norms,
         projection_matrix::ProjectionMatrix,
         ring_arithmetic::{Representation, RingElement},
@@ -16,22 +16,23 @@ use crate::{
         structured_row::{self, PreprocessedRow, StructuredRow},
     },
     protocol::{
-        commitment::{RecursiveCommitment, commit_basic, recursive_commit},
-        config::{CONFIG, paste_by_prefix, paste_recursive_commitment},
+        commitment::{commit_basic, recursive_commit, RecursiveCommitment},
+        config::{paste_by_prefix, paste_recursive_commitment, CONFIG},
         crs::{CK, CRS},
         fold::fold,
-        open::{Opening, claim, evaluation_point_to_structured_row, open_at},
+        open::{claim, evaluation_point_to_structured_row, open_at, Opening},
         prefix::check_prefixing_correctness,
         project::project,
         proof::Proof,
-        sumcheck::{self, SumcheckContext, init_sumcheck, sumcheck},
+        sumcheck::{self, init_sumcheck, sumcheck, SumcheckContext},
         sumcheck_utils::{
             common::{EvaluationSumcheckData, HighOrderSumcheckData, SumcheckBaseData},
             linear::{LinearSumcheck, StructuredRowEvaluationLinearSumcheck},
         },
         sumchecks::{
-            builder_verifier::init_verifier, context_verifier::VerifierSumcheckContext,
-            runner::{RoundProof, sumcheck_verifier},
+            builder_verifier::init_verifier,
+            context_verifier::VerifierSumcheckContext,
+            runner::{sumcheck_verifier, RoundProof},
         }, // sumcheck::sumcheck,
     },
 };
@@ -120,20 +121,12 @@ pub fn prover_round(
 
     let (claim_over_witness, claim_over_witness_conjugate, norm_claim, sumcheck_transcript) =
         sumcheck(
-            crs,
             &CONFIG,
             &next_round_data,
             &projection_matrix,
             &fold_challenge,
             &opening,
-            &evaluation_points_inner,
-            &evaluation_points_outer,
-            &claims,
-            rc_commitment.most_inner_commitment(),
-            rc_opening.most_inner_commitment(),
-            rc_projection_image.most_inner_commitment(),
             sumcheck_context,
-            verifier_sumcheck_context,
             &mut hash_wrapper,
         );
 
@@ -144,8 +137,7 @@ pub fn prover_round(
 
     // TODO: recurse
 
-
-   let rp =  RoundProof {
+    let rp = RoundProof {
         polys: &sumcheck_transcript,
         claim_over_witness: &claim_over_witness,
         claim_over_witness_conjugate: &claim_over_witness_conjugate,
@@ -155,9 +147,7 @@ pub fn prover_round(
         rc_projection_inner: rc_projection_image.most_inner_commitment(),
     };
 
-
     let mut hash_wrapper_verifier = HashWrapper::new();
-
 
     sumcheck_verifier(
         &CONFIG,
@@ -166,10 +156,8 @@ pub fn prover_round(
         &evaluation_points_inner,
         &evaluation_points_outer,
         &claims,
-        &mut hash_wrapper_verifier
+        &mut hash_wrapper_verifier,
     );
-
-
 
     // RoundOutput {
     //     folded_witness,

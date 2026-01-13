@@ -3,7 +3,7 @@ use std::vec;
 
 use crate::{
     common::{
-        arithmetic::{ONE, field_to_ring_element, field_to_ring_element_into, inner_product},
+        arithmetic::{field_to_ring_element, field_to_ring_element_into, inner_product, ONE},
         config::HALF_DEGREE,
         hash::HashWrapper,
         matrix::new_vec_zero_preallocated,
@@ -13,18 +13,23 @@ use crate::{
         sumcheck_element::SumcheckElement,
     },
     protocol::{
-        config::Config, crs, open::{Opening, evaluation_point_to_structured_row}, project, sumcheck::{self, SumcheckContext}, sumcheck_utils::{
+        config::Config,
+        crs,
+        open::{evaluation_point_to_structured_row, Opening},
+        project,
+        sumcheck::{self, SumcheckContext},
+        sumcheck_utils::{
             common::{EvaluationSumcheckData, HighOrderSumcheckData, SumcheckBaseData},
             polynomial::Polynomial,
-        }, sumchecks::{
+        },
+        sumchecks::{
             context_verifier::VerifierSumcheckContext,
             loader_verifier::{self, load_verifier_sumcheck_data},
-        }
+        },
     },
 };
 
 use super::{builder::init_sumcheck, loader::load_sumcheck_data};
-
 
 fn batch_claims(
     config: &Config,
@@ -35,7 +40,7 @@ fn batch_claims(
     norm_claim: &RingElement,
     combination: &Vec<RingElement>,
 ) -> RingElement {
-     let mut batched_claim = RingElement::zero(Representation::IncompleteNTT);
+    let mut batched_claim = RingElement::zero(Representation::IncompleteNTT);
     let mut idx = 0;
 
     // Type0: zero claims (difference sumchecks)
@@ -224,20 +229,12 @@ pub use crate::protocol::proof::Proof;
 /// By keeping this sequence explicit, future changes to the folding schedule
 /// can be reasoned about locally without digging through shared state.
 pub fn sumcheck(
-    crs: &crs::CRS,
     config: &Config,
     combined_witness: &Vec<RingElement>,
     projection_matrix: &ProjectionMatrix,
     folding_challenges: &Vec<RingElement>,
     opening: &Opening,
-    evaluation_points_inner: &Vec<StructuredRow>,
-    evaluation_points_outer: &Vec<StructuredRow>,
-    claims: &Vec<RingElement>,
-    rc_commitment_inner: &Vec<RingElement>,
-    rc_opening_inner: &Vec<RingElement>,
-    rc_projection_inner: &Vec<RingElement>,
     sumcheck_context: &mut SumcheckContext,
-    verifier_sumcheck_context: &mut VerifierSumcheckContext,
     hash_wrapper: &mut HashWrapper,
 ) -> (
     RingElement,
@@ -308,8 +305,7 @@ pub fn sumcheck(
 
     let mut num_vars = sumcheck_context.combiner.borrow().variable_count();
 
-   
-     // Collect evaluation points during sumcheck
+    // Collect evaluation points during sumcheck
     let mut evaluation_points: Vec<RingElement> = vec![];
 
     let mut polys: Vec<Polynomial<QuadraticExtension>> = vec![];
@@ -363,10 +359,9 @@ pub fn sumcheck(
     )
 }
 
-
 pub struct RoundProof<'a> {
-    pub polys:  &'a Vec<Polynomial<QuadraticExtension>>,
-    pub claim_over_witness:  &'a RingElement,
+    pub polys: &'a Vec<Polynomial<QuadraticExtension>>,
+    pub claim_over_witness: &'a RingElement,
     pub claim_over_witness_conjugate: &'a RingElement,
     pub norm_claim: &'a RingElement,
     pub rc_commitment_inner: &'a Vec<RingElement>,
@@ -383,8 +378,6 @@ pub fn sumcheck_verifier(
     claims: &Vec<RingElement>,
     hash_wrapper: &mut HashWrapper,
 ) {
-
-
     hash_wrapper.update_with_ring_element_slice(&round_proof.rc_commitment_inner);
     hash_wrapper.update_with_ring_element_slice(&round_proof.rc_opening_inner);
     let mut projection_matrix = ProjectionMatrix::new(config.projection_ratio);
@@ -392,10 +385,10 @@ pub fn sumcheck_verifier(
     projection_matrix.sample(hash_wrapper);
     hash_wrapper.update_with_ring_element_slice(&round_proof.rc_projection_inner);
 
-    let mut folding_challenges = vec![RingElement::zero(Representation::IncompleteNTT); config.witness_width];
+    let mut folding_challenges =
+        vec![RingElement::zero(Representation::IncompleteNTT); config.witness_width];
 
     hash_wrapper.sample_biased_ternary_ring_element_vec_into(&mut folding_challenges);
-
 
     let projection_height_flat = config.witness_height / config.projection_ratio;
     let mut projection_matrix_flatter_base =
@@ -405,11 +398,13 @@ pub fn sumcheck_verifier(
     let projection_matrix_flatter_structured =
         evaluation_point_to_structured_row(&projection_matrix_flatter_base);
 
-
     hash_wrapper.update_with_ring_element(&round_proof.norm_claim);
 
     // Sample random batching coefficients from Fiat-Shamir
-    let num_sumchecks = verifier_sumcheck_context.combiner_evaluation.borrow().sumchecks_count();
+    let num_sumchecks = verifier_sumcheck_context
+        .combiner_evaluation
+        .borrow()
+        .sumchecks_count();
     let mut combination = new_vec_zero_preallocated(num_sumchecks);
     hash_wrapper.sample_ring_element_vec_into(&mut combination);
 
@@ -418,13 +413,10 @@ pub fn sumcheck_verifier(
     combination_to_field.from_incomplete_ntt_to_homogenized_field_extensions();
     let qe = combination_to_field.split_into_quadratic_extensions();
 
-
-
-
     // Compute batched claim matching the combiner's output order:
     // type0 (rank many) -> type1 (nof_openings) -> type2 (nof_openings) ->
     // type3 (1) -> type4[3 recursions, each with layers*rank + output_rank] -> type5 (1)
-    
+
     let mut batched_claim = batch_claims(
         config,
         claims,
@@ -449,7 +441,6 @@ pub fn sumcheck_verifier(
         }
         result
     };
-
 
     let mut num_vars = round_proof.polys.len();
 
@@ -477,7 +468,6 @@ pub fn sumcheck_verifier(
         evaluation_points.push(f);
     }
 
-
     load_verifier_sumcheck_data(
         verifier_sumcheck_context,
         &folding_challenges,
@@ -485,16 +475,17 @@ pub fn sumcheck_verifier(
         &round_proof.claim_over_witness_conjugate,
         evaluation_points_inner,
         evaluation_points_outer,
-        &projection_matrix,      
+        &projection_matrix,
         &projection_matrix_flatter_structured,
         &combination,
         &qe,
     );
 
     assert_eq!(
-        &batched_claim_over_field, verifier_sumcheck_context
-        .field_combiner_evaluation
-        .borrow_mut()
-        .evaluate(&evaluation_points)
+        &batched_claim_over_field,
+        verifier_sumcheck_context
+            .field_combiner_evaluation
+            .borrow_mut()
+            .evaluate(&evaluation_points)
     );
 }
