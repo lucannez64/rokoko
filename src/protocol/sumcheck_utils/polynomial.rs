@@ -8,7 +8,7 @@ use crate::common::{ring_arithmetic::RingElement, sumcheck_element::SumcheckElem
 #[derive(Clone, Debug)]
 pub struct Polynomial<E: SumcheckElement = RingElement> {
     // coefficients[i] corresponds to x^i.
-    pub coefficients: [E; 4],
+    pub coefficients: [E; 3],
     /// How many coefficients are actually active (degree + 1).
     pub num_coefficients: usize,
 }
@@ -16,7 +16,7 @@ pub struct Polynomial<E: SumcheckElement = RingElement> {
 impl<E: SumcheckElement> Polynomial<E> {
     pub fn new(num_coefficients: usize) -> Self {
         assert!(
-            num_coefficients <= 4,
+            num_coefficients <= 3,
             "Only up to cubic polynomials are supported for now"
         );
         Polynomial {
