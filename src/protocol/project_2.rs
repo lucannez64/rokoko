@@ -288,6 +288,7 @@ fn batch_projection_n_times(
     hash_wrapper: &mut HashWrapper,
     n: usize,
 ) -> HorizontallyAlignedMatrix<RingElement> {
+    assert_eq!(n, 2, "Only n=2 is expected");
     let mut result = HorizontallyAlignedMatrix::new_zero_preallocated(n, witness.width);
     for i in 0..n {
         batch_projection_into(
