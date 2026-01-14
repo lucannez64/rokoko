@@ -58,8 +58,10 @@ fn batch_claims(
         idx += 1;
     }
 
-    // Type3: zero claim (difference sumcheck)
-    idx += 1;
+    if rc_projection_inner.is_some() {
+        // Type3: zero claim (difference sumcheck)
+        idx += 1;
+    }
 
     let mut polys: Vec<Polynomial<QuadraticExtension>> = vec![];
 
@@ -70,6 +72,7 @@ fn batch_claims(
         Some(rc_opening_inner),
         rc_projection_inner,
         rcs_projection_1_inner.map(|(rc_ct, _)| rc_ct),
+        rcs_projection_1_inner.map(|(_, rc_bp)| rc_bp),
     ]
     .iter()
     .enumerate()
@@ -83,9 +86,14 @@ fn batch_claims(
             1 => &config.opening_recursion,
             2 => match &config.projection_recursion {
                 Projection::Type0(proj_config) => proj_config,
-                Projection::Type1(proj_config) => &proj_config.recursion_constant_term,
+                // Projection::Type1(proj_config) => &proj_config.recursion_constant_term,
+                _ => unreachable!(),
             },
             3 => match &config.projection_recursion {
+                Projection::Type1(proj_config) => &proj_config.recursion_constant_term,
+                _ => unreachable!(),
+            },
+            4 => match &config.projection_recursion {
                 Projection::Type1(proj_config) => &proj_config.recursion_batched_projection,
                 _ => unreachable!(),
             },
@@ -358,6 +366,7 @@ pub fn sumcheck(
         let mut f = QuadraticExtension::zero();
 
         hash_wrapper.sample_field_element_into(&mut f);
+
         field_to_ring_element_into(&mut r, &f);
         r.from_homogenized_field_extensions_to_incomplete_ntt();
 
@@ -428,6 +437,10 @@ pub fn sumcheck_verifier(
     projection_matrix.sample(hash_wrapper);
     if let Some(rc_projection_inner) = &round_proof.rc_projection_inner {
         hash_wrapper.update_with_ring_element_slice(rc_projection_inner);
+    }
+    if let Some((rcs_projection_1_ct, rcs_projection_1_batched)) = &round_proof.rcs_projection_1_inner {
+        hash_wrapper.update_with_ring_element_slice(rcs_projection_1_ct);
+        hash_wrapper.update_with_ring_element_slice(rcs_projection_1_batched);
     }
 
     let mut folding_challenges =
