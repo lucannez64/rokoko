@@ -1,5 +1,5 @@
 use crate::{
-    common::ring_arithmetic::RingElement,
+    common::{config::NOF_BATCHES, ring_arithmetic::RingElement},
     protocol::sumcheck_utils::{
         combiner::Combiner,
         common::{HighOrderSumcheckData, SumcheckBaseData},
@@ -44,7 +44,7 @@ pub struct SumcheckContext {
     pub type3sumcheck: Option<Type3SumcheckContext>,
     pub type4sumchecks: Vec<Type4SumcheckContext>,
     pub type5sumcheck: Type5SumcheckContext,
-    pub type3_1_a_sumchecks: Option<Vec<Type3_1_A_SumcheckContext>>, // it should never go together with type3sumcheck TODO: refactor for enum I guess
+    pub type3_1_a_sumchecks: Option<[Type3_1_A_SumcheckContext; NOF_BATCHES]>, // it should never go together with type3sumcheck TODO: refactor for enum I guess
     pub combiner: ElephantCell<Combiner<RingElement>>,
     pub field_combiner: ElephantCell<RingToFieldCombiner>,
 }
@@ -136,6 +136,35 @@ impl SumcheckContext {
                 .projection_selector_sumcheck
                 .borrow_mut()
                 .partial_evaluate(r);
+        }
+
+        if let Some(type3_1_a_sumchecks) = &mut self.type3_1_a_sumchecks {
+            for type3_1_a_sc in type3_1_a_sumchecks.iter_mut() {
+                type3_1_a_sc
+                    .lhs_flatter_0_sumcheck
+                    .borrow_mut()
+                    .partial_evaluate(r);
+                type3_1_a_sc
+                    .lhs_flatter_1_times_matrix_sumcheck
+                    .borrow_mut()
+                    .partial_evaluate(r);
+                type3_1_a_sc
+                    .rhs_fold_challenge_sumcheck
+                    .borrow_mut()
+                    .partial_evaluate(r);
+                type3_1_a_sc
+                    .projection_selector_sumcheck
+                    .borrow_mut()
+                    .partial_evaluate(r);
+                type3_1_a_sc
+                    .projection_combiner_constant_sumcheck
+                    .borrow_mut()
+                    .partial_evaluate(r);
+                type3_1_a_sc
+                    .projection_combiner_sumcheck
+                    .borrow_mut()
+                    .partial_evaluate(r);
+            }
         }
 
         for type4_sc in self.type4sumchecks.iter_mut() {
@@ -484,7 +513,7 @@ pub struct Type3_1_A_SumcheckContext {
     pub lhs_flatter_0_sumcheck: ElephantCell<LinearSumcheck<RingElement>>,
     pub lhs_flatter_1_times_matrix_sumcheck: ElephantCell<LinearSumcheck<RingElement>>,
     pub rhs_fold_challenge_sumcheck: ElephantCell<LinearSumcheck<RingElement>>,
-    pub rhs_projection_flatter_sumcheck: ElephantCell<LinearSumcheck<RingElement>>,
+    // pub rhs_projection_flatter_sumcheck: ElephantCell<LinearSumcheck<RingElement>>,
     pub projection_selector_sumcheck: ElephantCell<SelectorEq<RingElement>>,
     pub output: ElephantCell<DiffSumcheck<RingElement>>,
 }

@@ -8,15 +8,87 @@ use crate::{
         },
         config::{DEGREE, MOD_Q, NOF_BATCHES},
         hash::HashWrapper,
-        matrix::{HorizontallyAlignedMatrix, VerticallyAlignedMatrix, new_vec_zero_preallocated},
+        matrix::{new_vec_zero_preallocated, HorizontallyAlignedMatrix, VerticallyAlignedMatrix},
         pool::preallocate_ring_element_vecs,
         projection_matrix::ProjectionMatrix,
         ring_arithmetic::{Representation, RingElement},
         structured_row::StructuredRow,
     },
     hexl::bindings::{add_mod, multiply_mod, sub_mod},
-    protocol::open::evaluation_point_to_structured_row,
+    protocol::{open::evaluation_point_to_structured_row, sumchecks::helpers::tensor_product},
 };
+
+/// Computes J_batched = c'_1^T * J_embedded
+///
+/// J_embedded applies dual embedding: each coefficient j ∈ {-1,0,1} becomes a polynomial
+/// where the constant term is j and non-constant terms are -j (to maintain inner product).
+///
+/// # Arguments
+/// * `projection_matrix` - The projection matrix
+/// * `c_1_values` - Precomputed c'_1 values (length = PROJECTION_HEIGHT)
+///
+/// # Returns
+/// Vector of inner_width_ring ring elements representing the batched projection matrix
+pub fn compute_j_batched(
+    projection_matrix: &ProjectionMatrix,
+    c_1_values: &[u64],
+) -> Vec<RingElement> {
+    use crate::{
+        common::matrix::new_vec_zero_preallocated,
+        hexl::bindings::{add_mod, sub_mod},
+    };
+
+    let inner_width_ring =
+        projection_matrix.projection_ratio * (projection_matrix.projection_height / DEGREE);
+    let mut j_batched = new_vec_zero_preallocated(inner_width_ring);
+
+    for el in j_batched.iter_mut() {
+        el.representation = Representation::Coefficients;
+    }
+
+    // Iterate over each ring element in J_batched
+    for i in 0..inner_width_ring {
+        // For each coefficient position in the ring element
+        for j in 0..DEGREE {
+            let col_index = i * DEGREE + j; // Flatten to coefficient space
+                                            // Accumulate weighted sum over PROJECTION_HEIGHT rows using c'_1
+            for k in 0..projection_matrix.projection_height {
+                let coeff = c_1_values[k];
+                unsafe {
+                    let (is_positive, is_non_zero) = &projection_matrix[(k, col_index)];
+                    if !*is_non_zero {
+                        continue;
+                    }
+                    // Dual embedding: constant term (j=0) keeps sign, non-constant terms flip sign
+                    // This ensures <embed_dual(a), embed(b)> = a * b for scalars a, b
+                    let deg_idx = if j == 0 { 0 } else { DEGREE - j };
+                    if *is_positive {
+                        if j == 0 {
+                            j_batched[i].v[0] = add_mod(j_batched[i].v[0], coeff, MOD_Q);
+                        } else {
+                            j_batched[i].v[deg_idx] =
+                                sub_mod(j_batched[i].v[deg_idx], coeff, MOD_Q);
+                        }
+                    } else {
+                        if j == 0 {
+                            j_batched[i].v[0] = sub_mod(j_batched[i].v[0], coeff, MOD_Q);
+                        } else {
+                            j_batched[i].v[deg_idx] =
+                                add_mod(j_batched[i].v[deg_idx], coeff, MOD_Q);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Convert j_batched to NTT for efficient multiplication
+    for bp in j_batched.iter_mut() {
+        bp.to_representation(Representation::IncompleteNTT);
+    }
+
+    j_batched
+}
 
 // Compute the coefficient-wise projection: V = (I_d ⊗ J) * coeff(W)
 //
@@ -164,12 +236,19 @@ pub fn project_coefficients(
 // Each c'_i is structured as a tensor product: c'_i = ⊗ (1 - l_j, l_j)
 // This allows us to sample only log(|c'_i|) random values (the layers l_j)
 // and compute any c'_i[k] on-the-fly using the binary representation of k.
+
+pub struct BatchedProjectionChallenges {
+    pub c_0_values: Vec<u64>,
+    pub c_1_values: Vec<u64>,
+    pub j_batched: Vec<RingElement>, // this is technically not needed, but since it's computed anyway, we return it for reuse
+}
+
 fn batch_projection_into(
     result: &mut [RingElement],
     witness: &VerticallyAlignedMatrix<RingElement>,
     projection_matrix: &ProjectionMatrix,
     hash_wrapper: &mut HashWrapper,
-) -> (Vec<u64>, Vec<u64>, Vec<RingElement>) {
+) -> BatchedProjectionChallenges {
     // Sample structured challenge layers
     // c'_0 is over d (number of blocks in image_ct when viewed coefficient-wise)
     // c'_1 is over n_rp (projection height coefficients)
@@ -185,10 +264,10 @@ fn batch_projection_into(
     //     .map(|_| hash_wrapper.sample_u64_mod_q())
     //     .collect();
     // TODO: fix randomness consumption
-    let c_0_layers: Vec<u64> = (0..d.ilog2()).map(|_| 1u64).collect();
+    let c_0_layers: Vec<u64> = (0..d.ilog2()).map(|_| 2u64).collect();
 
     let c_1_layers: Vec<u64> = (0..projection_matrix.projection_height.ilog2())
-        .map(|_| 1u64)
+        .map(|_| 2u64)
         .collect();
 
     // Precompute all structured row values for c_0 and c_1
@@ -198,58 +277,9 @@ fn batch_projection_into(
     let c_1_values = precompute_structured_values_fast(&c_1_layers);
 
     // ===== Step 1: Batch projection matrix with dual embedding =====
-    // Compute J_batched = c'_1^T * J_embedded
-    // J_embedded applies dual embedding: each coefficient j ∈ {-1,0,1} becomes a polynomial
-    // where the constant term is j and non-constant terms are -j (to maintain inner product)
-    // J_batched will be a vector of inner_width_ring ring elements
+    let j_batched = compute_j_batched(projection_matrix, &c_1_values);
     let inner_width_ring =
         projection_matrix.projection_ratio * (projection_matrix.projection_height / DEGREE);
-    let mut j_batched = new_vec_zero_preallocated(inner_width_ring);
-
-    for el in j_batched.iter_mut() {
-        el.representation = Representation::Coefficients;
-    }
-
-    // Iterate over each ring element in J_batched
-    for i in 0..inner_width_ring {
-        // For each coefficient position in the ring element
-        for j in 0..DEGREE {
-            let col_index = i * DEGREE + j; // Flatten to coefficient space
-                                            // Accumulate weighted sum over PROJECTION_HEIGHT rows using c'_1
-            for k in 0..projection_matrix.projection_height {
-                let coeff = c_1_values[k];
-                unsafe {
-                    let (is_positive, is_non_zero) = &projection_matrix[(k, col_index)];
-                    if !*is_non_zero {
-                        continue;
-                    }
-                    // Dual embedding: constant term (j=0) keeps sign, non-constant terms flip sign
-                    // This ensures <embed_dual(a), embed(b)> = a * b for scalars a, b
-                    let deg_idx = if j == 0 { 0 } else { DEGREE - j };
-                    if *is_positive {
-                        if j == 0 {
-                            j_batched[i].v[0] = add_mod(j_batched[i].v[0], coeff, MOD_Q);
-                        } else {
-                            j_batched[i].v[deg_idx] =
-                                sub_mod(j_batched[i].v[deg_idx], coeff, MOD_Q);
-                        }
-                    } else {
-                        if j == 0 {
-                            j_batched[i].v[0] = sub_mod(j_batched[i].v[0], coeff, MOD_Q);
-                        } else {
-                            j_batched[i].v[deg_idx] =
-                                add_mod(j_batched[i].v[deg_idx], coeff, MOD_Q);
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    // Convert j_batched to NTT for efficient multiplication
-    for bp in j_batched.iter_mut() {
-        bp.to_representation(Representation::IncompleteNTT);
-    }
 
     // ===== Step 2: Apply c'_0 batching and compute final inner product =====
     // Process each column independently (no batching across columns)
@@ -283,7 +313,11 @@ fn batch_projection_into(
 
         result[col] = col_result;
     }
-    (c_0_values, c_1_values, j_batched)
+    BatchedProjectionChallenges {
+        c_0_values,
+        c_1_values,
+        j_batched,
+    }
 }
 
 pub fn batch_projection_n_times(
@@ -291,7 +325,10 @@ pub fn batch_projection_n_times(
     projection_matrix: &ProjectionMatrix,
     hash_wrapper: &mut HashWrapper,
     n: usize,
-) -> (HorizontallyAlignedMatrix<RingElement>, [(Vec<u64>, Vec<u64>, Vec<RingElement>); NOF_BATCHES]) {
+) -> (
+    HorizontallyAlignedMatrix<RingElement>,
+    [BatchedProjectionChallenges; NOF_BATCHES],
+) {
     assert_eq!(n, NOF_BATCHES, "Only n=NOF_BATCHES is expected");
     let mut result = HorizontallyAlignedMatrix::new_zero_preallocated(n, witness.width);
     let challenges = [
@@ -308,6 +345,32 @@ pub fn batch_projection_n_times(
             hash_wrapper,
         ),
     ];
+
+    let expanded_c_0 = challenges[0]
+        .c_0_values
+        .iter()
+        .map(|&x| RingElement::constant(x, Representation::IncompleteNTT))
+        .collect::<Vec<RingElement>>();
+
+    let j_folded_expanded = tensor_product(&expanded_c_0, &challenges[0].j_batched);
+
+    // let ip = inner_product(
+    //     &j_folded_expanded,
+    //     witness.col(0)
+    // );
+
+    let mut ip = RingElement::zero(Representation::IncompleteNTT);
+    for i in 0..j_folded_expanded.len() {
+        let mut temp = RingElement::zero(Representation::IncompleteNTT);
+        temp *= (&witness[(i, 0)], &j_folded_expanded[i]);
+        ip += &temp;
+    }
+
+    assert_eq!(
+        ip,
+        result[(1, 0)],
+        "Tensor product folding should match batched projection"
+    );
     // let mut challenges = Vec::with_capacity(n);
     // for i in 0..n {
     //     challenges.push(batch_projection_into(
@@ -361,10 +424,10 @@ fn test_batch_projection() {
     //     .collect();
 
     // TODO: fix randomness consumption
-    let c_0_layers: Vec<u64> = (0..d.ilog2()).map(|_| 1u64).collect();
+    let c_0_layers: Vec<u64> = (0..d.ilog2()).map(|_| 2u64).collect();
 
     let c_1_layers: Vec<u64> = (0..projection_matrix.projection_height.ilog2())
-        .map(|_| 1u64)
+        .map(|_| 2u64)
         .collect();
 
     // Precompute all structured row values

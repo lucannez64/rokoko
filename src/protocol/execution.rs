@@ -121,11 +121,14 @@ pub fn prover_round(
                 &projection_batched.data,
             );
             println!("  rc_projection_batched: {} ms", t5.elapsed().as_millis());
-            hash_wrapper.update_with_ring_element_slice(
-                &rc_projection_batched.most_inner_commitment(),
-            );
+            hash_wrapper
+                .update_with_ring_element_slice(&rc_projection_batched.most_inner_commitment());
 
-            Some((rc_projection_ct, rc_projection_batched, challenges_batching_projection_1))
+            Some((
+                rc_projection_ct,
+                rc_projection_batched,
+                challenges_batching_projection_1,
+            ))
         }
         _ => None,
     };
@@ -210,7 +213,9 @@ pub fn prover_round(
             &next_round_data,
             &projection_matrix,
             &fold_challenge,
-            &rcs_projection_1.as_ref().map(|(_, _, challenges)| challenges),
+            &rcs_projection_1
+                .as_ref()
+                .map(|(_, _, challenges)| challenges),
             &opening,
             sumcheck_context,
             &mut hash_wrapper,

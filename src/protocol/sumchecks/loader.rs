@@ -1,15 +1,16 @@
 use crate::{
     common::{
         arithmetic::field_to_ring_element_into,
-        config::HALF_DEGREE,
+        config::{HALF_DEGREE, NOF_BATCHES},
         matrix::new_vec_zero_preallocated,
         projection_matrix::ProjectionMatrix,
-        ring_arithmetic::{QuadraticExtension, RingElement},
+        ring_arithmetic::{QuadraticExtension, Representation, RingElement},
         structured_row::{PreprocessedRow, StructuredRow},
     },
     protocol::{
         config::Config,
         open::Opening,
+        project_2::BatchedProjectionChallenges,
         sumchecks::helpers::{projection_flatter_1_times_matrix, split_projection_flatter},
     },
 };
@@ -40,6 +41,7 @@ pub fn load_sumcheck_data(
     combined_witness: &Vec<RingElement>,
     conjugated_combined_witness: &Vec<RingElement>,
     folding_challenges: &Vec<RingElement>,
+    challenges_batching_projection_1: &Option<&[BatchedProjectionChallenges; NOF_BATCHES]>,
     opening: &Opening,
     projection_matrix: &ProjectionMatrix,
     projection_matrix_flatter_structured: &StructuredRow,
@@ -140,6 +142,50 @@ pub fn load_sumcheck_data(
             .rhs_projection_flatter_sumcheck
             .borrow_mut()
             .load_from(&projection_matrix_flatter_preprocessed.preprocessed_row);
+    }
+
+    // Load type3_1_a_sumchecks if present (batched projections)
+    if let Some(type3_1_a_contexts) = &mut sumcheck_context.type3_1_a_sumchecks {
+        if let Some(challenges) = challenges_batching_projection_1 {
+            // Each batch gets its own (c_0_values, c_1_values, j_batched) tuple
+            for (batch_idx, (type3_1_a_ctx, challenges)) in type3_1_a_contexts
+                .iter_mut()
+                .zip(challenges.iter())
+                .enumerate()
+            {
+                // let c_0_values = challenges.c_0_values;
+                // let c_1_values = challenges.c_1_values;
+                // let j_batched = challenges.j_batched;
+                // Lift c_0_values from u64 to RingElement and load into lhs_flatter_0
+                let c_0_ring: Vec<RingElement> = challenges
+                    .c_0_values
+                    .iter()
+                    .map(|&val| RingElement::constant(val, Representation::IncompleteNTT))
+                    .collect();
+
+                type3_1_a_ctx
+                    .lhs_flatter_0_sumcheck
+                    .borrow_mut()
+                    .load_from(&c_0_ring);
+
+                println!(
+                    "len, c_0_values: {}, len j_batched: {}",
+                    c_0_ring.len(),
+                    challenges.j_batched.len()
+                );
+
+                type3_1_a_ctx
+                    .lhs_flatter_1_times_matrix_sumcheck
+                    .borrow_mut()
+                    .load_from(&challenges.j_batched);
+
+                // RHS: fold_challenge (same for all batches, already loaded in folding_challenges_sumcheck)
+                type3_1_a_ctx
+                    .rhs_fold_challenge_sumcheck
+                    .borrow_mut()
+                    .load_from(folding_challenges);
+            }
+        }
     }
 
     sumcheck_context

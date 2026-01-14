@@ -3,7 +3,7 @@ use std::vec;
 
 use crate::{
     common::{
-        arithmetic::{ONE, field_to_ring_element, field_to_ring_element_into, inner_product},
+        arithmetic::{field_to_ring_element, field_to_ring_element_into, inner_product, ONE},
         config::{HALF_DEGREE, NOF_BATCHES},
         hash::HashWrapper,
         matrix::new_vec_zero_preallocated,
@@ -15,8 +15,9 @@ use crate::{
     protocol::{
         config::{Config, Projection},
         crs,
-        open::{Opening, evaluation_point_to_structured_row},
+        open::{evaluation_point_to_structured_row, Opening},
         project,
+        project_2::BatchedProjectionChallenges,
         sumcheck::{self, SumcheckContext},
         sumcheck_utils::{
             common::{EvaluationSumcheckData, HighOrderSumcheckData, SumcheckBaseData},
@@ -258,7 +259,7 @@ pub fn sumcheck(
     combined_witness: &Vec<RingElement>,
     projection_matrix: &ProjectionMatrix,
     folding_challenges: &Vec<RingElement>,
-    challenges_batching_projection_1: &Option<&[(Vec<u64>, Vec<u64>, Vec<RingElement>); NOF_BATCHES]>,
+    challenges_batching_projection_1: &Option<&[BatchedProjectionChallenges; NOF_BATCHES]>,
     opening: &Opening,
     sumcheck_context: &mut SumcheckContext,
     hash_wrapper: &mut HashWrapper,
@@ -311,6 +312,7 @@ pub fn sumcheck(
         combined_witness,
         &conjugated_combined_witness,
         folding_challenges,
+        challenges_batching_projection_1,
         opening,
         projection_matrix,
         &projection_matrix_flatter_structured,
@@ -348,6 +350,18 @@ pub fn sumcheck(
     let t_loop = std::time::Instant::now();
     let mut time_poly = 0;
     let mut time_eval = 0;
+
+    let mut poly_temp = Polynomial::<RingElement>::new(0);
+    let c = &sumcheck_context.type3_1_a_sumchecks.as_ref().unwrap()[0]
+        .output
+        .borrow()
+        .univariate_polynomial_into(&mut poly_temp);
+    assert_eq!(
+        &poly_temp.at_one() + &poly_temp.at_zero(),
+        RingElement::zero(Representation::IncompleteNTT),
+        "Type3_1_A initial claim failed"
+    );
+
     while num_vars > 0 {
         num_vars -= 1;
 
@@ -438,7 +452,9 @@ pub fn sumcheck_verifier(
     if let Some(rc_projection_inner) = &round_proof.rc_projection_inner {
         hash_wrapper.update_with_ring_element_slice(rc_projection_inner);
     }
-    if let Some((rcs_projection_1_ct, rcs_projection_1_batched)) = &round_proof.rcs_projection_1_inner {
+    if let Some((rcs_projection_1_ct, rcs_projection_1_batched)) =
+        &round_proof.rcs_projection_1_inner
+    {
         hash_wrapper.update_with_ring_element_slice(rcs_projection_1_ct);
         hash_wrapper.update_with_ring_element_slice(rcs_projection_1_batched);
     }
