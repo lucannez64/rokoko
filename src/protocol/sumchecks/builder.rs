@@ -562,22 +562,17 @@ pub fn init_sumcheck(crs: &crs::CRS, config: &Config) -> SumcheckContext {
     // 3. Projection recursion: verifies the projection images are correctly committed
     // Each tree has its own depth, rank, and decomposition parameters defined in config.
 
-    // Convert concrete ElephantCell<LinearSumcheck> to trait object ElephantCell<dyn HighOrderSumcheckData>
-    // CoerceUnsized handles this automatically
-    let combined_witness_trait_obj: ElephantCell<dyn HighOrderSumcheckData<Element = RingElement>> =
-        combined_witness_sumcheck.clone();
-
     let mut type4sumchecks = vec![
         build_type4_sumcheck_context(
             crs,
             total_vars,
-            combined_witness_trait_obj.clone(),
+            combined_witness_sumcheck.clone(),
             &config.commitment_recursion,
         ),
         build_type4_sumcheck_context(
             crs,
             total_vars,
-            combined_witness_trait_obj.clone(),
+            combined_witness_sumcheck.clone(),
             &config.opening_recursion,
         ),
     ];
@@ -587,7 +582,7 @@ pub fn init_sumcheck(crs: &crs::CRS, config: &Config) -> SumcheckContext {
             type4sumchecks.push(build_type4_sumcheck_context(
                 crs,
                 total_vars,
-                combined_witness_trait_obj.clone(),
+                combined_witness_sumcheck.clone(),
                 recursion_config,
             ));
         }
@@ -595,13 +590,13 @@ pub fn init_sumcheck(crs: &crs::CRS, config: &Config) -> SumcheckContext {
             type4sumchecks.push(build_type4_sumcheck_context(
                 crs,
                 total_vars,
-                combined_witness_trait_obj.clone(),
+                combined_witness_sumcheck.clone(),
                 &recursion_config.recursion_constant_term,
             ));
             type4sumchecks.push(build_type4_sumcheck_context(
                 crs,
                 total_vars,
-                combined_witness_trait_obj.clone(),
+                combined_witness_sumcheck.clone(),
                 &recursion_config.recursion_batched_projection,
             ));
         }

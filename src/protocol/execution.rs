@@ -103,8 +103,12 @@ pub fn prover_round(
             hash_wrapper.update_with_ring_element_slice(&rc_projection_ct.most_inner_commitment());
 
             let t4 = std::time::Instant::now();
-            let projection_batched =
-                batch_projection_n_times(&witness, &projection_matrix, &mut hash_wrapper, 2);
+            let projection_batched = batch_projection_n_times(
+                &witness,
+                &projection_matrix,
+                &mut hash_wrapper,
+                proj_config.nof_batches,
+            );
             println!(
                 "  batch_projection_n_times: {} ms",
                 t4.elapsed().as_millis()
@@ -258,7 +262,7 @@ pub fn prover_round(
 
 pub fn execute() {
     check_prefixing_correctness(&CONFIG);
-    let crs = CRS::gen_crs(CONFIG.witness_height * 4, CONFIG.basic_commitment_rank);
+    let crs = CRS::gen_crs(CONFIG.composed_witness_length, CONFIG.basic_commitment_rank);
 
     let mut sumcheck_context = init_sumcheck(&crs, &CONFIG);
     let mut sumcheck_context_verifier = init_verifier(&crs, &CONFIG);
