@@ -232,6 +232,12 @@ pub fn prover_round(
         rc_projection_inner: rc_projection_image
             .as_ref()
             .map(|rc| rc.most_inner_commitment()),
+        rcs_projection_1_inner: rcs_projection_1.as_ref().map(|(rc_ct, rc_batched)| {
+            (
+                rc_ct.most_inner_commitment(),
+                rc_batched.most_inner_commitment(),
+            )
+        }),
     };
 
     let elapsed = start.elapsed().as_nanos();

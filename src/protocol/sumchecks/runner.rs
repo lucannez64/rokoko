@@ -37,6 +37,7 @@ fn batch_claims(
     rc_commitment_inner: &Vec<RingElement>,
     rc_opening_inner: &Vec<RingElement>,
     rc_projection_inner: Option<&Vec<RingElement>>,
+    rcs_projection_1_inner: Option<(&Vec<RingElement>, &Vec<RingElement>)>,
     norm_claim: &RingElement,
     combination: &Vec<RingElement>,
 ) -> RingElement {
@@ -68,6 +69,7 @@ fn batch_claims(
         Some(rc_commitment_inner),
         Some(rc_opening_inner),
         rc_projection_inner,
+        rcs_projection_1_inner.map(|(rc_ct, _)| rc_ct),
     ]
     .iter()
     .enumerate()
@@ -405,6 +407,7 @@ pub struct RoundProof<'a> {
     pub rc_commitment_inner: &'a Vec<RingElement>,
     pub rc_opening_inner: &'a Vec<RingElement>,
     pub rc_projection_inner: Option<&'a Vec<RingElement>>,
+    pub rcs_projection_1_inner: Option<(&'a Vec<RingElement>, &'a Vec<RingElement>)>,
 }
 
 pub fn sumcheck_verifier(
@@ -464,6 +467,7 @@ pub fn sumcheck_verifier(
         round_proof.rc_commitment_inner,
         round_proof.rc_opening_inner,
         round_proof.rc_projection_inner,
+        round_proof.rcs_projection_1_inner,
         &round_proof.norm_claim,
         &combination,
     );
