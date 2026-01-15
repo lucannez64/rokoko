@@ -5,7 +5,7 @@ use crate::common::{
     matrix::{VerticallyAlignedMatrix, ZeroNew},
 };
 
-static PROJECTION_BASE_HEIGHT: usize = 128; 
+static PROJECTION_BASE_HEIGHT: usize = 128;
 
 // Static storage for return values to avoid returning references to temporaries
 static FALSE_FALSE: (bool, bool) = (false, false);
@@ -57,16 +57,16 @@ impl ProjectionMatrix {
         let square_col = col_base / PROJECTION_BASE_HEIGHT;
         let inner_row = row % PROJECTION_BASE_HEIGHT;
         let inner_col_base = col_base % PROJECTION_BASE_HEIGHT;
-        
+
         let square = &self.projection_data[(square_row, square_col)];
-        
+
         // Each byte stores 8 consecutive columns for one row
         // byte_index = row * (bytes_per_row) + which_byte_in_row
         let bytes_per_row = PROJECTION_BASE_HEIGHT / 8;
         let byte_index = inner_row * bytes_per_row + inner_col_base / 8;
         let k_pos = square.data_sign[byte_index];
         let k_inc = square.data_value[byte_index];
-        
+
         (k_pos, k_inc)
     }
 
@@ -174,11 +174,13 @@ mod tests {
     fn test_stability_of_sampling() {
         let mut hash_wrapper = HashWrapper::new();
         let mut projection_matrix_1 = ProjectionMatrix::new(4, PROJECTION_BASE_HEIGHT * 4);
-        println!("Matrix 1: height={}, width={}, data.height={}, data.width={}", 
-            projection_matrix_1.projection_height, 
+        println!(
+            "Matrix 1: height={}, width={}, data.height={}, data.width={}",
+            projection_matrix_1.projection_height,
             projection_matrix_1.projection_width,
             projection_matrix_1.projection_data.height,
-            projection_matrix_1.projection_data.width);
+            projection_matrix_1.projection_data.width
+        );
         projection_matrix_1.sample(&mut hash_wrapper);
 
         let mut hash_wrapper_2 = HashWrapper::new();
@@ -191,7 +193,7 @@ mod tests {
                     projection_matrix_1[(row, outer_col)],
                     projection_matrix_2[(row, outer_col)]
                 );
-        }
+            }
         }
     }
 
@@ -210,9 +212,7 @@ mod tests {
         let mut differences_found = 0;
         for col in 0..PROJECTION_BASE_HEIGHT * 4 * 4 {
             for row in 0..PROJECTION_BASE_HEIGHT {
-                if projection_matrix_1[(row, col)]
-                    != projection_matrix_2[(row, col)]
-                {
+                if projection_matrix_1[(row, col)] != projection_matrix_2[(row, col)] {
                     differences_found += 1;
                 }
             }

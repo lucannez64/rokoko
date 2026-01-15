@@ -40,8 +40,8 @@ fn batch_claims(
     claims: &Vec<RingElement>,
     rc_commitment_inner: &Vec<RingElement>,
     rc_opening_inner: &Vec<RingElement>,
-    rc_projection_inner: Option<&Vec<RingElement>>,
-    rcs_projection_1_inner: Option<(&Vec<RingElement>, &Vec<RingElement>)>,
+    rc_projection_inner: &Option<Vec<RingElement>>,
+    rcs_projection_1_inner: &Option<(Vec<RingElement>, Vec<RingElement>)>,
     norm_claim: &RingElement,
     combination: &Vec<RingElement>,
 ) -> RingElement {
@@ -72,16 +72,14 @@ fn batch_claims(
         idx += NOF_BATCHES;
     }
 
-    let mut polys: Vec<Polynomial<QuadraticExtension>> = vec![];
-
     // Type4: Three recursion trees (commitment, opening, projection)
     // Each tree has: (layers with rank each) + (output layer with rank)
     for (recursion_idx, rc_inner) in [
         Some(rc_commitment_inner),
         Some(rc_opening_inner),
-        rc_projection_inner,
-        rcs_projection_1_inner.map(|(rc_ct, _)| rc_ct),
-        rcs_projection_1_inner.map(|(_, rc_bp)| rc_bp),
+        rc_projection_inner.as_ref(),
+        rcs_projection_1_inner.as_ref().map(|(rc_ct, _)| rc_ct),
+        rcs_projection_1_inner.as_ref().map(|(_, rc_bp)| rc_bp),
     ]
     .iter()
     .enumerate()
@@ -435,15 +433,15 @@ pub fn sumcheck(
     )
 }
 
-pub struct RoundProof<'a> {
-    pub polys: &'a Vec<Polynomial<QuadraticExtension>>,
-    pub claim_over_witness: &'a RingElement,
-    pub claim_over_witness_conjugate: &'a RingElement,
-    pub norm_claim: &'a RingElement,
-    pub rc_commitment_inner: &'a Vec<RingElement>,
-    pub rc_opening_inner: &'a Vec<RingElement>,
-    pub rc_projection_inner: Option<&'a Vec<RingElement>>,
-    pub rcs_projection_1_inner: Option<(&'a Vec<RingElement>, &'a Vec<RingElement>)>,
+pub struct RoundProof {
+    pub polys: Vec<Polynomial<QuadraticExtension>>,
+    pub claim_over_witness: RingElement,
+    pub claim_over_witness_conjugate: RingElement,
+    pub norm_claim: RingElement,
+    pub rc_commitment_inner: Vec<RingElement>,
+    pub rc_opening_inner: Vec<RingElement>,
+    pub rc_projection_inner: Option<Vec<RingElement>>,
+    pub rcs_projection_1_inner: Option<(Vec<RingElement>, Vec<RingElement>)>,
 }
 
 pub fn sumcheck_verifier(
@@ -517,10 +515,10 @@ pub fn sumcheck_verifier(
     let mut batched_claim = batch_claims(
         config,
         claims,
-        round_proof.rc_commitment_inner,
-        round_proof.rc_opening_inner,
-        round_proof.rc_projection_inner,
-        round_proof.rcs_projection_1_inner,
+        &round_proof.rc_commitment_inner,
+        &round_proof.rc_opening_inner,
+        &round_proof.rc_projection_inner,
+        &round_proof.rcs_projection_1_inner,
         &round_proof.norm_claim,
         &combination,
     );

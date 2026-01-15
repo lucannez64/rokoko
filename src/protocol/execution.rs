@@ -39,16 +39,39 @@ use crate::{
     },
 };
 
+fn verifier_round(
+    crs: &CRS,
+    round_proof: &RoundProof,
+    evaluation_points_inner: &Vec<StructuredRow>,
+    evaluation_points_outer: &Vec<StructuredRow>,
+    claims: &Vec<RingElement>,
+    sumcheck_context_verifier: &mut VerifierSumcheckContext,
+) {
+    let start = std::time::Instant::now();
+    let mut hash_wrapper_verifier = HashWrapper::new();
+
+    let start = std::time::Instant::now();
+    sumcheck_verifier(
+        &CONFIG,
+        sumcheck_context_verifier,
+        &round_proof,
+        &evaluation_points_inner,
+        &evaluation_points_outer,
+        &claims,
+        &mut hash_wrapper_verifier,
+    );
+    let elapsed = start.elapsed().as_nanos();
+    println!("Verifier: {} ns", elapsed);
+}
+
 pub fn prover_round(
     crs: &CRS,
     rc_commitment: &RecursiveCommitment,
     witness: &VerticallyAlignedMatrix<RingElement>,
     evaluation_points_inner: &Vec<StructuredRow>,
     evaluation_points_outer: &Vec<StructuredRow>,
-    claims: &Vec<RingElement>,
     sumcheck_context: &mut SumcheckContext,
-    verifier_sumcheck_context: &mut VerifierSumcheckContext,
-) {
+) -> RoundProof {
     let mut hash_wrapper = HashWrapper::new();
 
     let start = std::time::Instant::now();
@@ -132,9 +155,6 @@ pub fn prover_round(
         }
         _ => None,
     };
-
-    // TODO implement Type1 projection recursion
-
     let mut fold_challenge = vec![RingElement::zero(Representation::IncompleteNTT); witness.width];
 
     hash_wrapper.sample_biased_ternary_ring_element_vec_into(&mut fold_challenge);
@@ -153,7 +173,6 @@ pub fn prover_round(
     );
     println!("  decompose: {} ms", t5.elapsed().as_millis());
 
-    // TODO: can we avoid those copies?
     paste_by_prefix(
         &mut next_round_data,
         &folded_witness_decomposed,
@@ -227,52 +246,27 @@ pub fn prover_round(
         "norm too large, aborting"
     );
 
-    // TODO: recurse
-
-    // let rc_proj_inner = rc_projection_image.as_ref().map(|rc| rc.most_inner_commitment());
-
     let rp = RoundProof {
-        polys: &sumcheck_transcript,
-        claim_over_witness: &claim_over_witness,
-        claim_over_witness_conjugate: &claim_over_witness_conjugate,
-        norm_claim: &norm_claim,
-        rc_commitment_inner: rc_commitment.most_inner_commitment(),
-        rc_opening_inner: rc_opening.most_inner_commitment(),
+        polys: sumcheck_transcript,
+        claim_over_witness: claim_over_witness,
+        claim_over_witness_conjugate: claim_over_witness_conjugate,
+        norm_claim: norm_claim,
+        rc_commitment_inner: rc_commitment.most_inner_commitment().clone(),
+        rc_opening_inner: rc_opening.most_inner_commitment().clone(),
         rc_projection_inner: rc_projection_image
             .as_ref()
-            .map(|rc| rc.most_inner_commitment()),
+            .map(|rc| rc.most_inner_commitment().clone()),
         rcs_projection_1_inner: rcs_projection_1.as_ref().map(|(rc_ct, rc_batched, _)| {
             (
-                rc_ct.most_inner_commitment(),
-                rc_batched.most_inner_commitment(),
+                rc_ct.most_inner_commitment().clone(),
+                rc_batched.most_inner_commitment().clone(),
             )
         }),
     };
 
     let elapsed = start.elapsed().as_nanos();
     println!("Prover: {} ns", elapsed);
-
-    let mut hash_wrapper_verifier = HashWrapper::new();
-
-    let start = std::time::Instant::now();
-    sumcheck_verifier(
-        &CONFIG,
-        verifier_sumcheck_context,
-        &rp,
-        &evaluation_points_inner,
-        &evaluation_points_outer,
-        &claims,
-        &mut hash_wrapper_verifier,
-    );
-
-    let elapsed = start.elapsed().as_nanos();
-    println!("Verifier: {} ns", elapsed);
-
-    // RoundOutput {
-    //     folded_witness,
-    //     projection_image,
-    //     opening,
-    // }
+    rp
 }
 
 pub fn execute() {
@@ -314,14 +308,21 @@ pub fn execute() {
         &evaluation_points_inner[0],
         &evaluation_points_outer[0],
     )];
-    let round_output = prover_round(
+    let proof = prover_round(
         &crs,
         &rc_commitment,
         &witness,
         &evaluation_points_inner,
         &evaluation_points_outer,
-        &claims,
         &mut sumcheck_context,
+    );
+
+    verifier_round(
+        &crs,
+        &proof,
+        &evaluation_points_inner,
+        &evaluation_points_outer,
+        &claims,
         &mut sumcheck_context_verifier,
     );
 }

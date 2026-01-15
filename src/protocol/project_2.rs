@@ -53,19 +53,19 @@ pub fn compute_j_batched(
     {
         println!("Using AVX-512 for compute_j_batched");
         use std::arch::x86_64::*;
-        
+
         for i in 0..inner_width_ring {
             // For each coefficient position in the ring element
             for k in 0..projection_matrix.projection_height {
                 let coeff = c_1_values[k];
-                
+
                 // Process 8 coefficients at a time using AVX-512
                 for j_ in 0..DEGREE / 8 {
                     let col_index_base = i * DEGREE + j_ * 8;
-                    
+
                     // Get masks for the 8 positions
                     let (k_pos, k_inc) = projection_matrix.get_row_masks_u8(k, col_index_base);
-                    
+
                     // Apply masked signed addition using AVX-512
                     // Goal: for each of 8 positions i:
                     //   if k_inc[i] == 0: leave unchanged (zero in projection matrix)
@@ -73,27 +73,27 @@ pub fn compute_j_batched(
                     //   if k_inc[i] == 1 && k_pos[i] == 0: subtract coeff (negative in projection matrix)
                     unsafe {
                         let base_ptr = j_batched[i].v.as_mut_ptr().add(j_ * 8);
-                        
+
                         // Load current 8 coefficients from j_batched
                         let current = _mm512_loadu_epi64(base_ptr as *const i64);
-                        
+
                         // Broadcast the scalar coefficient to all 8 lanes
                         let coeff_vec = _mm512_set1_epi64(coeff as i64);
-                        
+
                         // Compute masks for add and subtract operations
                         // k_add: positions that are non-zero AND positive (add coeff)
                         // k_sub: positions that are non-zero AND negative (subtract coeff)
                         let k_add = k_inc & k_pos;
                         let k_sub = k_inc & !k_pos;
-                        
+
                         // Masked add: add coeff only at positions where k_add is 1
                         // _mm512_mask_add_epi64(src, mask, a, b) = mask ? a + b : src
                         let result = _mm512_mask_add_epi64(current, k_add, current, coeff_vec);
-                        
+
                         // Masked subtract: subtract coeff only at positions where k_sub is 1
                         // This is more efficient than creating a negated vector first
                         let result = _mm512_mask_sub_epi64(result, k_sub, result, coeff_vec);
-                        
+
                         // Store the result back
                         _mm512_storeu_epi64(base_ptr as *mut i64, result);
                     }
@@ -101,7 +101,7 @@ pub fn compute_j_batched(
             }
         }
     }
-    
+
     #[cfg(not(all(target_arch = "x86_64", target_feature = "avx512f")))]
     {
         println!("Using scalar code for compute_j_batched");
@@ -223,59 +223,67 @@ pub fn project_coefficients(
                 let current_projection_row = inner_row / DEGREE; // Which ring element
                 let current_projection_coeff_index = inner_row % DEGREE; // Which coeff in that element
 
-
                 let target = &mut projection_subimage[current_projection_row].v
                     [current_projection_coeff_index];
                 // Compute the inner product: projection_subimage[inner_row] = J[inner_row, :] · subwitness
                 // J has (projection_ratio * PROJECTION_HEIGHT) columns
-                
+
                 #[cfg(all(target_arch = "x86_64", target_feature = "avx512f"))]
                 {
                     use std::arch::x86_64::*;
-                    
-                    let total_cols = projection_matrix.projection_ratio * projection_matrix.projection_height;
-                    debug_assert_eq!(total_cols % 8, 0, "total_cols must be a multiple of 8 for vectorization");
-                    
+
+                    let total_cols =
+                        projection_matrix.projection_ratio * projection_matrix.projection_height;
+                    debug_assert_eq!(
+                        total_cols % 8,
+                        0,
+                        "total_cols must be a multiple of 8 for vectorization"
+                    );
+
                     unsafe {
                         let mut accumulator = _mm512_setzero_si512();
-                        
+
                         // Process 8 columns at a time
                         for chunk_idx in 0..(total_cols / 8) {
                             let col_base = chunk_idx * 8;
-                            
+
                             // Get masks for these 8 columns
-                            let (k_pos, k_inc) = projection_matrix.get_row_masks_u8(inner_row, col_base);
-                            
+                            let (k_pos, k_inc) =
+                                projection_matrix.get_row_masks_u8(inner_row, col_base);
+
                             // Load 8 coefficients from subwitness
                             // Since col_base is always a multiple of 8 and DEGREE is a multiple of 8,
                             // all 8 coefficients are guaranteed to be in the same ring element
                             let ring_idx = col_base / DEGREE;
                             let coeff_offset = col_base % DEGREE;
-                            let coeff_vec = _mm512_loadu_epi64(subwitness[ring_idx].v.as_ptr().add(coeff_offset) as *const i64);
-                            
+                            let coeff_vec = _mm512_loadu_epi64(
+                                subwitness[ring_idx].v.as_ptr().add(coeff_offset) as *const i64,
+                            );
+
                             // Compute masks for add and subtract
                             let k_add = k_inc & k_pos;
                             let k_sub = k_inc & !k_pos;
-                            
+
                             // Start with positive contributions (where k_add is 1)
                             let result = _mm512_maskz_mov_epi64(k_add, coeff_vec);
-                            
+
                             // Subtract negative contributions (where k_sub is 1)
                             let result = _mm512_mask_sub_epi64(result, k_sub, result, coeff_vec);
-                            
+
                             // Accumulate
                             accumulator = _mm512_add_epi64(accumulator, result);
                         }
-                        
+
                         // Horizontal sum using _mm512_reduce_add_epi64
                         let sum = _mm512_reduce_add_epi64(accumulator);
                         *target = (*target as i64 + sum) as u64;
                     }
                 }
-                
+
                 #[cfg(not(all(target_arch = "x86_64", target_feature = "avx512f")))]
                 {
-                    let total_cols = projection_matrix.projection_ratio * projection_matrix.projection_height;
+                    let total_cols =
+                        projection_matrix.projection_ratio * projection_matrix.projection_height;
                     for i in 0..total_cols {
                         let (is_positive, is_non_zero) = &projection_matrix[(inner_row, i)];
                         if !*is_non_zero {
