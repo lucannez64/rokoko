@@ -1,5 +1,8 @@
 use crate::{
-    common::ring_arithmetic::{QuadraticExtension, RingElement},
+    common::{
+        config::NOF_BATCHES,
+        ring_arithmetic::{QuadraticExtension, RingElement},
+    },
     protocol::sumcheck_utils::{
         combiner::CombinerEvaluation,
         diff::DiffSumcheckEvaluation,
@@ -40,6 +43,7 @@ pub struct VerifierSumcheckContext {
     pub type1evaluations: Vec<Type1VerifierContext>,
     pub type2evaluations: Vec<Type2VerifierContext>,
     pub type3evaluation: Option<Type3VerifierContext>,
+    pub type3_1_a_evaluations: Option<Type3_1AVerifierContextWrapper>,
     pub type4evaluations: Vec<Type4VerifierContext>,
     pub type5evaluation: Type5VerifierContext,
 
@@ -87,6 +91,21 @@ pub struct Type3VerifierContext {
     pub rhs_fold_challenge_evaluation: ElephantCell<BasicEvaluationLinearSumcheck<RingElement>>,
     pub projection_selector_evaluation: ElephantCell<SelectorEqEvaluation>,
     pub output: ElephantCell<DiffSumcheckEvaluation>,
+}
+
+pub struct Type3_1AVerifierContext {
+    pub lhs_flatter_0_evaluation: ElephantCell<StructuredRowEvaluationLinearSumcheck<RingElement>>,
+    pub lhs_flatter_1_times_matrix_evaluation:
+        ElephantCell<BasicEvaluationLinearSumcheck<RingElement>>,
+    pub projection_selector_evaluation: ElephantCell<SelectorEqEvaluation>,
+    pub output: ElephantCell<DiffSumcheckEvaluation>,
+}
+pub struct Type3_1AVerifierContextWrapper {
+    pub sumchecks: [Type3_1AVerifierContext; NOF_BATCHES],
+    pub projection_combiner_constant_evaluation:
+        ElephantCell<BasicEvaluationLinearSumcheck<RingElement>>,
+    pub projection_combiner_evaluation: ElephantCell<BasicEvaluationLinearSumcheck<RingElement>>,
+    pub rhs_fold_challenge_evaluation: ElephantCell<BasicEvaluationLinearSumcheck<RingElement>>,
 }
 
 pub struct Type4VerifierContext {

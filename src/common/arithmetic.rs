@@ -7,7 +7,7 @@ use crate::{
             incomplete_ntt_multiplication, QuadraticExtension, Representation, RingElement,
             SHIFT_FACTORS,
         },
-        structured_row::StructuredRow,
+        structured_row::{PreprocessedRow, StructuredRow},
         sumcheck_element::SumcheckElement,
     },
     hexl::bindings::{multiply_mod, sub_mod},
@@ -108,7 +108,7 @@ pub fn precompute_structured_values_fast(layers: &[u64]) -> Vec<u64> {
     // TODO: can we use preallocated pool here? Does it make sense?
     let mut values = vec![1u64; size];
 
-    for (layer_idx, &layer) in layers.iter().enumerate() {
+    for (layer_idx, &layer) in layers.iter().rev().enumerate() {
         let layer_complement = unsafe { sub_mod(1, layer, MOD_Q) };
         let chunk_size = 1 << (layer_idx + 1);
         let half_chunk = 1 << layer_idx;
@@ -126,6 +126,7 @@ pub fn precompute_structured_values_fast(layers: &[u64]) -> Vec<u64> {
             // Multiply in-place by scalar
             for i in start_0..end_0 {
                 unsafe {
+                    // TODO: use vectorisation
                     values[i] = multiply_mod(values[i], layer_complement, MOD_Q);
                 }
             }
@@ -187,7 +188,7 @@ fn test_precompute_structured_values_properties() {
 
     let manual_compute = |index: usize| -> u64 {
         let mut result = 1u64;
-        for (bit_pos, &layer) in layers.iter().enumerate() {
+        for (bit_pos, &layer) in layers.iter().rev().enumerate() {
             if (index >> bit_pos) & 1 == 1 {
                 unsafe {
                     result = multiply_mod(result, layer, MOD_Q);
@@ -208,6 +209,37 @@ fn test_precompute_structured_values_properties() {
             "Value mismatch at index {} (binary: {:05b})",
             i,
             i
+        );
+    }
+}
+
+#[test]
+fn test_precompute_structured_values_mathces_preprocessed_row() {
+    let layers = vec![2u64, 3u64, 5u64];
+    let layers_ring = layers
+        .iter()
+        .map(|&l| RingElement::constant(l, Representation::IncompleteNTT))
+        .collect::<Vec<RingElement>>();
+
+    let structure_row = StructuredRow {
+        tensor_layers: layers_ring,
+    };
+    let preprocessed_row = PreprocessedRow::from_structured_row(&structure_row);
+
+    let precomputed_values = precompute_structured_values_fast(&layers);
+    let precomputed_values_ring = precomputed_values
+        .iter()
+        .map(|&v| RingElement::constant(v, Representation::IncompleteNTT))
+        .collect::<Vec<RingElement>>();
+
+    assert_eq!(
+        preprocessed_row.preprocessed_row.len(),
+        precomputed_values_ring.len()
+    );
+    for i in 0..preprocessed_row.preprocessed_row.len() {
+        assert_eq!(
+            preprocessed_row.preprocessed_row[i],
+            precomputed_values_ring[i],
         );
     }
 }

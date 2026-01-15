@@ -1,14 +1,16 @@
 use crate::{
     common::{
         arithmetic::field_to_ring_element_into,
-        config::HALF_DEGREE,
+        config::{HALF_DEGREE, NOF_BATCHES},
         matrix::new_vec_zero_preallocated,
         projection_matrix::ProjectionMatrix,
-        ring_arithmetic::{QuadraticExtension, RingElement},
+        ring_arithmetic::{QuadraticExtension, Representation, RingElement},
         structured_row::{PreprocessedRow, StructuredRow},
     },
     protocol::{
         config::Config,
+        open::evaluation_point_to_structured_row,
+        project_2::{BatchedProjectionChallenges, BatchedProjectionChallengesSuccinct},
         sumchecks::helpers::{
             projection_coefficients, projection_flatter_1_times_matrix, split_projection_flatter,
             tensor_product,
@@ -32,6 +34,7 @@ pub fn load_verifier_sumcheck_data(
     evaluation_points_outer: &Vec<StructuredRow>,
     projection_matrix: &ProjectionMatrix,
     projection_matrix_flatter_structured: Option<&StructuredRow>, // Only needed for type0 projection
+    challenges_3_1_a: &Option<[BatchedProjectionChallengesSuccinct; NOF_BATCHES]>,
     combination: &Vec<RingElement>,
     qe: &[QuadraticExtension; HALF_DEGREE],
 ) {
@@ -111,6 +114,35 @@ pub fn load_verifier_sumcheck_data(
             .rhs_fold_challenge_evaluation
             .borrow_mut()
             .load_from(folding_challenges);
+    }
+
+    if let Some(type3_1_a_eval) = &mut verifier_sumcheck_context.type3_1_a_evaluations {
+        // Type3_1_A: projection image consistency for type1.1 projection
+
+        type3_1_a_eval
+            .rhs_fold_challenge_evaluation
+            .borrow_mut()
+            .load_from(folding_challenges);
+
+        for (batch_idx, challenges) in challenges_3_1_a.as_ref().unwrap().iter().enumerate() {
+            type3_1_a_eval.sumchecks[batch_idx]
+                .lhs_flatter_1_times_matrix_evaluation
+                .borrow_mut()
+                .load_from(&challenges.j_batched);
+
+            // TODO make a smarter sumcheck over u64
+            let c_0_ring = evaluation_point_to_structured_row(
+                &challenges
+                    .c_0_layers
+                    .iter()
+                    .map(|e| RingElement::constant(*e, Representation::IncompleteNTT))
+                    .collect::<Vec<_>>(),
+            );
+            type3_1_a_eval.sumchecks[batch_idx]
+                .lhs_flatter_0_evaluation
+                .borrow_mut()
+                .load_from(c_0_ring);
+        }
     }
     // Load combiner challenges
     verifier_sumcheck_context

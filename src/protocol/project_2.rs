@@ -6,7 +6,7 @@ use crate::{
             inner_product, inner_product_into, precompute_structured_values,
             precompute_structured_values_fast,
         },
-        config::{DEGREE, MOD_Q, NOF_BATCHES},
+        config::{self, DEGREE, MOD_Q, NOF_BATCHES},
         hash::HashWrapper,
         matrix::{new_vec_zero_preallocated, HorizontallyAlignedMatrix, VerticallyAlignedMatrix},
         pool::preallocate_ring_element_vecs,
@@ -15,7 +15,10 @@ use crate::{
         structured_row::StructuredRow,
     },
     hexl::bindings::{add_mod, multiply_mod, sub_mod},
-    protocol::{open::evaluation_point_to_structured_row, sumchecks::helpers::tensor_product},
+    protocol::{
+        config::Config, open::evaluation_point_to_structured_row,
+        sumchecks::helpers::tensor_product,
+    },
 };
 
 /// Computes J_batched = c'_1^T * J_embedded
@@ -189,6 +192,7 @@ pub fn project_coefficients(
                     if *is_positive {
                         unsafe {
                             // TODO: set it first to u64::MAX / 2 and perform addition/sub without mod. Make mod at the end once
+                            // TODO: use vectorisation
                             projection_subimage[current_projection_row].v
                                 [current_projection_coeff_index] = add_mod(
                                 projection_subimage[current_projection_row].v
@@ -240,7 +244,43 @@ pub fn project_coefficients(
 pub struct BatchedProjectionChallenges {
     pub c_0_values: Vec<u64>,
     pub c_1_values: Vec<u64>,
+    pub c_2_values: Vec<u64>, // for columns, not used here but for consistency
     pub j_batched: Vec<RingElement>, // this is technically not needed, but since it's computed anyway, we return it for reuse
+}
+
+pub struct BatchedProjectionChallengesSuccinct {
+    pub c_0_layers: Vec<u64>,
+    pub c_1_layers: Vec<u64>,
+    pub c_2_layers: Vec<u64>, // for columns, not used here but for consistency
+    pub j_batched: Vec<RingElement>, // this is technically not needed, but since it's computed anyway, we return it for reuse
+}
+
+pub fn sample_layers(
+    projection_matrix: &ProjectionMatrix,
+    witness_width: usize,
+    witness_height: usize,
+    hash_wrapper: &mut HashWrapper,
+) -> (Vec<u64>, Vec<u64>, Vec<u64>) {
+    // Sample structured challenge layers
+    let d = (witness_height / projection_matrix.projection_ratio) * DEGREE
+        / projection_matrix.projection_height;
+
+    let c_0_layers: Vec<u64> = (0..d.ilog2())
+        // .map(|_| hash_wrapper.sample_u64_mod_q())
+        .map(|_| 2u64)
+        .collect();
+
+    let c_1_layers: Vec<u64> = (0..projection_matrix.projection_height.ilog2())
+        // .map(|_| hash_wrapper.sample_u64_mod_q())
+        .map(|_| 2u64)
+        .collect();
+
+    let c_2_layers: Vec<u64> = (0..witness_width.ilog2())
+        // .map(|_| hash_wrapper.sample_u64_mod_q())
+        .map(|_| 2u64)
+        .collect();
+
+    (c_0_layers, c_1_layers, c_2_layers)
 }
 
 fn batch_projection_into(
@@ -264,17 +304,18 @@ fn batch_projection_into(
     //     .map(|_| hash_wrapper.sample_u64_mod_q())
     //     .collect();
     // TODO: fix randomness consumption
-    let c_0_layers: Vec<u64> = (0..d.ilog2()).map(|_| 2u64).collect();
-
-    let c_1_layers: Vec<u64> = (0..projection_matrix.projection_height.ilog2())
-        .map(|_| 2u64)
-        .collect();
-
+    let (c_0_layers, c_1_layers, c_2_layers) = sample_layers(
+        projection_matrix,
+        witness.width,
+        witness.height,
+        hash_wrapper,
+    );
     // Precompute all structured row values for c_0 and c_1
     // For k layers, we compute all 2^k values in O(2^k) time
 
     let c_0_values = precompute_structured_values_fast(&c_0_layers);
     let c_1_values = precompute_structured_values_fast(&c_1_layers);
+    let c_2_values = precompute_structured_values_fast(&c_2_layers);
 
     // ===== Step 1: Batch projection matrix with dual embedding =====
     let j_batched = compute_j_batched(projection_matrix, &c_1_values);
@@ -316,6 +357,7 @@ fn batch_projection_into(
     BatchedProjectionChallenges {
         c_0_values,
         c_1_values,
+        c_2_values,
         j_batched,
     }
 }
@@ -381,6 +423,41 @@ pub fn batch_projection_n_times(
     //     ));
     // }
     (result, challenges)
+}
+
+pub fn verifier_sample_projection_challenges(
+    projection_matrix: &ProjectionMatrix,
+    config: &Config,
+    hash_wrapper: &mut HashWrapper,
+) -> BatchedProjectionChallengesSuccinct {
+    // Sample structured challenge layers
+    let d = (1 << (config.witness_width / projection_matrix.projection_ratio).ilog2() as u32)
+        * DEGREE
+        / projection_matrix.projection_height;
+
+    let (c_0_layers, c_1_layers, c_2_layers) = sample_layers(
+        projection_matrix,
+        config.witness_width,
+        config.witness_height,
+        hash_wrapper,
+    );
+
+    let c_1_values = precompute_structured_values_fast(&c_1_layers)
+        .iter()
+        .map(|&x| RingElement::constant(x, Representation::IncompleteNTT))
+        .collect::<Vec<RingElement>>();
+
+    let j_batched = compute_j_batched(
+        projection_matrix,
+        &c_1_values.iter().map(|el| el.v[0]).collect::<Vec<u64>>(),
+    );
+
+    BatchedProjectionChallengesSuccinct {
+        c_0_layers,
+        c_1_layers,
+        c_2_layers,
+        j_batched,
+    }
 }
 
 #[test]

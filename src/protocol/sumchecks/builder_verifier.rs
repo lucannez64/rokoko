@@ -1,5 +1,6 @@
 use crate::{
     common::{
+        config::{DEGREE, NOF_BATCHES},
         decomposition::get_decomposed_offset_scaled,
         ring_arithmetic::{QuadraticExtension, Representation, RingElement},
     },
@@ -22,8 +23,9 @@ use crate::{
         },
         sumchecks::context_verifier::{
             Type0VerifierContext, Type1VerifierContext, Type2VerifierContext, Type3VerifierContext,
-            Type4LayerVerifierContext, Type4OutputLayerVerifierContext, Type4VerifierContext,
-            Type5VerifierContext, VerifierSumcheckContext,
+            Type3_1AVerifierContext, Type3_1AVerifierContextWrapper, Type4LayerVerifierContext,
+            Type4OutputLayerVerifierContext, Type4VerifierContext, Type5VerifierContext,
+            VerifierSumcheckContext,
         },
     },
 };
@@ -557,6 +559,114 @@ pub fn init_verifier(crs: &CRS, config: &Config) -> VerifierSumcheckContext {
         }
     };
 
+    let type3_1_a_evaluations = match &config.projection_recursion {
+        Projection::Type1(proj_config) => {
+            let projection_combiner_evaluation = load_combiner_evaluation_data(
+                proj_config.recursion_constant_term.decomposition_base_log as u64,
+                proj_config.recursion_constant_term.decomposition_chunks,
+                total_vars,
+            );
+            let projection_combiner_constant_evaluation = load_combiner_constant_evaluation(
+                proj_config.recursion_constant_term.decomposition_base_log as u64,
+                proj_config.recursion_constant_term.decomposition_chunks,
+                total_vars,
+            );
+            let rhs_fold_challenge_evaluation = basic_evaluation_linear(
+                config.witness_width,
+                total_vars
+                    - config.witness_width.ilog2() as usize
+                    - proj_config
+                        .recursion_batched_projection
+                        .decomposition_chunks
+                        .ilog2() as usize,
+                proj_config
+                    .recursion_batched_projection
+                    .decomposition_chunks
+                    .ilog2() as usize,
+            );
+            let contexts: [Type3_1AVerifierContext; NOF_BATCHES] = std::array::from_fn(|i| {
+                // Split coefficients into block indices (elder vars) and within-block (LS vars)
+                let height = config.projection_height;
+                let inner_width = config.projection_ratio * height / DEGREE;
+                let blocks = config.witness_height / inner_width;
+                let lhs_flatter_0_evaluation = ElephantCell::new(
+                    StructuredRowEvaluationLinearSumcheck::new_with_prefixed_sufixed_data(
+                        blocks,
+                        total_vars
+                            - blocks.ilog2() as usize
+                            - inner_width.ilog2() as usize
+                            - config.witness_decomposition_chunks.ilog2() as usize,
+                        inner_width.ilog2() as usize
+                            + config.witness_decomposition_chunks.ilog2() as usize,
+                    ),
+                );
+                let lhs_flatter_1_times_matrix_evaluation = basic_evaluation_linear(
+                    inner_width,
+                    total_vars
+                        - inner_width.ilog2() as usize
+                        - config.witness_decomposition_chunks.ilog2() as usize,
+                    config.witness_decomposition_chunks.ilog2() as usize,
+                );
+                let projection_selector_evaluation = selector_evaluation_from_prefix(
+                    &Prefix {
+                        prefix: proj_config.recursion_batched_projection.prefix.prefix
+                            * NOF_BATCHES
+                            + i,
+                        length: proj_config.recursion_batched_projection.prefix.length
+                            + NOF_BATCHES.ilog2() as usize,
+                    },
+                    total_vars,
+                );
+
+                let projection_coeff_product = ElephantCell::new(ProductSumcheckEvaluation::new(
+                    lhs_flatter_0_evaluation.clone(),
+                    lhs_flatter_1_times_matrix_evaluation.clone(),
+                ));
+
+                let recomposed_projection = ElephantCell::new(DiffSumcheckEvaluation::new(
+                    ElephantCell::new(ProductSumcheckEvaluation::new(
+                        combined_witness_evaluation.clone(),
+                        projection_combiner_evaluation.clone(),
+                    )),
+                    projection_combiner_constant_evaluation.clone(),
+                ));
+
+                let lhs = ElephantCell::new(ProductSumcheckEvaluation::new(
+                    folded_witness_selector_evaluation.clone(),
+                    ElephantCell::new(ProductSumcheckEvaluation::new(
+                        recomposed_folded_witness.clone(),
+                        projection_coeff_product.clone(),
+                    )),
+                ));
+
+                let rhs = ElephantCell::new(ProductSumcheckEvaluation::new(
+                    projection_selector_evaluation.clone(),
+                    ElephantCell::new(ProductSumcheckEvaluation::new(
+                        recomposed_projection.clone(),
+                        rhs_fold_challenge_evaluation.clone(),
+                    )),
+                ));
+
+                let output = ElephantCell::new(DiffSumcheckEvaluation::new(lhs, rhs));
+
+                Type3_1AVerifierContext {
+                    lhs_flatter_0_evaluation: lhs_flatter_0_evaluation.clone(),
+                    lhs_flatter_1_times_matrix_evaluation: lhs_flatter_1_times_matrix_evaluation
+                        .clone(),
+                    projection_selector_evaluation: projection_selector_evaluation.clone(),
+                    output,
+                }
+            });
+            Some(Type3_1AVerifierContextWrapper {
+                sumchecks: contexts,
+                projection_combiner_constant_evaluation,
+                projection_combiner_evaluation,
+                rhs_fold_challenge_evaluation,
+            })
+        }
+        _ => None,
+    };
+
     let mut type4evaluations = vec![
         build_type4_verifier_context(
             crs,
@@ -652,6 +762,7 @@ pub fn init_verifier(crs: &CRS, config: &Config) -> VerifierSumcheckContext {
         type1evaluations,
         type2evaluations,
         type3evaluation,
+        type3_1_a_evaluations,
         type4evaluations,
         type5evaluation,
         combiner_evaluation,

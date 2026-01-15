@@ -3,7 +3,7 @@ use std::rc::Rc;
 
 use crate::common::config::DEGREE;
 use crate::protocol::config::Projection;
-use crate::protocol::sumchecks::context::Type3_1_A_SumcheckContextWrapper;
+use crate::protocol::sumchecks::context::Type3_1ASumcheckContextWrapper;
 use crate::{
     common::{config::NOF_BATCHES, ring_arithmetic::RingElement},
     protocol::{
@@ -22,7 +22,7 @@ use crate::{
 use super::{
     context::{
         SumcheckContext, Type0SumcheckContext, Type1SumcheckContext, Type2SumcheckContext,
-        Type3SumcheckContext, Type3_1_A_SumcheckContext, Type4LayerSumcheckContext,
+        Type3SumcheckContext, Type3_1ASumcheckContext, Type4LayerSumcheckContext,
         Type4OutputLayerSumcheckContext, Type4SumcheckContext,
     },
     helpers::{ck_sumcheck, composition_sumcheck, sumcheck_from_prefix},
@@ -567,7 +567,7 @@ pub fn init_sumcheck(crs: &crs::CRS, config: &Config) -> SumcheckContext {
                 )
             };
 
-            // RHS: fold_challenge (same for all batches) // TODO move outside the loop
+            // RHS: fold_challenge (same for all batches)
             let rhs_fold_challenge_sumcheck = ElephantCell::new(
                 LinearSumcheck::<RingElement>::new_with_prefixed_sufixed_data(
                     config.witness_width,
@@ -585,7 +585,7 @@ pub fn init_sumcheck(crs: &crs::CRS, config: &Config) -> SumcheckContext {
             );
             // Build one context per batch
             // Each batch has its own projection result stored at a different prefix location
-            let contexts: [Type3_1_A_SumcheckContext; NOF_BATCHES] = std::array::from_fn(|i| {
+            let contexts: [Type3_1ASumcheckContext; NOF_BATCHES] = std::array::from_fn(|i| {
                 // Create selectors and combiners similar to type3
                 // Note: We'll load the actual challenge data (c_0, c_1, j_batched) in the loader
 
@@ -621,19 +621,6 @@ pub fn init_sumcheck(crs: &crs::CRS, config: &Config) -> SumcheckContext {
                         config.witness_decomposition_chunks.ilog2() as usize,
                     ),
                 );
-
-                // RHS: projection_flatter for batch i
-                // Each batch has its own projection stored at a different prefix
-                // The prefix for batch i is: base_prefix * NOF_BATCHES + i
-                // let rhs_projection_flatter_sumcheck = ElephantCell::new(
-                //     LinearSumcheck::<RingElement>::new_with_prefixed_sufixed_data(
-                //         projection_height_flat,
-                //         total_vars
-                //             - projection_height_flat.ilog2() as usize
-                //             - projection_recursion.recursion_batched_projection.decomposition_chunks.ilog2() as usize,
-                //         projection_recursion.recursion_batched_projection.decomposition_chunks.ilog2() as usize,
-                //     ),
-                // );
 
                 // Selector for batch i's projection
                 // Each batch occupies a distinct prefix within the recursion_batched_projection tree
@@ -691,19 +678,15 @@ pub fn init_sumcheck(crs: &crs::CRS, config: &Config) -> SumcheckContext {
 
                 let output = ElephantCell::new(DiffSumcheck::new(lhs, rhs));
 
-                Type3_1_A_SumcheckContext {
-                    // projection_combiner_sumcheck,
-                    // projection_combiner_constant_sumcheck,
+                Type3_1ASumcheckContext {
                     lhs_flatter_0_sumcheck,
                     lhs_flatter_1_times_matrix_sumcheck,
-                    // rhs_fold_challenge_sumcheck,
-                    // rhs_projection_flatter_sumcheck,
                     projection_selector_sumcheck,
                     output,
                 }
             });
 
-            Some(Type3_1_A_SumcheckContextWrapper {
+            Some(Type3_1ASumcheckContextWrapper {
                 sumchecks: contexts,
                 projection_combiner_constant_sumcheck,
                 projection_combiner_sumcheck,
@@ -809,7 +792,6 @@ pub fn init_sumcheck(crs: &crs::CRS, config: &Config) -> SumcheckContext {
 
     all_outputs.push(type5sumcheck.output.clone());
 
-    // TODO: do something smart here
     let combiner = ElephantCell::new(Combiner::new(all_outputs));
 
     let field_combiner = ElephantCell::new(RingToFieldCombiner::new(combiner.clone()));

@@ -402,7 +402,7 @@ pub(crate) fn projection_flatter_1_times_matrix(
                 continue;
             }
             if is_positive {
-                result_field[i] += &weight_field;
+                result_field[i] += &weight_field; // TODO: avoid mod reduction here
             } else {
                 result_field[i] -= &weight_field;
             }

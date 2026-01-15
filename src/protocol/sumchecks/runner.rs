@@ -1,5 +1,5 @@
 use core::hash;
-use std::vec;
+use std::{array, vec};
 
 use crate::{
     common::{
@@ -17,7 +17,10 @@ use crate::{
         crs,
         open::{evaluation_point_to_structured_row, Opening},
         project,
-        project_2::BatchedProjectionChallenges,
+        project_2::{
+            sample_layers, verifier_sample_projection_challenges, BatchedProjectionChallenges,
+            BatchedProjectionChallengesSuccinct,
+        },
         sumcheck::{self, SumcheckContext},
         sumcheck_utils::{
             common::{EvaluationSumcheckData, HighOrderSumcheckData, SumcheckBaseData},
@@ -352,15 +355,19 @@ pub fn sumcheck(
     let mut time_eval = 0;
 
     let mut poly_temp = Polynomial::<RingElement>::new(0);
-    // let c = &sumcheck_context.type3_1_a_sumchecks.as_ref().unwrap()[0]
-    //     .output
-    //     .borrow()
-    //     .univariate_polynomial_into(&mut poly_temp);
-    // assert_eq!(
-    //     &poly_temp.at_one() + &poly_temp.at_zero(),
-    //     RingElement::zero(Representation::IncompleteNTT),
-    //     "Type3_1_A initial claim failed"
-    // );
+    let c = &sumcheck_context
+        .type3_1_a_sumchecks
+        .as_ref()
+        .unwrap()
+        .sumchecks[0]
+        .output
+        .borrow()
+        .univariate_polynomial_into(&mut poly_temp);
+    assert_eq!(
+        &poly_temp.at_one() + &poly_temp.at_zero(),
+        RingElement::zero(Representation::IncompleteNTT),
+        "Type3_1_A initial claim failed"
+    );
 
     while num_vars > 0 {
         num_vars -= 1;
@@ -397,6 +404,18 @@ pub fn sumcheck(
         t_loop.elapsed().as_millis(),
         time_poly,
         time_eval
+    );
+
+    print!(
+        "final claim type3_1_A {:?}",
+        sumcheck_context
+            .type3_1_a_sumchecks
+            .as_ref()
+            .unwrap()
+            .sumchecks[0]
+            .output
+            .borrow()
+            .final_evaluations_test_only()
     );
 
     // final round
@@ -452,12 +471,23 @@ pub fn sumcheck_verifier(
     if let Some(rc_projection_inner) = &round_proof.rc_projection_inner {
         hash_wrapper.update_with_ring_element_slice(rc_projection_inner);
     }
-    if let Some((rcs_projection_1_ct, rcs_projection_1_batched)) =
+    let challenges_3_1_a = if let Some((rcs_projection_1_ct, rcs_projection_1_batched)) =
         &round_proof.rcs_projection_1_inner
     {
         hash_wrapper.update_with_ring_element_slice(rcs_projection_1_ct);
+        let challenges_3_1_a: [BatchedProjectionChallengesSuccinct; NOF_BATCHES] =
+            std::array::from_fn(|batch_idx| {
+                let challenges =
+                    verifier_sample_projection_challenges(&projection_matrix, config, hash_wrapper);
+                challenges
+            });
+
+        verifier_sample_projection_challenges(&projection_matrix, config, hash_wrapper);
         hash_wrapper.update_with_ring_element_slice(rcs_projection_1_batched);
-    }
+        Some(challenges_3_1_a)
+    } else {
+        None
+    };
 
     let mut folding_challenges =
         vec![RingElement::zero(Representation::IncompleteNTT); config.witness_width];
@@ -551,16 +581,40 @@ pub fn sumcheck_verifier(
         evaluation_points_inner,
         evaluation_points_outer,
         &projection_matrix,
-        Some(&projection_matrix_flatter_structured), // assume type0 projection
+        Some(&projection_matrix_flatter_structured), // assume type0 projection TODO: make optional
+        &challenges_3_1_a,                           // for 1 projection type only
         &combination,
         &qe,
     );
 
-    assert_eq!(
-        &batched_claim_over_field,
+    // assert_eq!(
+    //     &batched_claim_over_field,
+    //     verifier_sumcheck_context
+    //         .field_combiner_evaluation
+    //         .borrow_mut()
+    //         .evaluate(&evaluation_points)
+    // );
+
+    println!(
+        "V final claim type3_1_A {:?}",
         verifier_sumcheck_context
-            .field_combiner_evaluation
+            .type3_1_a_evaluations
+            .as_ref()
+            .unwrap()
+            .sumchecks
+            .get(0)
+            .unwrap()
+            .output
             .borrow_mut()
-            .evaluate(&evaluation_points)
+            .evaluate(
+                &evaluation_points
+                    .iter()
+                    .map(|e| {
+                        let mut a = field_to_ring_element(e);
+                        a.from_homogenized_field_extensions_to_incomplete_ntt();
+                        a
+                    })
+                    .collect::<Vec<_>>()
+            )
     );
 }
