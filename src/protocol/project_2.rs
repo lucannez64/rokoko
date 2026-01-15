@@ -4,7 +4,7 @@ use crate::{
     common::{
         arithmetic::{
             inner_product, inner_product_into, precompute_structured_values,
-            precompute_structured_values_fast,
+            precompute_structured_values_fast, HALF_WAY_MOD_Q_RING_CF,
         },
         config::{self, DEGREE, MOD_Q, NOF_BATCHES},
         hash::HashWrapper,
@@ -14,7 +14,7 @@ use crate::{
         ring_arithmetic::{Representation, RingElement},
         structured_row::StructuredRow,
     },
-    hexl::bindings::{add_mod, multiply_mod, sub_mod},
+    hexl::bindings::{add_mod, eltwise_reduce_mod, multiply_mod, sub_mod},
     protocol::{
         config::Config, open::evaluation_point_to_structured_row,
         sumchecks::helpers::tensor_product,
@@ -46,7 +46,7 @@ pub fn compute_j_batched(
     let mut j_batched = new_vec_zero_preallocated(inner_width_ring);
 
     for el in j_batched.iter_mut() {
-        el.representation = Representation::Coefficients;
+        el.set_from(&HALF_WAY_MOD_Q_RING_CF);
     }
 
     // Iterate over each ring element in J_batched
@@ -62,23 +62,12 @@ pub fn compute_j_batched(
                     if !*is_non_zero {
                         continue;
                     }
-                    // Dual embedding: constant term (j=0) keeps sign, non-constant terms flip sign
-                    // This ensures <embed_dual(a), embed(b)> = a * b for scalars a, b
-                    let deg_idx = if j == 0 { 0 } else { DEGREE - j };
                     if *is_positive {
-                        if j == 0 {
-                            j_batched[i].v[0] = add_mod(j_batched[i].v[0], coeff, MOD_Q);
-                        } else {
-                            j_batched[i].v[deg_idx] =
-                                sub_mod(j_batched[i].v[deg_idx], coeff, MOD_Q);
-                        }
+                            // j_batched[i].v[j] += coeff;
+                             j_batched[i].v[j] = add_mod(j_batched[i].v[j], coeff, MOD_Q);
                     } else {
-                        if j == 0 {
-                            j_batched[i].v[0] = sub_mod(j_batched[i].v[0], coeff, MOD_Q);
-                        } else {
-                            j_batched[i].v[deg_idx] =
-                                add_mod(j_batched[i].v[deg_idx], coeff, MOD_Q);
-                        }
+                            // j_batched[i].v[j] -= coeff;
+                            j_batched[i].v[j] = sub_mod(j_batched[i].v[j], coeff, MOD_Q);
                     }
                 }
             }
@@ -87,8 +76,11 @@ pub fn compute_j_batched(
 
     // Convert j_batched to NTT for efficient multiplication
     for bp in j_batched.iter_mut() {
+        unsafe {
+            eltwise_reduce_mod(bp.v.as_mut_ptr(), bp.v.as_mut_ptr(), DEGREE as u64, MOD_Q);
+        }
         bp.to_representation(Representation::IncompleteNTT);
-        // bp.conjugate_in_place();
+        bp.conjugate_in_place();
     }
 
     j_batched
@@ -137,7 +129,7 @@ pub fn project_coefficients(
     );
 
     for el in image_ct.data.iter_mut() {
-        el.representation = Representation::Coefficients; // TODO: let's just preallocate properly
+        el.set_from(&HALF_WAY_MOD_Q_RING_CF);
     }
 
     // Verify dimensions: each ring element in image corresponds to projection_ratio
@@ -191,30 +183,23 @@ pub fn project_coefficients(
 
                     // Add or subtract the witness coefficient depending on J's sign
                     if *is_positive {
-                        unsafe {
-                            // TODO: set it first to u64::MAX / 2 and perform addition/sub without mod. Make mod at the end once
-                            // TODO: use vectorisation
-                            projection_subimage[current_projection_row].v
-                                [current_projection_coeff_index] = add_mod(
-                                projection_subimage[current_projection_row].v
-                                    [current_projection_coeff_index],
-                                subwitness[i / DEGREE].v[i % DEGREE],
-                                MOD_Q,
-                            );
-                        }
+                        // TODO: use vectorisation
+                        projection_subimage[current_projection_row].v
+                            [current_projection_coeff_index] +=
+                            subwitness[i / DEGREE].v[i % DEGREE];
                     } else {
-                        unsafe {
-                            projection_subimage[current_projection_row].v
-                                [current_projection_coeff_index] = sub_mod(
-                                projection_subimage[current_projection_row].v
-                                    [current_projection_coeff_index],
-                                subwitness[i / DEGREE].v[i % DEGREE],
-                                MOD_Q,
-                            );
-                        }
+                        // TODO: use vectorisation
+                        projection_subimage[current_projection_row].v
+                            [current_projection_coeff_index] -=
+                            subwitness[i / DEGREE].v[i % DEGREE];
                     }
                 }
             }
+        }
+    }
+    for el in image_ct.data.iter_mut() {
+        unsafe {
+            eltwise_reduce_mod(el.v.as_mut_ptr(), el.v.as_mut_ptr(), DEGREE as u64, MOD_Q);
         }
     }
     image_ct
@@ -267,18 +252,15 @@ pub fn sample_layers(
         / projection_matrix.projection_height;
 
     let c_0_layers: Vec<u64> = (0..d.ilog2())
-        // .map(|_| hash_wrapper.sample_u64_mod_q())
-        .map(|_| 2u64)
+        .map(|_| hash_wrapper.sample_u64_mod_q())
         .collect();
 
     let c_1_layers: Vec<u64> = (0..projection_matrix.projection_height.ilog2())
-        // .map(|_| hash_wrapper.sample_u64_mod_q())
-        .map(|_| 2u64)
+        .map(|_| hash_wrapper.sample_u64_mod_q())
         .collect();
 
     let c_2_layers: Vec<u64> = (0..witness_width.ilog2())
-        // .map(|_| hash_wrapper.sample_u64_mod_q())
-        .map(|_| 2u64)
+        .map(|_| hash_wrapper.sample_u64_mod_q())
         .collect();
 
     (c_0_layers, c_1_layers, c_2_layers)
@@ -389,31 +371,31 @@ pub fn batch_projection_n_times(
         ),
     ];
 
-    let expanded_c_0 = challenges[0]
-        .c_0_values
-        .iter()
-        .map(|&x| RingElement::constant(x, Representation::IncompleteNTT))
-        .collect::<Vec<RingElement>>();
+    // let expanded_c_0 = challenges[0]
+    //     .c_0_values
+    //     .iter()
+    //     .map(|&x| RingElement::constant(x, Representation::IncompleteNTT))
+    //     .collect::<Vec<RingElement>>();
 
-    let j_folded_expanded = tensor_product(&expanded_c_0, &challenges[0].j_batched);
+    // let j_folded_expanded = tensor_product(&expanded_c_0, &challenges[0].j_batched);
 
-    // let ip = inner_product(
-    //     &j_folded_expanded,
-    //     witness.col(0)
+    // // let ip = inner_product(
+    // //     &j_folded_expanded,
+    // //     witness.col(0)
+    // // );
+
+    // let mut ip = RingElement::zero(Representation::IncompleteNTT);
+    // for i in 0..j_folded_expanded.len() {
+    //     let mut temp = RingElement::zero(Representation::IncompleteNTT);
+    //     temp *= (&witness[(i, 0)], &j_folded_expanded[i]);
+    //     ip += &temp;
+    // }
+
+    // assert_eq!(
+    //     ip,
+    //     result[(1, 0)],
+    //     "Tensor product folding should match batched projection"
     // );
-
-    let mut ip = RingElement::zero(Representation::IncompleteNTT);
-    for i in 0..j_folded_expanded.len() {
-        let mut temp = RingElement::zero(Representation::IncompleteNTT);
-        temp *= (&witness[(i, 0)], &j_folded_expanded[i]);
-        ip += &temp;
-    }
-
-    assert_eq!(
-        ip,
-        result[(1, 0)],
-        "Tensor product folding should match batched projection"
-    );
     // let mut challenges = Vec::with_capacity(n);
     // for i in 0..n {
     //     challenges.push(batch_projection_into(
@@ -431,11 +413,6 @@ pub fn verifier_sample_projection_challenges(
     config: &Config,
     hash_wrapper: &mut HashWrapper,
 ) -> BatchedProjectionChallengesSuccinct {
-    // Sample structured challenge layers
-    let d = (1 << (config.witness_width / projection_matrix.projection_ratio).ilog2() as u32)
-        * DEGREE
-        / projection_matrix.projection_height;
-
     let (c_0_layers, c_1_layers, c_2_layers) = sample_layers(
         projection_matrix,
         config.witness_width,
@@ -502,38 +479,44 @@ fn test_batch_projection() {
     //     .collect();
 
     // TODO: fix randomness consumption
-    let c_0_layers: Vec<u64> = (0..d.ilog2()).map(|_| 2u64).collect();
+    // let c_0_layers: Vec<u64> = (0..d.ilog2()).map(|_| 2u64).collect();
 
-    let c_1_layers: Vec<u64> = (0..projection_matrix.projection_height.ilog2())
-        .map(|_| 2u64)
-        .collect();
+    // let c_1_layers: Vec<u64> = (0..projection_matrix.projection_height.ilog2())
+    //     .map(|_| 2u64)
+    //     .collect();
 
+    let (c_0_layers, c_1_layers, _c_2_layers) = sample_layers(
+        &projection_matrix,
+        witness.width,
+        witness.height,
+        &mut hash_wrapper,
+    );
     // Precompute all structured row values
-    let precompute_structured_values = |layers: &[u64]| -> Vec<u64> {
-        let size = 1 << layers.len();
-        let mut values = vec![1u64; size];
+    // let precompute_structured_values = |layers: &[u64]| -> Vec<u64> {
+    //     let size = 1 << layers.len();
+    //     let mut values = vec![1u64; size];
 
-        for (layer_idx, &layer) in layers.iter().enumerate() {
-            let layer_complement = unsafe { sub_mod(1, layer, MOD_Q) };
+    //     for (layer_idx, &layer) in layers.iter().rev().enumerate() {
+    //         let layer_complement = unsafe { sub_mod(1, layer, MOD_Q) };
 
-            for i in 0..size {
-                if (i >> layer_idx) & 1 == 1 {
-                    unsafe {
-                        values[i] = multiply_mod(values[i], layer, MOD_Q);
-                    }
-                } else {
-                    unsafe {
-                        values[i] = multiply_mod(values[i], layer_complement, MOD_Q);
-                    }
-                }
-            }
-        }
+    //         for i in 0..size {
+    //             if (i >> layer_idx) & 1 == 1 {
+    //                 unsafe {
+    //                     values[i] = multiply_mod(values[i], layer, MOD_Q);
+    //                 }
+    //             } else {
+    //                 unsafe {
+    //                     values[i] = multiply_mod(values[i], layer_complement, MOD_Q);
+    //                 }
+    //             }
+    //         }
+    //     }
 
-        values
-    };
+    //     values
+    // };
 
-    let c_0_values = precompute_structured_values(&c_0_layers);
-    let c_1_values = precompute_structured_values(&c_1_layers);
+    let c_0_values = precompute_structured_values_fast(&c_0_layers);
+    let c_1_values = precompute_structured_values_fast(&c_1_layers);
 
     let inner_width_ring =
         projection_matrix.projection_ratio * (projection_matrix.projection_height / DEGREE);

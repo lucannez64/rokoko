@@ -137,18 +137,16 @@ pub static TOY_CONFIG_II: LazyLock<Config> = LazyLock::new(|| {
     AuxConfig {
         witness_height: 1024,
         witness_width: 16,
-        projection_ratio: 4,
-        projection_height: 128, // small for testing
+        projection_ratio: 32,
+        projection_height: 256, // small for testing
         basic_commitment_rank: 2,
         nof_openings: 1,
 
         commitment_recursion: AuxRecursionConfig {
-            // basic_commitment_rank * witness_width * decomposition_chunks = 2 * 16 * 4 = 128
             decomposition_base_log: 15,
             decomposition_chunks: 4,
             rank: 1,
             next: Some(Box::new(AuxRecursionConfig {
-                // rank * decomposition_chunks = 1 * 8 = 8
                 decomposition_base_log: 7,
                 decomposition_chunks: 8,
                 rank: 1,
@@ -156,23 +154,21 @@ pub static TOY_CONFIG_II: LazyLock<Config> = LazyLock::new(|| {
             })),
         },
         opening_recursion: AuxRecursionConfig {
-            // nof_openings * witness_width * decomposition_chunks = 1 * 16 * 4 = 64
             decomposition_base_log: 15,
-            decomposition_chunks: 4, // for now, there's no reason why decomposition_chunks here shall be different from commitment_recursion.decomposition_chunks. I will use that assumption in sumcheck.
+            decomposition_chunks: 4,
             rank: 1,
             next: None,
         },
         projection_recursion: AuxProjection::Type1 {
             nof_batches: 2,
             recursion_constant_term: AuxRecursionConfig {
-                // witness_height * witness_width / projection_ratio * decomposition_chunks =  (512 * 16 / 64) * 2 = 256
                 decomposition_base_log: 15,
                 decomposition_chunks: 4,
                 rank: 1,
                 next: None,
             },
             recursion_batched_projection: AuxRecursionConfig {
-                decomposition_base_log: 15, // witness_width * nof_batches * decomposition_chunks = 16 * 2 * 4 = 128
+                decomposition_base_log: 15,
                 decomposition_chunks: 4,
                 rank: 1,
                 next: None,

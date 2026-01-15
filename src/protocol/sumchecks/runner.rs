@@ -469,13 +469,13 @@ pub fn sumcheck_verifier(
     {
         hash_wrapper.update_with_ring_element_slice(rcs_projection_1_ct);
         let challenges_3_1_a: [BatchedProjectionChallengesSuccinct; NOF_BATCHES] =
-            std::array::from_fn(|batch_idx| {
-                let challenges =
-                    verifier_sample_projection_challenges(&projection_matrix, config, hash_wrapper);
-                challenges
+            std::array::from_fn(|_| {
+                // let challenges =
+                    verifier_sample_projection_challenges(&projection_matrix, config, hash_wrapper)
+                // challenges
             });
 
-        verifier_sample_projection_challenges(&projection_matrix, config, hash_wrapper);
+        // verifier_sample_projection_challenges(&projection_matrix, config, hash_wrapper);
         hash_wrapper.update_with_ring_element_slice(rcs_projection_1_batched);
         Some(challenges_3_1_a)
     } else {

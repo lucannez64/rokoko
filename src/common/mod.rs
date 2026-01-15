@@ -13,7 +13,9 @@ pub mod sampling;
 pub mod structured_row;
 pub mod sumcheck_element;
 use crate::common::{
-    arithmetic::{ONE, ONE_QUAD, TWO, TWO_QUAD, ZERO, ZERO_QUAD},
+    arithmetic::{
+        ADDITION_SUBTRACTION_BUDGET, HALF_WAY_MOD_Q, HALF_WAY_MOD_Q_RING_CF, ONE, ONE_QUAD, TWO, TWO_QUAD, ZERO, ZERO_QUAD
+    },
     ring_arithmetic::*,
 };
 
@@ -30,6 +32,9 @@ pub fn init_common() {
     LazyLock::force(&ZERO_QUAD);
     LazyLock::force(&TWO);
     LazyLock::force(&TWO_QUAD);
+    LazyLock::force(&ADDITION_SUBTRACTION_BUDGET);
+    LazyLock::force(&HALF_WAY_MOD_Q);
+    LazyLock::force(&HALF_WAY_MOD_Q_RING_CF);
 
     unsafe { LazyLock::force_mut(&mut crate::common::ring_arithmetic::temp_buffer) };
 
