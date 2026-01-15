@@ -5,7 +5,7 @@ use crate::common::{
     matrix::{VerticallyAlignedMatrix, ZeroNew},
 };
 
-static PROJECTION_BASE_HEIGHT: usize = 8;
+static PROJECTION_BASE_HEIGHT: usize = 128; 
 
 // Static storage for return values to avoid returning references to temporaries
 static FALSE_FALSE: (bool, bool) = (false, false);
@@ -15,8 +15,9 @@ static TRUE_TRUE: (bool, bool) = (true, true);
 
 #[derive(Clone)]
 pub struct ProjectionSquare {
-    // Each byte encodes 4 entries (2 bits per entry)
-    data: [u8; PROJECTION_BASE_HEIGHT * PROJECTION_BASE_HEIGHT / 4],
+    // Row-wise aligned: each byte stores 8 columns of one row
+    pub data_sign: [u8; PROJECTION_BASE_HEIGHT * PROJECTION_BASE_HEIGHT / 8],
+    pub data_value: [u8; PROJECTION_BASE_HEIGHT * PROJECTION_BASE_HEIGHT / 8],
 }
 pub struct ProjectionMatrix {
     pub projection_height: usize,
@@ -27,6 +28,10 @@ pub struct ProjectionMatrix {
 
 impl ProjectionMatrix {
     pub fn new(projection_ratio: usize, projection_height: usize) -> Self {
+        assert!(
+            projection_height % PROJECTION_BASE_HEIGHT == 0,
+            "projection_height must be multiple of PROJECTION_BASE_HEIGHT"
+        );
         ProjectionMatrix {
             projection_height,
             projection_width: projection_height * projection_ratio,
@@ -35,10 +40,34 @@ impl ProjectionMatrix {
                 projection_height / PROJECTION_BASE_HEIGHT,
                 projection_height * projection_ratio / PROJECTION_BASE_HEIGHT,
                 &ProjectionSquare {
-                    data: [0u8; PROJECTION_BASE_HEIGHT * PROJECTION_BASE_HEIGHT / 4],
+                    data_sign: [0u8; PROJECTION_BASE_HEIGHT * PROJECTION_BASE_HEIGHT / 8],
+                    data_value: [0u8; PROJECTION_BASE_HEIGHT * PROJECTION_BASE_HEIGHT / 8],
                 },
             ),
         }
+    }
+
+    /// Get masks for 8 consecutive columns at a single row
+    /// Returns (k_pos, k_inc) where each bit represents one column
+    /// This directly reads the natural storage format (8 columns per byte)
+    #[inline]
+    pub fn get_row_masks_u8(&self, row: usize, col_base: usize) -> (u8, u8) {
+        debug_assert!(col_base % 8 == 0, "col_base must be aligned to 8");
+        let square_row = row / PROJECTION_BASE_HEIGHT;
+        let square_col = col_base / PROJECTION_BASE_HEIGHT;
+        let inner_row = row % PROJECTION_BASE_HEIGHT;
+        let inner_col_base = col_base % PROJECTION_BASE_HEIGHT;
+        
+        let square = &self.projection_data[(square_row, square_col)];
+        
+        // Each byte stores 8 consecutive columns for one row
+        // byte_index = row * (bytes_per_row) + which_byte_in_row
+        let bytes_per_row = PROJECTION_BASE_HEIGHT / 8;
+        let byte_index = inner_row * bytes_per_row + inner_col_base / 8;
+        let k_pos = square.data_sign[byte_index];
+        let k_inc = square.data_value[byte_index];
+        
+        (k_pos, k_inc)
     }
 
     #[cfg(test)]
@@ -50,27 +79,36 @@ impl ProjectionMatrix {
             projection_height / PROJECTION_BASE_HEIGHT,
             projection_width / PROJECTION_BASE_HEIGHT,
             &ProjectionSquare {
-                data: [0u8; PROJECTION_BASE_HEIGHT * PROJECTION_BASE_HEIGHT / 4],
+                data_sign: [0u8; PROJECTION_BASE_HEIGHT * PROJECTION_BASE_HEIGHT / 8],
+                data_value: [0u8; PROJECTION_BASE_HEIGHT * PROJECTION_BASE_HEIGHT / 8],
             },
         );
         for outer_col in 0..projection_data.width {
             for row in 0..projection_data.height {
                 let mut square = ProjectionSquare {
-                    data: [0u8; PROJECTION_BASE_HEIGHT * PROJECTION_BASE_HEIGHT / 4],
+                    data_sign: [0u8; PROJECTION_BASE_HEIGHT * PROJECTION_BASE_HEIGHT / 8],
+                    data_value: [0u8; PROJECTION_BASE_HEIGHT * PROJECTION_BASE_HEIGHT / 8],
                 };
-                for inner_col in 0..PROJECTION_BASE_HEIGHT {
-                    for inner_row in 0..PROJECTION_BASE_HEIGHT {
+                for inner_row in 0..PROJECTION_BASE_HEIGHT {
+                    for inner_col in 0..PROJECTION_BASE_HEIGHT {
                         let value = data[row * PROJECTION_BASE_HEIGHT + inner_row]
                             [outer_col * PROJECTION_BASE_HEIGHT + inner_col];
-                        let bits = match value {
-                            0 => 0b00,  // (false, false) = not positive, not non-zero
-                            1 => 0b11,  // (true, true) = positive, non-zero
-                            -1 => 0b01, // (false, true) = not positive, non-zero
+                        let (is_positive, is_non_zero) = match value {
+                            0 => (false, false),
+                            1 => (true, true),
+                            -1 => (false, true),
                             _ => panic!("Invalid value in projection matrix"),
                         };
-                        let byte_index = (inner_col / 4) * PROJECTION_BASE_HEIGHT + inner_row;
-                        let bits_offset = (inner_col % 4) * 2;
-                        square.data[byte_index] |= bits << bits_offset;
+                        // Row-wise storage: each row spans multiple bytes (PROJECTION_BASE_HEIGHT / 8 bytes per row)
+                        let bytes_per_row = PROJECTION_BASE_HEIGHT / 8;
+                        let byte_index = inner_row * bytes_per_row + inner_col / 8;
+                        let bit_offset = inner_col % 8;
+                        if is_positive {
+                            square.data_sign[byte_index] |= 1 << bit_offset;
+                        }
+                        if is_non_zero {
+                            square.data_value[byte_index] |= 1 << bit_offset;
+                        }
                     }
                 }
                 projection_data[(row, outer_col)] = square;
@@ -86,7 +124,8 @@ impl ProjectionMatrix {
 
     pub fn sample(&mut self, hash_wrapper: &mut HashWrapper) {
         for square in self.projection_data.data.iter_mut() {
-            hash_wrapper.fill_from_xof(b"projection-square", &mut square.data);
+            hash_wrapper.fill_from_xof(b"projection-square-sign", &mut square.data_sign);
+            hash_wrapper.fill_from_xof(b"projection-square-value", &mut square.data_value);
         }
     }
 }
@@ -96,16 +135,17 @@ impl Index<(usize, usize)> for ProjectionSquare {
 
     fn index(&self, index: (usize, usize)) -> &Self::Output {
         let (row, col) = index;
-        let byte_index = (col / 4) * PROJECTION_BASE_HEIGHT + row;
-        let bits_offset = (col % 4) * 2;
-        let byte = self.data[byte_index];
-        let bits = (byte >> bits_offset) & 0b11;
-        match bits {
-            0b00 => &FALSE_FALSE,
-            0b01 => &FALSE_TRUE,
-            0b10 => &TRUE_FALSE,
-            0b11 => &TRUE_TRUE,
-            _ => unreachable!(),
+        // Row-wise storage: each row spans multiple bytes (PROJECTION_BASE_HEIGHT / 8 bytes per row)
+        let bytes_per_row = PROJECTION_BASE_HEIGHT / 8;
+        let byte_index = row * bytes_per_row + col / 8;
+        let bit_offset = col % 8;
+        let is_positive = (self.data_sign[byte_index] >> bit_offset) & 1 == 1;
+        let is_non_zero = (self.data_value[byte_index] >> bit_offset) & 1 == 1;
+        match (is_positive, is_non_zero) {
+            (false, false) => &FALSE_FALSE,
+            (false, true) => &FALSE_TRUE,
+            (true, false) => &TRUE_FALSE,
+            (true, true) => &TRUE_TRUE,
         }
     }
 }
@@ -133,47 +173,47 @@ mod tests {
     #[test]
     fn test_stability_of_sampling() {
         let mut hash_wrapper = HashWrapper::new();
-        let mut projection_matrix_1 = ProjectionMatrix::new(4, 8);
+        let mut projection_matrix_1 = ProjectionMatrix::new(4, PROJECTION_BASE_HEIGHT * 4);
+        println!("Matrix 1: height={}, width={}, data.height={}, data.width={}", 
+            projection_matrix_1.projection_height, 
+            projection_matrix_1.projection_width,
+            projection_matrix_1.projection_data.height,
+            projection_matrix_1.projection_data.width);
         projection_matrix_1.sample(&mut hash_wrapper);
 
         let mut hash_wrapper_2 = HashWrapper::new();
-        let mut projection_matrix_2 = ProjectionMatrix::new(4, 8);
+        let mut projection_matrix_2 = ProjectionMatrix::new(4, PROJECTION_BASE_HEIGHT * 4);
         projection_matrix_2.sample(&mut hash_wrapper_2);
 
-        for outer_col in 0..4 {
-            for row in 0..PROJECTION_BASE_HEIGHT {
-                for inner_col in 0..PROJECTION_BASE_HEIGHT {
-                    assert_eq!(
-                        projection_matrix_1[(row, outer_col * PROJECTION_BASE_HEIGHT + inner_col)],
-                        projection_matrix_2[(row, outer_col * PROJECTION_BASE_HEIGHT + inner_col)]
-                    );
-                }
-            }
+        for outer_col in 0..PROJECTION_BASE_HEIGHT * 16 {
+            for row in 0..PROJECTION_BASE_HEIGHT * 4 {
+                assert_eq!(
+                    projection_matrix_1[(row, outer_col)],
+                    projection_matrix_2[(row, outer_col)]
+                );
+        }
         }
     }
 
     #[test]
     fn test_instability_with_different_transcript() {
         let mut hash_wrapper = HashWrapper::new();
-        let mut projection_matrix_1 = ProjectionMatrix::new(4, 8);
+        let mut projection_matrix_1 = ProjectionMatrix::new(4, PROJECTION_BASE_HEIGHT * 4);
         projection_matrix_1.sample(&mut hash_wrapper);
 
         let mut hash_wrapper_2 = HashWrapper::new();
         hash_wrapper_2
             .update_with_ring_element(&RingElement::constant(42, Representation::IncompleteNTT));
-        let mut projection_matrix_2 = ProjectionMatrix::new(4, 8);
+        let mut projection_matrix_2 = ProjectionMatrix::new(4, PROJECTION_BASE_HEIGHT * 4);
         projection_matrix_2.sample(&mut hash_wrapper_2);
 
         let mut differences_found = 0;
-        for outer_col in 0..4 {
+        for col in 0..PROJECTION_BASE_HEIGHT * 4 * 4 {
             for row in 0..PROJECTION_BASE_HEIGHT {
-                for inner_col in 0..PROJECTION_BASE_HEIGHT {
-                    if projection_matrix_1[(row, outer_col * PROJECTION_BASE_HEIGHT + inner_col)]
-                        != projection_matrix_2
-                            [(row, outer_col * PROJECTION_BASE_HEIGHT + inner_col)]
-                    {
-                        differences_found += 1;
-                    }
+                if projection_matrix_1[(row, col)]
+                    != projection_matrix_2[(row, col)]
+                {
+                    differences_found += 1;
                 }
             }
         }
