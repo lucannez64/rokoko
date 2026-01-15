@@ -90,10 +90,6 @@ impl<E: SumcheckElement> HighOrderSumcheckData for ProductSumcheck<E> {
         point: HypercubePoint,
         polynomial: &mut Polynomial<E>,
     ) {
-        // Reset accumulator for this point and build g(x) = g_lhs(x) * g_rhs(x).
-        polynomial.set_zero();
-        polynomial.num_coefficients = 0;
-
         let mut lhs_eval_poly = self.lhs_eval_poly.borrow_mut();
         let mut rhs_eval_poly = self.rhs_eval_poly.borrow_mut();
 

@@ -200,7 +200,7 @@ impl DiffSumcheckEvaluation {
         DiffSumcheckEvaluation {
             lhs_evaluation,
             rhs_evaluation,
-            result: RingElement::constant(0, Representation::IncompleteNTT),
+            result: RingElement::zero(Representation::IncompleteNTT),
         }
     }
 }

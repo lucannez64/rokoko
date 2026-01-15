@@ -330,7 +330,7 @@ impl SelectorEqEvaluation {
             selector_variable_count,
             total_variable_count,
             result: RingElement::constant(1, Representation::IncompleteNTT),
-            scratch: RingElement::constant(0, Representation::IncompleteNTT),
+            scratch: RingElement::zero(Representation::IncompleteNTT),
             evaluated: false,
         }
     }

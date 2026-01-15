@@ -74,11 +74,26 @@ pub fn mul_poly_into<E: SumcheckElement>(
 
     result.set_zero();
 
+    if poly_0.num_coefficients == 2 && poly_1.num_coefficients == 2 {
+        // Both are linear: (a0 + a1*x) * (b0 + b1*x) = a0*b0 + (a0*b1 + a1*b0)*x + a1*b1*x^2
+
+        let (first, rest) = result.coefficients.split_at_mut(1);
+        let (second, third) = rest.split_at_mut(1);
+
+        first[0] *= (&poly_0.coefficients[0], &poly_1.coefficients[1]); // buffer
+        second[0] *= (&poly_0.coefficients[1], &poly_1.coefficients[0]);
+        second[0] += &first[0];
+        first[0] *= (&poly_0.coefficients[0], &poly_1.coefficients[0]);
+        third[0] *= (&poly_0.coefficients[1], &poly_1.coefficients[1]);
+
+        result.num_coefficients = 3;
+        return;
+    }
+
+    // This works only in one poly is constant
     for i in 0..poly_0.num_coefficients {
         for j in 0..poly_1.num_coefficients {
-            let mut product = E::zero();
-            product *= (&poly_0.coefficients[i], &poly_1.coefficients[j]);
-            result.coefficients[i + j] += &product;
+            result.coefficients[i + j] *= (&poly_0.coefficients[i], &poly_1.coefficients[j])
         }
     }
     result.num_coefficients = poly_0.num_coefficients + poly_1.num_coefficients - 1;
