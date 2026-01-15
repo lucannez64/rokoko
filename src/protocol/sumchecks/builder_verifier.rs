@@ -730,6 +730,12 @@ pub fn init_verifier(crs: &CRS, config: &Config) -> VerifierSumcheckContext {
     if let Some(type3evaluation) = &type3evaluation {
         all_outputs.push(type3evaluation.output.clone());
     }
+    if let Some(type3_1_a_evaluations) = &type3_1_a_evaluations {
+        for type3_1_a in &type3_1_a_evaluations.sumchecks {
+            all_outputs.push(type3_1_a.output.clone());
+        }
+    }
+
     for type4 in &type4evaluations {
         for layer in &type4.layers {
             for output in &layer.outputs {

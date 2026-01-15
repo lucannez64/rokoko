@@ -169,12 +169,6 @@ pub fn load_sumcheck_data(
                     .borrow_mut()
                     .load_from(&c_0_ring);
 
-                println!(
-                    "len, c_0_values: {}, len j_batched: {}",
-                    c_0_ring.len(),
-                    challenges.j_batched.len()
-                );
-
                 type3_1_a_ctx
                     .lhs_flatter_1_times_matrix_sumcheck
                     .borrow_mut()

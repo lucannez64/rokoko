@@ -559,10 +559,13 @@ pub fn init_sumcheck(crs: &crs::CRS, config: &Config) -> SumcheckContext {
         Projection::Type1(projection_recursion) => {
             // Projection combiner for decomposition (same for all batches)
             let (projection_combiner_sumcheck, projection_combiner_constant_sumcheck) = {
-                // Use same decomposition as witness for consistency
                 composition_sumcheck(
-                    config.witness_decomposition_base_log as u64,
-                    config.witness_decomposition_chunks,
+                    projection_recursion
+                        .recursion_batched_projection
+                        .decomposition_base_log as u64,
+                    projection_recursion
+                        .recursion_batched_projection
+                        .decomposition_chunks,
                     config.composed_witness_length.ilog2() as usize,
                 )
             };
@@ -765,11 +768,19 @@ pub fn init_sumcheck(crs: &crs::CRS, config: &Config) -> SumcheckContext {
     for type2 in &type2sumchecks {
         all_outputs.push(type2.output.clone());
     }
+
+    // TODO no need for match / if should be better
     match &type3sumcheck {
         Some(ctx) => {
             all_outputs.push(ctx.output.clone());
         }
         None => {}
+    }
+
+    if let Some(type3_1_a_contexts) = &type3_1_a_sumchecks {
+        for type3_1_a_ctx in type3_1_a_contexts.sumchecks.iter() {
+            all_outputs.push(type3_1_a_ctx.output.clone());
+        }
     }
 
     // Add type3_1_a outputs (batched projections)

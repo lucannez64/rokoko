@@ -67,6 +67,11 @@ fn batch_claims(
         idx += 1;
     }
 
+    if rcs_projection_1_inner.is_some() {
+        // Type3_1_A: zero claim (difference sumcheck)
+        idx += NOF_BATCHES;
+    }
+
     let mut polys: Vec<Polynomial<QuadraticExtension>> = vec![];
 
     // Type4: Three recursion trees (commitment, opening, projection)
@@ -406,18 +411,6 @@ pub fn sumcheck(
         time_eval
     );
 
-    print!(
-        "final claim type3_1_A {:?}",
-        sumcheck_context
-            .type3_1_a_sumchecks
-            .as_ref()
-            .unwrap()
-            .sumchecks[0]
-            .output
-            .borrow()
-            .final_evaluations_test_only()
-    );
-
     // final round
     assert_eq!(sumcheck_context.field_combiner.borrow().variable_count(), 0);
 
@@ -587,34 +580,11 @@ pub fn sumcheck_verifier(
         &qe,
     );
 
-    // assert_eq!(
-    //     &batched_claim_over_field,
-    //     verifier_sumcheck_context
-    //         .field_combiner_evaluation
-    //         .borrow_mut()
-    //         .evaluate(&evaluation_points)
-    // );
-
-    println!(
-        "V final claim type3_1_A {:?}",
+    assert_eq!(
+        &batched_claim_over_field,
         verifier_sumcheck_context
-            .type3_1_a_evaluations
-            .as_ref()
-            .unwrap()
-            .sumchecks
-            .get(0)
-            .unwrap()
-            .output
+            .field_combiner_evaluation
             .borrow_mut()
-            .evaluate(
-                &evaluation_points
-                    .iter()
-                    .map(|e| {
-                        let mut a = field_to_ring_element(e);
-                        a.from_homogenized_field_extensions_to_incomplete_ntt();
-                        a
-                    })
-                    .collect::<Vec<_>>()
-            )
+            .evaluate(&evaluation_points)
     );
 }
