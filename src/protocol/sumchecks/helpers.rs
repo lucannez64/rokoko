@@ -2,21 +2,23 @@ use num::range;
 
 use crate::{
     common::{
-        arithmetic::{HALF_WAY_MOD_Q, field_to_ring_element_into},
+        arithmetic::{field_to_ring_element_into, HALF_WAY_MOD_Q},
         config::{HALF_DEGREE, MOD_Q},
         decomposition::get_decomposed_offset_scaled,
         matrix::{new_vec_zero_field_preallocated, new_vec_zero_preallocated},
         projection_matrix::ProjectionMatrix,
         ring_arithmetic::{QuadraticExtension, Representation, RingElement, SHIFT_FACTORS},
         structured_row::{PreprocessedRow, StructuredRow},
-    }, hexl::bindings::eltwise_reduce_mod, protocol::{
+    },
+    hexl::bindings::{eltwise_reduce_mod, multiply_mod},
+    protocol::{
         commitment::Prefix,
         crs::CRS,
         sumcheck_utils::{
             elephant_cell::ElephantCell, linear::LinearSumcheck, product::ProductSumcheck,
             selector_eq::SelectorEq,
         },
-    }
+    },
 };
 
 /// Builds the pair of sumchecks that recompose a base-`2^{base_log}` decomposition.
@@ -200,6 +202,18 @@ pub(crate) fn tensor_product(a: &Vec<RingElement>, b: &Vec<RingElement>) -> Vec<
     result
 }
 
+pub fn tensor_product_u64(a: &Vec<u64>, b: &Vec<u64>) -> Vec<u64> {
+    let mut result: Vec<u64> = vec![0u64; a.len() * b.len()];
+    let mut idx = 0;
+    for a_elem in a.iter() {
+        for b_elem in b.iter() {
+            unsafe { result[idx] = multiply_mod(*a_elem, *b_elem, MOD_Q) }
+            // result[idx] = a_elem.wrapping_mul(*b_elem);
+            idx += 1;
+        }
+    }
+    result
+}
 /// Computes the projection coefficients for proving the projection image consistency.
 ///
 /// This is one of the most intricate helper functions in the protocol because it bridges
@@ -384,10 +398,7 @@ pub fn projection_flatter_1_times_matrix(
 ) -> Vec<QuadraticExtension> {
     #[cfg(not(all(target_arch = "x86_64", target_feature = "avx512f")))]
     {
-        return projection_flatter_1_times_matrix_ref(
-            projection_matrix,
-            projection_flatter_1,
-        );
+        return projection_flatter_1_times_matrix_ref(projection_matrix, projection_flatter_1);
     }
     let height = projection_matrix.projection_height;
     let projection_ratio = projection_matrix.projection_ratio;
@@ -435,8 +446,10 @@ pub fn projection_flatter_1_times_matrix(
                     // k_pos has 8 bits for 8 elements, we need 16 bits for 16 u64s (interleaved coeffs)
                     // Bit pattern: abcdefgh -> aabbccddeeffgghh
                     // Use BMI2 PDEP instruction to efficiently duplicate bits
-                    let k_pos_16 = (_pdep_u32(k_pos as u32, 0x5555) | _pdep_u32(k_pos as u32, 0xAAAA)) as u16;
-                    let k_inc_16 = (_pdep_u32(k_inc as u32, 0x5555) | _pdep_u32(k_inc as u32, 0xAAAA)) as u16;
+                    let k_pos_16 =
+                        (_pdep_u32(k_pos as u32, 0x5555) | _pdep_u32(k_pos as u32, 0xAAAA)) as u16;
+                    let k_inc_16 =
+                        (_pdep_u32(k_inc as u32, 0x5555) | _pdep_u32(k_inc as u32, 0xAAAA)) as u16;
 
                     // Get base pointer to the coeffs array (16 consecutive u64s)
                     let base_ptr = result_field[i].coeffs.as_mut_ptr();
@@ -453,12 +466,16 @@ pub fn projection_flatter_1_times_matrix(
                     let k_sub_high = ((k_inc_16 & !k_pos_16) >> 8) as u8;
 
                     // Apply masked operations for low part
-                    let result_low = _mm512_mask_add_epi64(current_low, k_add_low, current_low, weight_vec);
-                    let result_low = _mm512_mask_sub_epi64(result_low, k_sub_low, result_low, weight_vec);
+                    let result_low =
+                        _mm512_mask_add_epi64(current_low, k_add_low, current_low, weight_vec);
+                    let result_low =
+                        _mm512_mask_sub_epi64(result_low, k_sub_low, result_low, weight_vec);
 
                     // Apply masked operations for high part
-                    let result_high = _mm512_mask_add_epi64(current_high, k_add_high, current_high, weight_vec);
-                    let result_high = _mm512_mask_sub_epi64(result_high, k_sub_high, result_high, weight_vec);
+                    let result_high =
+                        _mm512_mask_add_epi64(current_high, k_add_high, current_high, weight_vec);
+                    let result_high =
+                        _mm512_mask_sub_epi64(result_high, k_sub_high, result_high, weight_vec);
 
                     // Store results back
                     _mm512_storeu_epi64(base_ptr as *mut i64, result_low);
@@ -483,10 +500,14 @@ pub fn projection_flatter_1_times_matrix(
         }
     }
 
-
     unsafe {
         // this is a bit ugly but we want to avoid calling eltwise_reduce_mod separately
-        eltwise_reduce_mod(result_field[0].coeffs.as_mut_ptr(), result_field[0].coeffs.as_ptr(), 2 * inner_width as u64, MOD_Q);
+        eltwise_reduce_mod(
+            result_field[0].coeffs.as_mut_ptr(),
+            result_field[0].coeffs.as_ptr(),
+            2 * inner_width as u64,
+            MOD_Q,
+        );
     }
 
     result_field
@@ -526,10 +547,14 @@ pub fn projection_flatter_1_times_matrix_ref(
         }
     }
 
-
     unsafe {
         // this is a bit ugly but we want to avoid calling eltwise_reduce_mod separately
-        eltwise_reduce_mod(result_field[0].coeffs.as_mut_ptr(), result_field[0].coeffs.as_ptr(), 2 * inner_width as u64, MOD_Q);
+        eltwise_reduce_mod(
+            result_field[0].coeffs.as_mut_ptr(),
+            result_field[0].coeffs.as_ptr(),
+            2 * inner_width as u64,
+            MOD_Q,
+        );
     }
 
     result_field

@@ -16,8 +16,9 @@ use crate::{
     },
     hexl::bindings::{add_mod, eltwise_reduce_mod, multiply_mod, sub_mod},
     protocol::{
-        config::Config, open::evaluation_point_to_structured_row,
-        sumchecks::helpers::tensor_product,
+        config::Config,
+        open::evaluation_point_to_structured_row,
+        sumchecks::helpers::{tensor_product, tensor_product_u64},
     },
 };
 
@@ -334,6 +335,7 @@ pub fn project_coefficients(
 pub struct BatchedProjectionChallenges {
     pub c_0_values: Vec<u64>,
     pub c_1_values: Vec<u64>,
+    pub c_1_layers: Vec<u64>,
     pub c_2_values: Vec<u64>, // for columns, not used here but for consistency
     pub j_batched: Vec<RingElement>, // this is technically not needed, but since it's computed anyway, we return it for reuse
 }
@@ -433,6 +435,7 @@ fn batch_projection_into(
             // Multiply by c_0 coefficient and accumulate
             for deg in 0..DEGREE {
                 unsafe {
+                    // TODO: vectorize
                     let temp = multiply_mod(chunk_result.v[deg], c_0_coeff, MOD_Q);
                     col_result.v[deg] = add_mod(col_result.v[deg], temp, MOD_Q);
                 }
@@ -444,6 +447,7 @@ fn batch_projection_into(
     BatchedProjectionChallenges {
         c_0_values,
         c_1_values,
+        c_1_layers,
         c_2_values,
         j_batched,
     }
@@ -527,7 +531,7 @@ pub fn verifier_sample_projection_challenges(
     let c_1_values = precompute_structured_values_fast(&c_1_layers)
         .iter()
         .map(|&x| RingElement::constant(x, Representation::IncompleteNTT))
-        .collect::<Vec<RingElement>>();
+        .collect::<Vec<RingElement>>(); // TODO: This seems to not make sense
 
     let j_batched = compute_j_batched(
         projection_matrix,
@@ -567,63 +571,16 @@ fn test_batch_projection() {
     // Compute the full projection V = (I_d ⊗ J) * coeff(W) explicitly
     let image_ct = project_coefficients(&witness, &projection_matrix);
 
-    // Sample the same structured challenges as batch_projection
-    // No column batching: we process each column independently
-
-    // c'_0: batches over d coefficient blocks in the image
-    // d = (number of ring elements in image) * (coefficients per ring element) / (block size)
-    let d = image_ct.height * DEGREE / projection_matrix.projection_height;
-    // let c_0_layers: Vec<u64> = (0..d.ilog2())
-    //     .map(|_| hash_wrapper.sample_u64_mod_q())
-    //     .collect();
-
-    // // c'_1: batches over PROJECTION_HEIGHT coefficients within each block
-    // let c_1_layers: Vec<u64> = (0..PROJECTION_HEIGHT.ilog2())
-    //     .map(|_| hash_wrapper.sample_u64_mod_q())
-    //     .collect();
-
-    // TODO: fix randomness consumption
-    // let c_0_layers: Vec<u64> = (0..d.ilog2()).map(|_| 2u64).collect();
-
-    // let c_1_layers: Vec<u64> = (0..projection_matrix.projection_height.ilog2())
-    //     .map(|_| 2u64)
-    //     .collect();
-
     let (c_0_layers, c_1_layers, _c_2_layers) = sample_layers(
         &projection_matrix,
         witness.width,
         witness.height,
         &mut hash_wrapper,
     );
-    // Precompute all structured row values
-    // let precompute_structured_values = |layers: &[u64]| -> Vec<u64> {
-    //     let size = 1 << layers.len();
-    //     let mut values = vec![1u64; size];
-
-    //     for (layer_idx, &layer) in layers.iter().rev().enumerate() {
-    //         let layer_complement = unsafe { sub_mod(1, layer, MOD_Q) };
-
-    //         for i in 0..size {
-    //             if (i >> layer_idx) & 1 == 1 {
-    //                 unsafe {
-    //                     values[i] = multiply_mod(values[i], layer, MOD_Q);
-    //                 }
-    //             } else {
-    //                 unsafe {
-    //                     values[i] = multiply_mod(values[i], layer_complement, MOD_Q);
-    //                 }
-    //             }
-    //         }
-    //     }
-
-    //     values
-    // };
 
     let c_0_values = precompute_structured_values_fast(&c_0_layers);
     let c_1_values = precompute_structured_values_fast(&c_1_layers);
 
-    let inner_width_ring =
-        projection_matrix.projection_ratio * (projection_matrix.projection_height / DEGREE);
     let num_chunks_in_image = image_ct.height / (projection_matrix.projection_height / DEGREE);
 
     // Compute expected results for each column separately
@@ -678,4 +635,129 @@ fn test_batch_projection() {
             col
         );
     }
+}
+
+#[test]
+fn test_const_term_relation_to_prove() {
+    let witness = VerticallyAlignedMatrix {
+        data: vec![RingElement::random(Representation::IncompleteNTT); 8 * 64],
+        width: 8,
+        height: 64,
+    };
+    let mut projection_matrix = ProjectionMatrix::new(4, 256);
+
+    let mut hash_wrapper = HashWrapper::new();
+    projection_matrix.sample(&mut hash_wrapper);
+
+    // Compute the full projection V = (I_d ⊗ J) * coeff(W) explicitly
+    let mut image_ct = project_coefficients(&witness, &projection_matrix);
+    for el in image_ct.data.iter_mut() {
+        el.to_representation(Representation::IncompleteNTT);
+    }
+    assert_eq!(image_ct.height, 16);
+
+    assert_eq!(image_ct.width, 8);
+
+    let mut batched_projected_witness =
+        HorizontallyAlignedMatrix::new_zero_preallocated(1, witness.width);
+
+    let challenges = batch_projection_into(
+        &mut batched_projected_witness.row_slice_mut(0),
+        &witness,
+        &projection_matrix,
+        &mut hash_wrapper,
+    );
+
+    // Now, we want to check if
+    // let B = batched_projected_witness
+    // let V = image_ct
+    // let V' = coefficients of V
+    // assume that challenges are "expanded" into vectors c_0 c_1 c_2
+    // We need to check if
+    // constant_term( c_0^T B c_2) = (c_0^T \otimes c_1^T ) V' c_2
+    // Let c_1 de split into (e_0 \otimes e_1) where e_1 has length DEGREE and e_0 has length PROJECTION_HEIGHT / DEGREE
+    // Let e = embed_dual(J) c_1
+    // Then, we need to check if
+    // constant_term( B c_2) = constant_term((c_0^T \otimes e_0^T) e V c_2)
+    // due to memory alignment:
+    // constant_term(<B, c_2>) = e <c_2 \otimes c_0 \otimes e_0, V>
+    let c_2_values = challenges.c_2_values;
+    let c_1_values = challenges.c_1_values;
+    let c_0_values = challenges.c_0_values;
+    let c1_layers = challenges.c_1_layers;
+    let (e_0_values, e_1_values) = {
+        let mut e_0_layers = Vec::new();
+        let mut e_1_layers = Vec::new();
+        for (i, &layer) in c1_layers.iter().enumerate() {
+            if i < c1_layers.len() - DEGREE.ilog2() as usize {
+                e_0_layers.push(layer);
+            } else {
+                e_1_layers.push(layer);
+            }
+        }
+        (
+            precompute_structured_values_fast(&e_0_layers),
+            precompute_structured_values_fast(&e_1_layers),
+        )
+    };
+
+    let _tensor_product = tensor_product_u64(&e_0_values, &e_1_values);
+    assert_eq!(_tensor_product, c_1_values);
+    let lhs_multipier_ring = c_2_values
+        .iter()
+        .map(|&x| RingElement::constant(x, Representation::IncompleteNTT))
+        .collect::<Vec<RingElement>>();
+
+    let rhs_multipier_ring = {
+        // c_2 \otimes c_0 \otimes e_0
+        // first over u64
+        let values_0 = tensor_product_u64(&c_2_values, &c_0_values);
+        let values_1 = tensor_product_u64(&values_0, &e_0_values);
+        let vals_over_ring = values_1
+            .iter()
+            .map(|&x| RingElement::constant(x, Representation::IncompleteNTT))
+            .collect::<Vec<RingElement>>();
+        vals_over_ring
+    };
+
+    let e = {
+        let mut e = RingElement::zero(Representation::Coefficients);
+        for (i, &val) in e_1_values.iter().enumerate() {
+            e.v[i as usize] = val;
+        }
+        e.from_coefficients_to_even_odd_coefficients();
+        e.from_even_odd_coefficients_to_incomplete_ntt_representation();
+        e.conjugate_in_place();
+        e
+    };
+
+    let mut lhs = {
+        let mut acc = RingElement::zero(Representation::IncompleteNTT);
+        for col in 0..batched_projected_witness.data.len() {
+            let mut temp = RingElement::zero(Representation::IncompleteNTT);
+            temp *= (
+                &batched_projected_witness.data[col],
+                &lhs_multipier_ring[col],
+            );
+            acc += &temp;
+        }
+        acc
+    };
+
+    let mut rhs = {
+        let mut acc = RingElement::zero(Representation::IncompleteNTT);
+        for i in 0..image_ct.data.len() {
+            let mut temp = RingElement::zero(Representation::IncompleteNTT);
+            temp *= (&image_ct.data[i], &rhs_multipier_ring[i]);
+            acc += &temp;
+        }
+        acc *= &e;
+        acc
+    };
+    lhs.to_representation(Representation::Coefficients);
+    rhs.to_representation(Representation::Coefficients);
+    assert_eq!(
+        lhs.v[0], rhs.v[0],
+        "Constant terms of LHS and RHS should match"
+    );
 }

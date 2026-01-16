@@ -288,9 +288,7 @@ impl RingElement {
             "RingElement not in Homogenized Field Extensions representation"
         );
 
-        let mut result = [QuadraticExtension {
-            coeffs: [0u64; 2],
-        }; HALF_DEGREE];
+        let mut result = [QuadraticExtension { coeffs: [0u64; 2] }; HALF_DEGREE];
 
         for i in 0..HALF_DEGREE {
             result[i].coeffs[0] = self.v[i];
@@ -454,9 +452,7 @@ pub static SHIFT_FACTORS: LazyLock<[u64; HALF_DEGREE]> = LazyLock::new(|| {
     factors
 });
 
-pub static FIELD_SHIFT_FACTOR: LazyLock<u64> = LazyLock::new(|| {
-    SHIFT_FACTORS[0]
-});
+pub static FIELD_SHIFT_FACTOR: LazyLock<u64> = LazyLock::new(|| SHIFT_FACTORS[0]);
 
 pub static INV_HALF_DEGREE: LazyLock<u64> =
     LazyLock::new(|| unsafe { power_mod(HALF_DEGREE as u64, MOD_Q - 2, MOD_Q) });
@@ -1032,9 +1028,7 @@ impl Add for QuadraticExtension {
                 add_mod(self.coeffs[1], other.coeffs[1], MOD_Q as u64),
             ]
         };
-        Self {
-            coeffs,
-        }
+        Self { coeffs }
     }
 }
 
@@ -1051,7 +1045,11 @@ impl Mul for QuadraticExtension {
             [
                 add_mod(
                     multiply_mod(a, c, MOD_Q as u64),
-                    multiply_mod(*FIELD_SHIFT_FACTOR, multiply_mod(b, d, MOD_Q as u64), MOD_Q as u64),
+                    multiply_mod(
+                        *FIELD_SHIFT_FACTOR,
+                        multiply_mod(b, d, MOD_Q as u64),
+                        MOD_Q as u64,
+                    ),
                     MOD_Q as u64,
                 ),
                 add_mod(
@@ -1061,9 +1059,7 @@ impl Mul for QuadraticExtension {
                 ),
             ]
         };
-        Self {
-            coeffs,
-        }
+        Self { coeffs }
     }
 }
 
@@ -1241,12 +1237,8 @@ mod tests {
 
     #[test]
     fn test_quadratic_extension_multiplication() {
-        let qe1 = QuadraticExtension {
-            coeffs: [2, 3],
-        };
-        let qe2 = QuadraticExtension {
-            coeffs: [4, 5],
-        };
+        let qe1 = QuadraticExtension { coeffs: [2, 3] };
+        let qe2 = QuadraticExtension { coeffs: [4, 5] };
         let result = qe1 * qe2;
 
         // (2 + 3X)(4 + 5X) = 8 + 10X + 12X + 15X^2 = 8 + 22X + 15*shift

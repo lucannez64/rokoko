@@ -116,7 +116,6 @@ fn test_ring_to_field_combiner() {
     for i in 0..HALF_DEGREE {
         challenge_qe.push(QuadraticExtension {
             coeffs: [i as u64 + 1, 0],
-            shift: SHIFT_FACTORS[0],
         });
     }
 
@@ -137,9 +136,7 @@ fn test_ring_to_field_combiner() {
         }
     );
 
-    let r0qe = QuadraticExtension {
-        coeffs: [7, 3],
-    };
+    let r0qe = QuadraticExtension { coeffs: [7, 3] };
 
     let mut r0 = RingElement::constant(0, Representation::HomogenizedFieldExtensions);
 
@@ -154,9 +151,7 @@ fn test_ring_to_field_combiner() {
 
     assert_eq!(poly.at_zero() + poly.at_one(), claim_after_r0);
 
-    let r1qe = QuadraticExtension {
-        coeffs: [21, 37],
-    };
+    let r1qe = QuadraticExtension { coeffs: [21, 37] };
 
     let mut r1 = RingElement::constant(0, Representation::HomogenizedFieldExtensions);
 
@@ -171,9 +166,7 @@ fn test_ring_to_field_combiner() {
 
     assert_eq!(poly.at_zero() + poly.at_one(), claim_after_r1);
 
-    let r2qe = QuadraticExtension {
-        coeffs: [53, 89],
-    };
+    let r2qe = QuadraticExtension { coeffs: [53, 89] };
 
     let mut r2 = RingElement::constant(0, Representation::HomogenizedFieldExtensions);
 
@@ -288,7 +281,6 @@ fn test_ring_to_field_combiner_evaluation() {
     for i in 0..HALF_DEGREE {
         challenge_qe[i] = QuadraticExtension {
             coeffs: [i as u64 + 1, 0],
-            shift: SHIFT_FACTORS[0],
         };
     }
 

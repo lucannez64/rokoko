@@ -141,9 +141,7 @@ pub fn load_verifier_sumcheck_data(
                 tensor_layers: challenges
                     .c_0_layers
                     .iter()
-                    .map(|e| QuadraticExtension {
-                        coeffs: [*e, 0],
-                    })
+                    .map(|e| QuadraticExtension { coeffs: [*e, 0] })
                     .collect::<Vec<_>>(),
             };
             type3_1_a_eval.sumchecks[batch_idx]
