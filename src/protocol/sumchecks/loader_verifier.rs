@@ -34,7 +34,7 @@ pub fn load_verifier_sumcheck_data(
     evaluation_points_outer: &Vec<StructuredRow>,
     projection_matrix: &ProjectionMatrix,
     projection_matrix_flatter_structured: &Option<StructuredRow>, // Only needed for type0 projection
-    challenges_3_1_a: &Option<[BatchedProjectionChallengesSuccinct; NOF_BATCHES]>,
+    challenges_3_1: &Option<[BatchedProjectionChallengesSuccinct; NOF_BATCHES]>,
     combination: &Vec<RingElement>,
     qe: &[QuadraticExtension; HALF_DEGREE],
 ) {
@@ -122,16 +122,16 @@ pub fn load_verifier_sumcheck_data(
             .load_from(folding_challenges);
     }
 
-    if let Some(type3_1_a_eval) = &mut verifier_sumcheck_context.type3_1_a_evaluations {
+    if let Some(type3_1_eval) = &mut verifier_sumcheck_context.type3_1_evaluations {
         // Type3_1_A: projection image consistency for type1.1 projection
 
-        type3_1_a_eval
+        type3_1_eval
             .rhs_fold_challenge_evaluation
             .borrow_mut()
             .load_from(folding_challenges);
 
-        for (batch_idx, challenges) in challenges_3_1_a.as_ref().unwrap().iter().enumerate() {
-            type3_1_a_eval.sumchecks[batch_idx]
+        for (batch_idx, challenges) in challenges_3_1.as_ref().unwrap().iter().enumerate() {
+            type3_1_eval.sumchecks[batch_idx]
                 .lhs_flatter_1_times_matrix_evaluation
                 .borrow_mut()
                 .load_from(&challenges.j_batched);
@@ -143,7 +143,7 @@ pub fn load_verifier_sumcheck_data(
                     .map(|e| QuadraticExtension { coeffs: [*e, 0] })
                     .collect::<Vec<_>>(),
             };
-            type3_1_a_eval.sumchecks[batch_idx]
+            type3_1_eval.sumchecks[batch_idx]
                 .lhs_flatter_0_evaluation_field
                 .borrow_mut()
                 .load_from(c_0_field);
@@ -199,17 +199,17 @@ pub fn load_verifier_sumcheck_data(
                 }
             };
 
-            type3_1_a_eval.sumchecks[batch_idx]
+            type3_1_eval.sumchecks[batch_idx]
                 .lhs_consistency_flatter_evaluation_field
                 .borrow_mut()
                 .load_from(lhs_layers_fields);
 
-            type3_1_a_eval.sumchecks[batch_idx]
+            type3_1_eval.sumchecks[batch_idx]
                 .rhs_consistency_flatter_evaluation_field
                 .borrow_mut()
                 .load_from(rhs_layers_field);
 
-            type3_1_a_eval.sumchecks[batch_idx]
+            type3_1_eval.sumchecks[batch_idx]
                 .rhs_scalar_consistency_evaluation
                 .borrow_mut()
                 .load_from(&vec![e]);

@@ -560,7 +560,7 @@ pub fn init_verifier(crs: &CRS, config: &Config) -> VerifierSumcheckContext {
         }
     };
 
-    let type3_1_a_evaluations = match &config.projection_recursion {
+    let type3_1_evaluations = match &config.projection_recursion {
         Projection::Type1(proj_config) => {
             let projection_combiner_evaluation = load_combiner_evaluation_data(
                 proj_config
@@ -871,10 +871,10 @@ pub fn init_verifier(crs: &CRS, config: &Config) -> VerifierSumcheckContext {
     if let Some(type3evaluation) = &type3evaluation {
         all_outputs.push(type3evaluation.output.clone());
     }
-    if let Some(type3_1_a_evaluations) = &type3_1_a_evaluations {
-        for type3_1_a in &type3_1_a_evaluations.sumchecks {
-            all_outputs.push(type3_1_a.output.clone());
-            all_outputs.push(type3_1_a.output_2.clone());
+    if let Some(type3_1_evaluations) = &type3_1_evaluations {
+        for type3_1 in &type3_1_evaluations.sumchecks {
+            all_outputs.push(type3_1.output.clone());
+            all_outputs.push(type3_1.output_2.clone());
         }
     }
 
@@ -910,7 +910,7 @@ pub fn init_verifier(crs: &CRS, config: &Config) -> VerifierSumcheckContext {
         type1evaluations,
         type2evaluations,
         type3evaluation,
-        type3_1_a_evaluations,
+        type3_1_evaluations,
         type4evaluations,
         type5evaluation,
         combiner_evaluation,

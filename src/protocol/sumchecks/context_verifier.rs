@@ -43,7 +43,7 @@ pub struct VerifierSumcheckContext {
     pub type1evaluations: Vec<Type1VerifierContext>,
     pub type2evaluations: Vec<Type2VerifierContext>,
     pub type3evaluation: Option<Type3VerifierContext>,
-    pub type3_1_a_evaluations: Option<Type3_1VerifierContextWrapper>,
+    pub type3_1_evaluations: Option<Type3_1VerifierContextWrapper>,
     pub type4evaluations: Vec<Type4VerifierContext>,
     pub type5evaluation: Type5VerifierContext,
 

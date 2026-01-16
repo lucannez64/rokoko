@@ -151,11 +151,11 @@ pub fn load_sumcheck_data(
             );
     }
 
-    // Load type3_1_a_sumchecks if present (batched projections)
-    if let Some(type3_1_a_contexts) = &mut sumcheck_context.type3_1_a_sumchecks {
+    // Load type3_1_sumchecks if present (batched projections)
+    if let Some(type3_1_contexts) = &mut sumcheck_context.type3_1_sumchecks {
         if let Some(challenges) = challenges_batching_projection_1 {
             // Each batch gets its own (c_0_values, c_1_values, j_batched) tuple
-            for (batch_idx, (type3_1_a_ctx, challenges)) in type3_1_a_contexts
+            for (batch_idx, (type3_1_ctx, challenges)) in type3_1_contexts
                 .sumchecks
                 .iter_mut()
                 .zip(challenges.iter())
@@ -168,12 +168,12 @@ pub fn load_sumcheck_data(
                     .map(|&val| RingElement::constant(val, Representation::IncompleteNTT))
                     .collect();
 
-                type3_1_a_ctx
+                type3_1_ctx
                     .lhs_flatter_0_sumcheck
                     .borrow_mut()
                     .load_from(&c_0_ring);
 
-                type3_1_a_ctx
+                type3_1_ctx
                     .lhs_flatter_1_times_matrix_sumcheck
                     .borrow_mut()
                     .load_from(&challenges.j_batched);
@@ -225,21 +225,21 @@ pub fn load_sumcheck_data(
                     e
                 };
 
-                type3_1_a_ctx
+                type3_1_ctx
                     .lhs_consistency_flatter_sumcheck
                     .borrow_mut()
                     .load_from(&lhs_multipier_ring);
-                type3_1_a_ctx
+                type3_1_ctx
                     .rhs_consistency_flatter_sumcheck
                     .borrow_mut()
                     .load_from(&rhs_multipier_ring);
-                type3_1_a_ctx
+                type3_1_ctx
                     .rhs_scalar_consistency_sumcheck
                     .borrow_mut()
                     .load_from(&vec![e]);
             }
             // RHS: fold_challenge (same for all batches, already loaded in folding_challenges_sumcheck)
-            type3_1_a_contexts
+            type3_1_contexts
                 .rhs_fold_challenge_sumcheck
                 .borrow_mut()
                 .load_from(folding_challenges);

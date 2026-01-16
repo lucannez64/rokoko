@@ -553,12 +553,12 @@ pub fn init_sumcheck(crs: &crs::CRS, config: &Config) -> SumcheckContext {
         _ => None,
     };
 
-    // let type_3_1_a_sumchecks = match &config.projection_recursion {
+    // let type_3_1_sumchecks = match &config.projection_recursion {
     // Type3_1_A sumchecks for batched projections
     // Similar to type3 but for each batch: c_0'^T (I ⊗ j_batched) · folded_witness = projection_image_i · fold_challenge
     // c_0 and c_1 are u64 challenges that need to be lifted to RingElement
     // j_batched is already a Vec<RingElement>
-    let type3_1_a_sumchecks = match &config.projection_recursion {
+    let type3_1_sumchecks = match &config.projection_recursion {
         Projection::Type1(projection_recursion) => {
             // Projection combiner for decomposition (same for all batches)
             let (projection_combiner_sumcheck, projection_combiner_constant_sumcheck) = {
@@ -877,10 +877,10 @@ pub fn init_sumcheck(crs: &crs::CRS, config: &Config) -> SumcheckContext {
         None => {}
     }
 
-    if let Some(type3_1_a_contexts) = &type3_1_a_sumchecks {
-        for type3_1_a_ctx in type3_1_a_contexts.sumchecks.iter() {
-            all_outputs.push(type3_1_a_ctx.output.clone());
-            all_outputs.push(type3_1_a_ctx.output_2.clone());
+    if let Some(type3_1_contexts) = &type3_1_sumchecks {
+        for type3_1_ctx in type3_1_contexts.sumchecks.iter() {
+            all_outputs.push(type3_1_ctx.output.clone());
+            all_outputs.push(type3_1_ctx.output_2.clone());
         }
     }
 
@@ -918,7 +918,7 @@ pub fn init_sumcheck(crs: &crs::CRS, config: &Config) -> SumcheckContext {
         type3sumcheck,
         type4sumchecks,
         type5sumcheck,
-        type3_1_a_sumchecks,
+        type3_1_sumchecks,
         combiner,
         field_combiner,
         next: match &config.next {

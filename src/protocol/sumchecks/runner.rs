@@ -369,13 +369,13 @@ pub fn sumcheck(
 
     let constant_term_claims =
         sumcheck_context
-            .type3_1_a_sumchecks
+            .type3_1_sumchecks
             .as_ref()
-            .map(|type3_1_a_sumchecks| {
-                type3_1_a_sumchecks
+            .map(|type3_1_sumchecks| {
+                type3_1_sumchecks
                     .sumchecks
                     .iter()
-                    .map(|type3_1_a_sc| type3_1_a_sc.output_2.borrow().claim())
+                    .map(|type3_1_sc| type3_1_sc.output_2.borrow().claim())
                     .collect::<Vec<_>>()
             });
 
@@ -481,11 +481,11 @@ pub fn sumcheck_verifier(
     if let Some(rc_projection_inner) = &round_proof.rc_projection_inner {
         hash_wrapper.update_with_ring_element_slice(rc_projection_inner);
     }
-    let challenges_3_1_a = if let Some((rcs_projection_1_ct, rcs_projection_1_batched)) =
+    let challenges_3_1 = if let Some((rcs_projection_1_ct, rcs_projection_1_batched)) =
         &round_proof.rcs_projection_1_inner
     {
         hash_wrapper.update_with_ring_element_slice(rcs_projection_1_ct);
-        let challenges_3_1_a: [BatchedProjectionChallengesSuccinct; NOF_BATCHES] =
+        let challenges_3_1: [BatchedProjectionChallengesSuccinct; NOF_BATCHES] =
             std::array::from_fn(|_| {
                 // let challenges =
                 verifier_sample_projection_challenges(&projection_matrix, config, hash_wrapper)
@@ -494,7 +494,7 @@ pub fn sumcheck_verifier(
 
         // verifier_sample_projection_challenges(&projection_matrix, config, hash_wrapper);
         hash_wrapper.update_with_ring_element_slice(rcs_projection_1_batched);
-        Some(challenges_3_1_a)
+        Some(challenges_3_1)
     } else {
         None
     };
@@ -609,7 +609,7 @@ pub fn sumcheck_verifier(
         evaluation_points_outer,
         &projection_matrix,
         &projection_matrix_flatter_structured, // assume type0 projection TODO: make optional
-        &challenges_3_1_a,                     // for 1 projection type only
+        &challenges_3_1,                     // for 1 projection type only
         &combination,
         &qe,
     );

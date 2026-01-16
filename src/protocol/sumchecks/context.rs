@@ -44,7 +44,7 @@ pub struct SumcheckContext {
     pub type3sumcheck: Option<Type3SumcheckContext>,
     pub type4sumchecks: Vec<Type4SumcheckContext>,
     pub type5sumcheck: Type5SumcheckContext,
-    pub type3_1_a_sumchecks: Option<Type3_1SumcheckContextWrapper>, // it should never go together with type3sumcheck TODO: refactor for enum I guess
+    pub type3_1_sumchecks: Option<Type3_1SumcheckContextWrapper>, // it should never go together with type3sumcheck TODO: refactor for enum I guess
     pub combiner: ElephantCell<Combiner<RingElement>>,
     pub field_combiner: ElephantCell<RingToFieldCombiner>,
     pub next: Option<Box<SumcheckContext>>,
@@ -139,58 +139,58 @@ impl SumcheckContext {
                 .partial_evaluate(r);
         }
 
-        if let Some(type3_1_a_sumchecks) = &mut self.type3_1_a_sumchecks {
-            type3_1_a_sumchecks
+        if let Some(type3_1_sumchecks) = &mut self.type3_1_sumchecks {
+            type3_1_sumchecks
                 .projection_combiner_constant_sumcheck
                 .borrow_mut()
                 .partial_evaluate(r);
-            type3_1_a_sumchecks
+            type3_1_sumchecks
                 .projection_combiner_sumcheck
                 .borrow_mut()
                 .partial_evaluate(r);
-            type3_1_a_sumchecks
+            type3_1_sumchecks
                 .rhs_fold_challenge_sumcheck
                 .borrow_mut()
                 .partial_evaluate(r);
-            type3_1_a_sumchecks
+            type3_1_sumchecks
                 .lhs_scalar_consistency_sumcheck
                 .borrow_mut()
                 .partial_evaluate(r);
-            type3_1_a_sumchecks
+            type3_1_sumchecks
                 .projection_constant_terms_embedded_selector_sumcheck
                 .borrow_mut()
                 .partial_evaluate(r);
-            type3_1_a_sumchecks
+            type3_1_sumchecks
                 .projection_constant_terms_embedded_combiner_sumcheck
                 .borrow_mut()
                 .partial_evaluate(r);
-            type3_1_a_sumchecks
+            type3_1_sumchecks
                 .projection_constant_terms_embedded_constant_sumcheck
                 .borrow_mut()
                 .partial_evaluate(r);
 
-            for type3_1_a_sc in type3_1_a_sumchecks.sumchecks.iter_mut() {
-                type3_1_a_sc
+            for type3_1_sc in type3_1_sumchecks.sumchecks.iter_mut() {
+                type3_1_sc
                     .lhs_flatter_0_sumcheck
                     .borrow_mut()
                     .partial_evaluate(r);
-                type3_1_a_sc
+                type3_1_sc
                     .lhs_flatter_1_times_matrix_sumcheck
                     .borrow_mut()
                     .partial_evaluate(r);
-                type3_1_a_sc
+                type3_1_sc
                     .projection_selector_sumcheck
                     .borrow_mut()
                     .partial_evaluate(r);
-                type3_1_a_sc
+                type3_1_sc
                     .lhs_consistency_flatter_sumcheck
                     .borrow_mut()
                     .partial_evaluate(r);
-                type3_1_a_sc
+                type3_1_sc
                     .rhs_consistency_flatter_sumcheck
                     .borrow_mut()
                     .partial_evaluate(r);
-                type3_1_a_sc
+                type3_1_sc
                     .rhs_scalar_consistency_sumcheck
                     .borrow_mut()
                     .partial_evaluate(r);
