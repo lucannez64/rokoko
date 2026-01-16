@@ -551,6 +551,14 @@ pub fn sumcheck_verifier(
         &combination,
     );
 
+    if let Some(constant_term_claims) = &round_proof.constant_term_claims {
+        for ct_claim in constant_term_claims.iter() {
+            let mut c = ct_claim.clone();
+            c.from_incomplete_ntt_to_even_odd_coefficients();
+            assert_eq!(c.v[0], 0);
+        }
+    }
+
     let mut batched_claim_over_field = {
         let batched_claim = {
             let mut temp = batched_claim.clone();
