@@ -1,5 +1,6 @@
 use crate::{
     common::{
+        arithmetic::{ONE, ONE_QUAD},
         config::{DEGREE, NOF_BATCHES},
         decomposition::get_decomposed_offset_scaled,
         ring_arithmetic::{QuadraticExtension, Representation, RingElement},
@@ -22,10 +23,7 @@ use crate::{
             selector_eq::SelectorEqEvaluation,
         },
         sumchecks::context_verifier::{
-            Type0VerifierContext, Type1VerifierContext, Type2VerifierContext, Type3VerifierContext,
-            Type3_1AVerifierContext, Type3_1AVerifierContextWrapper, Type4LayerVerifierContext,
-            Type4OutputLayerVerifierContext, Type4VerifierContext, Type5VerifierContext,
-            VerifierSumcheckContext,
+            Type0VerifierContext, Type1VerifierContext, Type2VerifierContext, Type3_1AVerifierContext, Type3_1AVerifierContextWrapper, Type3VerifierContext, Type4LayerVerifierContext, Type4OutputLayerVerifierContext, Type4VerifierContext, Type5VerifierContext, VerifierSumcheckContext
         },
     },
 };
@@ -562,13 +560,13 @@ pub fn init_verifier(crs: &CRS, config: &Config) -> VerifierSumcheckContext {
     let type3_1_a_evaluations = match &config.projection_recursion {
         Projection::Type1(proj_config) => {
             let projection_combiner_evaluation = load_combiner_evaluation_data(
-                proj_config.recursion_constant_term.decomposition_base_log as u64,
-                proj_config.recursion_constant_term.decomposition_chunks,
+                proj_config.recursion_batched_projection.decomposition_base_log as u64,
+                proj_config.recursion_batched_projection.decomposition_chunks,
                 total_vars,
             );
             let projection_combiner_constant_evaluation = load_combiner_constant_evaluation(
-                proj_config.recursion_constant_term.decomposition_base_log as u64,
-                proj_config.recursion_constant_term.decomposition_chunks,
+                proj_config.recursion_batched_projection.decomposition_base_log as u64,
+                proj_config.recursion_batched_projection.decomposition_chunks,
                 total_vars,
             );
             let rhs_fold_challenge_evaluation = basic_evaluation_linear(
@@ -584,6 +582,58 @@ pub fn init_verifier(crs: &CRS, config: &Config) -> VerifierSumcheckContext {
                     .decomposition_chunks
                     .ilog2() as usize,
             );
+
+            let projection_constant_term_combiner_evaluation =
+                load_combiner_evaluation_data(
+                    proj_config.recursion_constant_term.decomposition_base_log as u64,
+                    proj_config.recursion_constant_term.decomposition_chunks,
+                    total_vars,
+                );
+
+            let projection_constant_term_combiner_constant_evaluation =
+                load_combiner_constant_evaluation(
+                    proj_config.recursion_constant_term.decomposition_base_log as u64,
+                    proj_config.recursion_constant_term.decomposition_chunks,
+                    total_vars,
+                );
+
+            let recomposed_projection = ElephantCell::new(DiffSumcheckEvaluation::new(
+                ElephantCell::new(ProductSumcheckEvaluation::new(
+                    combined_witness_evaluation.clone(),
+                    projection_combiner_evaluation.clone(),
+                )),
+                projection_combiner_constant_evaluation.clone(),
+            ));
+
+            let recomposed_projection_constant_term =
+                ElephantCell::new(DiffSumcheckEvaluation::new(
+                    ElephantCell::new(ProductSumcheckEvaluation::new(
+                        combined_witness_evaluation.clone(),
+                        projection_constant_term_combiner_evaluation.clone(),
+                    )),
+                    projection_constant_term_combiner_constant_evaluation.clone(),
+                ));
+
+            let projection_constant_term_selector_evaluation = selector_evaluation_from_prefix(
+                &proj_config.recursion_constant_term.prefix,
+                total_vars,
+            );
+
+            let mut lhs_scalar_consistency_evaluation_field = ElephantCell::new(
+                BasicEvaluationLinearSumcheck::<QuadraticExtension>::new_with_prefixed_sufixed_data(
+                    1, total_vars, 0,
+                ),
+            );
+
+            lhs_scalar_consistency_evaluation_field
+                .borrow_mut()
+                .load_from(&[ONE_QUAD.clone()]);
+
+
+            let lhs_scalar_consistency_evaluation = ElephantCell::new(
+                RingToFieldWrapperEvaluation::new(lhs_scalar_consistency_evaluation_field.clone()),
+            );
+
             let contexts: [Type3_1AVerifierContext; NOF_BATCHES] = std::array::from_fn(|i| {
                 // Split coefficients into block indices (elder vars) and within-block (LS vars)
                 let height = config.projection_height;
@@ -627,14 +677,6 @@ pub fn init_verifier(crs: &CRS, config: &Config) -> VerifierSumcheckContext {
                     lhs_flatter_1_times_matrix_evaluation.clone(),
                 ));
 
-                let recomposed_projection = ElephantCell::new(DiffSumcheckEvaluation::new(
-                    ElephantCell::new(ProductSumcheckEvaluation::new(
-                        combined_witness_evaluation.clone(),
-                        projection_combiner_evaluation.clone(),
-                    )),
-                    projection_combiner_constant_evaluation.clone(),
-                ));
-
                 let lhs = ElephantCell::new(ProductSumcheckEvaluation::new(
                     folded_witness_selector_evaluation.clone(),
                     ElephantCell::new(ProductSumcheckEvaluation::new(
@@ -653,12 +695,94 @@ pub fn init_verifier(crs: &CRS, config: &Config) -> VerifierSumcheckContext {
 
                 let output = ElephantCell::new(DiffSumcheckEvaluation::new(lhs, rhs));
 
+                let lhs_consistency_flatter_evaluation_field = ElephantCell::new(
+                    StructuredRowEvaluationLinearSumcheck::<QuadraticExtension>::new_with_prefixed_sufixed_data(
+                        config.witness_width,
+                        total_vars
+                            - config.witness_width.ilog2() as usize
+                            - proj_config
+                                .recursion_batched_projection
+                                .decomposition_chunks
+                                .ilog2() as usize,
+                        proj_config
+                            .recursion_batched_projection
+                            .decomposition_chunks
+                            .ilog2() as usize,
+                    ),
+                );
+
+                let lhs_consistency_flatter_evaluation =
+                    ElephantCell::new(RingToFieldWrapperEvaluation::new(
+                        lhs_consistency_flatter_evaluation_field.clone(),
+                    ));
+
+                let lhs = ElephantCell::new(ProductSumcheckEvaluation::new(
+                    lhs_scalar_consistency_evaluation.clone(),
+                    ElephantCell::new(ProductSumcheckEvaluation::new(
+                        projection_selector_evaluation.clone(),
+                        ElephantCell::new(ProductSumcheckEvaluation::new(
+                            lhs_consistency_flatter_evaluation.clone(),
+                            recomposed_projection.clone(),
+                        )),
+                    )),
+                ));
+
+                // c_2 \otimes c_0 \otimes e_0
+                let rhs_flatter_len =
+                    config.witness_width * blocks * config.projection_height / DEGREE;
+
+                let rhs_consistency_flatter_evaluation_field = ElephantCell::new(
+                    StructuredRowEvaluationLinearSumcheck::<QuadraticExtension>::new_with_prefixed_sufixed_data(
+                        rhs_flatter_len,
+                        total_vars
+                            - rhs_flatter_len.ilog2() as usize
+                            - proj_config
+                                .recursion_constant_term
+                                .decomposition_chunks
+                                .ilog2() as usize,
+                        proj_config
+                            .recursion_constant_term
+                            .decomposition_chunks
+                            .ilog2() as usize,
+                    ),
+                );
+
+                let rhs_consistency_flatter_evaluation =
+                    ElephantCell::new(RingToFieldWrapperEvaluation::new(
+                        rhs_consistency_flatter_evaluation_field.clone(),
+                    ));
+
+                let mut rhs_scalar_consistency_evaluation = ElephantCell::new(
+                    BasicEvaluationLinearSumcheck::<RingElement>::new_with_prefixed_sufixed_data(
+                        1, total_vars, 0,
+                    ),
+                );
+
+                let rhs = ElephantCell::new(ProductSumcheckEvaluation::new(
+                    rhs_scalar_consistency_evaluation.clone(),
+                    ElephantCell::new(ProductSumcheckEvaluation::new(
+                        projection_constant_term_selector_evaluation.clone(),
+                        ElephantCell::new(ProductSumcheckEvaluation::new(
+                            rhs_consistency_flatter_evaluation.clone(),
+                            recomposed_projection_constant_term.clone(),
+                        )),
+                    )),
+                ));
+
+                let output_consistency = ElephantCell::new(DiffSumcheckEvaluation::new(lhs, rhs));
+
                 Type3_1AVerifierContext {
                     lhs_flatter_0_evaluation_field,
                     lhs_flatter_0_evaluation,
                     lhs_flatter_1_times_matrix_evaluation,
                     projection_selector_evaluation,
                     output,
+                    lhs_consistency_flatter_evaluation_field,
+                    lhs_consistency_flatter_evaluation,
+                    rhs_consistency_flatter_evaluation_field,
+                    rhs_consistency_flatter_evaluation,
+                    rhs_scalar_consistency_evaluation,
+                    output_2: output_consistency,
                 }
             });
             Some(Type3_1AVerifierContextWrapper {
@@ -666,6 +790,8 @@ pub fn init_verifier(crs: &CRS, config: &Config) -> VerifierSumcheckContext {
                 projection_combiner_constant_evaluation,
                 projection_combiner_evaluation,
                 rhs_fold_challenge_evaluation,
+                lhs_scalar_consistency_evaluation_field,
+                lhs_scalar_consistency_evaluation
             })
         }
         _ => None,
@@ -737,6 +863,7 @@ pub fn init_verifier(crs: &CRS, config: &Config) -> VerifierSumcheckContext {
     if let Some(type3_1_a_evaluations) = &type3_1_a_evaluations {
         for type3_1_a in &type3_1_a_evaluations.sumchecks {
             all_outputs.push(type3_1_a.output.clone());
+            // all_outputs.push(type3_1_a.output_2.clone()); // HEREX
         }
     }
 

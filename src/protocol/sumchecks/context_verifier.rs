@@ -102,6 +102,19 @@ pub struct Type3_1AVerifierContext {
         ElephantCell<BasicEvaluationLinearSumcheck<RingElement>>,
     pub projection_selector_evaluation: ElephantCell<SelectorEqEvaluation>,
     pub output: ElephantCell<DiffSumcheckEvaluation>,
+
+    pub lhs_consistency_flatter_evaluation_field:
+        ElephantCell<StructuredRowEvaluationLinearSumcheck<QuadraticExtension>>,
+    pub rhs_consistency_flatter_evaluation_field:
+        ElephantCell<StructuredRowEvaluationLinearSumcheck<QuadraticExtension>>,
+
+    pub lhs_consistency_flatter_evaluation: ElephantCell<RingToFieldWrapperEvaluation>,
+    pub rhs_consistency_flatter_evaluation: ElephantCell<RingToFieldWrapperEvaluation>,
+
+    pub rhs_scalar_consistency_evaluation:
+        ElephantCell<BasicEvaluationLinearSumcheck<RingElement>>,
+
+    pub output_2: ElephantCell<DiffSumcheckEvaluation>,
 }
 pub struct Type3_1AVerifierContextWrapper {
     pub sumchecks: [Type3_1AVerifierContext; NOF_BATCHES],
@@ -109,6 +122,8 @@ pub struct Type3_1AVerifierContextWrapper {
         ElephantCell<BasicEvaluationLinearSumcheck<RingElement>>,
     pub projection_combiner_evaluation: ElephantCell<BasicEvaluationLinearSumcheck<RingElement>>,
     pub rhs_fold_challenge_evaluation: ElephantCell<BasicEvaluationLinearSumcheck<RingElement>>,
+    pub lhs_scalar_consistency_evaluation_field: ElephantCell<BasicEvaluationLinearSumcheck<QuadraticExtension>>,
+    pub lhs_scalar_consistency_evaluation: ElephantCell<RingToFieldWrapperEvaluation>,
 }
 
 pub struct Type4VerifierContext {

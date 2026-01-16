@@ -574,6 +574,7 @@ pub fn init_sumcheck(crs: &crs::CRS, config: &Config) -> SumcheckContext {
             };
 
             let (
+                // TODO: rename projection_constant to projection_constant_terms_embedded
                 projection_constant_term_combiner_sumcheck,
                 projection_constant_term_constant_sumcheck,
             ) = composition_sumcheck(
@@ -593,7 +594,7 @@ pub fn init_sumcheck(crs: &crs::CRS, config: &Config) -> SumcheckContext {
                 projection_combiner_constant_sumcheck.clone(),
             ));
 
-            let recomposed_constant_term_projection = ElephantCell::new(DiffSumcheck::new(
+            let recomposed_projection_constant_term = ElephantCell::new(DiffSumcheck::new(
                 ElephantCell::new(ProductSumcheck::new(
                     combined_witness_sumcheck.clone(),
                     projection_constant_term_combiner_sumcheck.clone(),
@@ -601,11 +602,8 @@ pub fn init_sumcheck(crs: &crs::CRS, config: &Config) -> SumcheckContext {
                 projection_constant_term_constant_sumcheck.clone(),
             ));
 
-            let projection_contant_term_selector_sumcheck = sumcheck_from_prefix(
-                &Prefix {
-                    prefix: projection_recursion.recursion_constant_term.prefix.prefix,
-                    length: projection_recursion.recursion_constant_term.prefix.length,
-                },
+            let projection_constant_term_selector_sumcheck = sumcheck_from_prefix(
+                &projection_recursion.recursion_constant_term.prefix,
                 total_vars,
             );
 
@@ -625,6 +623,14 @@ pub fn init_sumcheck(crs: &crs::CRS, config: &Config) -> SumcheckContext {
                         .ilog2() as usize,
                 ),
             );
+
+            let mut lhs_scalar_consistency_sumcheck = ElephantCell::new(
+                LinearSumcheck::<RingElement>::new_with_prefixed_sufixed_data(1, total_vars, 0),
+            );
+
+            lhs_scalar_consistency_sumcheck
+                .borrow_mut()
+                .load_from(&[ONE.clone()]);
             // Build one context per batch
             // Each batch has its own projection result stored at a different prefix location
             let contexts: [Type3_1ASumcheckContext; NOF_BATCHES] = std::array::from_fn(|i| {
@@ -707,8 +713,6 @@ pub fn init_sumcheck(crs: &crs::CRS, config: &Config) -> SumcheckContext {
 
                 let output = ElephantCell::new(DiffSumcheck::new(lhs, rhs));
 
-                println!("total_vars: {}", total_vars);
-
                 let lhs_consistency_flatter_sumcheck = ElephantCell::new(
                     LinearSumcheck::<RingElement>::new_with_prefixed_sufixed_data(
                         config.witness_width,
@@ -724,14 +728,6 @@ pub fn init_sumcheck(crs: &crs::CRS, config: &Config) -> SumcheckContext {
                             .ilog2() as usize,
                     ),
                 );
-
-                let mut lhs_scalar_consistency_sumcheck = ElephantCell::new(
-                    LinearSumcheck::<RingElement>::new_with_prefixed_sufixed_data(1, total_vars, 0),
-                );
-
-                lhs_scalar_consistency_sumcheck
-                    .borrow_mut()
-                    .load_from(&[ONE.clone()]);
 
                 let lhs = ElephantCell::new(ProductSumcheck::new(
                     lhs_scalar_consistency_sumcheck.clone(),
@@ -771,10 +767,10 @@ pub fn init_sumcheck(crs: &crs::CRS, config: &Config) -> SumcheckContext {
                 let rhs = ElephantCell::new(ProductSumcheck::new(
                     rhs_scalar_consistency_sumcheck.clone(),
                     ElephantCell::new(ProductSumcheck::new(
-                        projection_contant_term_selector_sumcheck.clone(),
+                        projection_constant_term_selector_sumcheck.clone(),
                         ElephantCell::new(ProductSumcheck::new(
                             rhs_consistency_flatter_sumcheck.clone(),
-                            recomposed_constant_term_projection.clone(),
+                            recomposed_projection_constant_term.clone(),
                         )),
                     )),
                 ));
@@ -786,7 +782,6 @@ pub fn init_sumcheck(crs: &crs::CRS, config: &Config) -> SumcheckContext {
                     lhs_flatter_1_times_matrix_sumcheck,
                     projection_selector_sumcheck,
                     output,
-                    lhs_scalar_consistency_sumcheck,
                     lhs_consistency_flatter_sumcheck,
                     rhs_scalar_consistency_sumcheck,
                     rhs_consistency_flatter_sumcheck,
@@ -798,7 +793,11 @@ pub fn init_sumcheck(crs: &crs::CRS, config: &Config) -> SumcheckContext {
                 sumchecks: contexts,
                 projection_combiner_constant_sumcheck,
                 projection_combiner_sumcheck,
+                projection_constant_term_combiner_sumcheck,
+                projection_constant_term_constant_sumcheck,
                 rhs_fold_challenge_sumcheck,
+                lhs_scalar_consistency_sumcheck,
+                projection_constant_term_selector_sumcheck
             })
         }
         _ => None,
@@ -885,6 +884,7 @@ pub fn init_sumcheck(crs: &crs::CRS, config: &Config) -> SumcheckContext {
     if let Some(type3_1_a_contexts) = &type3_1_a_sumchecks {
         for type3_1_a_ctx in type3_1_a_contexts.sumchecks.iter() {
             all_outputs.push(type3_1_a_ctx.output.clone());
+            // all_outputs.push(type3_1_a_ctx.output_2.clone()); // HEREX
         }
     }
 

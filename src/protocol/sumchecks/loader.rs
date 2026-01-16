@@ -161,9 +161,6 @@ pub fn load_sumcheck_data(
                 .zip(challenges.iter())
                 .enumerate()
             {
-                // let c_0_values = challenges.c_0_values;
-                // let c_1_values = challenges.c_1_values;
-                // let j_batched = challenges.j_batched;
                 // Lift c_0_values from u64 to RingElement and load into lhs_flatter_0
                 let c_0_ring: Vec<RingElement> = challenges
                     .c_0_values
@@ -205,7 +202,7 @@ pub fn load_sumcheck_data(
                     .map(|&x| RingElement::constant(x, Representation::IncompleteNTT))
                     .collect::<Vec<RingElement>>();
 
-                let rhs_multipier_ring = {
+                let rhs_multipier_ring: Vec<RingElement> = {
                     // c_2 \otimes c_0 \otimes e_0
                     // first over u64
                     let values_0 =

@@ -50,7 +50,8 @@ pub trait HighOrderSumcheckData {
     }
 
     fn claim(&self) -> Self::Element {
-        let mut poly = self.get_scratch_poly().borrow_mut();
+        // let mut poly = self.get_scratch_poly().borrow_mut();
+        let mut poly = Polynomial::new(0);
         self.univariate_polynomial_into(&mut poly);
         let mut res = poly.at_one();
         res += &poly.at_zero();

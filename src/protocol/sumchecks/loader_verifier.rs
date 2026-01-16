@@ -1,7 +1,7 @@
 use crate::{
     common::{
-        arithmetic::field_to_ring_element_into,
-        config::{HALF_DEGREE, NOF_BATCHES},
+        arithmetic::{field_to_ring_element_into, precompute_structured_values_fast},
+        config::{DEGREE, HALF_DEGREE, NOF_BATCHES},
         matrix::new_vec_zero_preallocated,
         projection_matrix::ProjectionMatrix,
         ring_arithmetic::{QuadraticExtension, Representation, RingElement, SHIFT_FACTORS},
@@ -136,7 +136,6 @@ pub fn load_verifier_sumcheck_data(
                 .borrow_mut()
                 .load_from(&challenges.j_batched);
 
-            // TODO make a smarter sumcheck over u64
             let c_0_field = StructuredRow {
                 tensor_layers: challenges
                     .c_0_layers
@@ -148,6 +147,73 @@ pub fn load_verifier_sumcheck_data(
                 .lhs_flatter_0_evaluation_field
                 .borrow_mut()
                 .load_from(c_0_field);
+
+            // consistency cehck between embedded constant terms
+            let (e_0_layers, e) = {
+                let mut e_0_layers = Vec::new();
+                let mut e_1_layers = Vec::new();
+                for (i, &layer) in challenges.c_1_layers.iter().enumerate() {
+                    if i < challenges.c_1_layers.len() - DEGREE.ilog2() as usize {
+                        e_0_layers.push(layer);
+                    } else {
+                        e_1_layers.push(layer);
+                    }
+                }
+
+                let e_1_values = precompute_structured_values_fast(&e_1_layers);
+                let mut e = RingElement::zero(Representation::Coefficients);
+                for (i, &val) in e_1_values.iter().enumerate() {
+                    e.v[i as usize] = val;
+                }
+                e.from_coefficients_to_even_odd_coefficients();
+                e.from_even_odd_coefficients_to_incomplete_ntt_representation();
+                e.conjugate_in_place();
+                (e_0_layers, e)
+            };
+
+            let lhs_layers_fields = StructuredRow {
+                tensor_layers: challenges
+                    .c_2_layers
+                    .iter()
+                    .map(|&x| QuadraticExtension { coeffs: [x, 0] })
+                    .collect::<Vec<QuadraticExtension>>(),
+            };
+
+            let rhs_layers_field = {
+                let mut layers = Vec::new();
+                for c_2 in &challenges.c_2_layers {
+                    layers.push(QuadraticExtension { coeffs: [*c_2, 0] });
+                }
+
+                for c_0 in &challenges.c_0_layers {
+                    layers.push(QuadraticExtension { coeffs: [*c_0, 0] });
+                }
+
+                for layer in &e_0_layers {
+                    layers.push(QuadraticExtension {
+                        coeffs: [*layer, 0],
+                    });
+                }
+                StructuredRow {
+                    tensor_layers: layers,
+                }
+            };
+
+            type3_1_a_eval.sumchecks[batch_idx]
+                .lhs_consistency_flatter_evaluation_field
+                .borrow_mut()
+                .load_from(lhs_layers_fields);
+
+            type3_1_a_eval.sumchecks[batch_idx]
+                .rhs_consistency_flatter_evaluation_field
+                .borrow_mut()
+                .load_from(rhs_layers_field);
+
+            type3_1_a_eval.sumchecks[batch_idx]
+                .rhs_scalar_consistency_evaluation
+                .borrow_mut()
+                .load_from(&vec![e]);
+            
         }
     }
     // Load combiner challenges

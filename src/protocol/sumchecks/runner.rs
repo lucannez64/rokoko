@@ -3,7 +3,7 @@ use std::{array, vec};
 
 use crate::{
     common::{
-        arithmetic::{ONE, field_to_ring_element, field_to_ring_element_into, inner_product},
+        arithmetic::{field_to_ring_element, field_to_ring_element_into, inner_product, ONE},
         config::{HALF_DEGREE, NOF_BATCHES},
         hash::HashWrapper,
         matrix::{self, new_vec_zero_preallocated},
@@ -15,10 +15,11 @@ use crate::{
     protocol::{
         config::{Config, Projection, ProjectionType},
         crs,
-        open::{Opening, evaluation_point_to_structured_row},
+        open::{evaluation_point_to_structured_row, Opening},
         project,
         project_2::{
-            BatchedProjectionChallenges, BatchedProjectionChallengesSuccinct, sample_layers, verifier_sample_projection_challenges
+            sample_layers, verifier_sample_projection_challenges, BatchedProjectionChallenges,
+            BatchedProjectionChallengesSuccinct,
         },
         sumcheck::{self, SumcheckContext},
         sumcheck_utils::{
@@ -41,6 +42,7 @@ fn batch_claims(
     rc_opening_inner: &Vec<RingElement>,
     rc_projection_inner: &Option<Vec<RingElement>>,
     rcs_projection_1_inner: &Option<(Vec<RingElement>, Vec<RingElement>)>,
+    rcs_projection_1_constant_term_claims: &Option<Vec<RingElement>>,
     norm_claim: &RingElement,
     combination: &Vec<RingElement>,
 ) -> RingElement {
@@ -67,8 +69,14 @@ fn batch_claims(
     }
 
     if rcs_projection_1_inner.is_some() {
-        // Type3_1_A: zero claim (difference sumcheck)
-        idx += NOF_BATCHES;
+        // Type3_1_A: zero claim (difference sumcheck) + consistence between ct comm and bp comm
+        for i in 0..NOF_BATCHES {
+            idx += 1;
+            // let mut weighted = rcs_projection_1_constant_term_claims.as_ref().unwrap()[i].clone();
+            // weighted *= &combination[idx];
+            // batched_claim += &weighted;
+            // idx += 1;
+        }
     }
 
     // Type4: Three recursion trees (commitment, opening, projection)
@@ -274,7 +282,7 @@ pub fn sumcheck(
     RingElement,
     Vec<Polynomial<QuadraticExtension>>,
     Vec<RingElement>,
-    Option<Vec<RingElement>>
+    Option<Vec<RingElement>>,
 ) {
     // Removed: let mut hash_wrapper_clone = hash_wrapper.clone(); - unused
     let projection_matrix_flatter = match config.projection_recursion {
@@ -359,20 +367,17 @@ pub fn sumcheck(
         1u64 << (num_vars - 1)
     );
 
-    let constant_term_claims = sumcheck_context
-        .type3_1_a_sumchecks.as_ref()
-        .map(|type3_1_a_sumchecks| {
-            type3_1_a_sumchecks
-                .sumchecks
-                .iter()
-                .map(|type3_1_a_sc| {
-                    type3_1_a_sc
-                        .output_2
-                        .borrow()
-                        .claim()
-                })
-                .collect::<Vec<_>>()
-        });
+    let constant_term_claims =
+        sumcheck_context
+            .type3_1_a_sumchecks
+            .as_ref()
+            .map(|type3_1_a_sumchecks| {
+                type3_1_a_sumchecks
+                    .sumchecks
+                    .iter()
+                    .map(|type3_1_a_sc| type3_1_a_sc.output_2.borrow().claim())
+                    .collect::<Vec<_>>()
+            });
 
     // Collect evaluation points during sumcheck
     let mut evaluation_points: Vec<RingElement> = vec![];
@@ -417,6 +422,16 @@ pub fn sumcheck(
         t_loop.elapsed().as_millis(),
         time_poly,
         time_eval
+    );
+    
+    println!("fe {:?}", sumcheck_context
+        .type3_1_a_sumchecks
+        .as_ref()
+        .unwrap()
+        .sumchecks[1]
+        .output_2
+        .borrow()
+        .final_evaluations_test_only()
     );
 
     // final round
@@ -541,6 +556,7 @@ pub fn sumcheck_verifier(
         &round_proof.rc_opening_inner,
         &round_proof.rc_projection_inner,
         &round_proof.rcs_projection_1_inner,
+        &round_proof.constant_term_claims,
         &round_proof.norm_claim,
         &combination,
     );
@@ -559,6 +575,7 @@ pub fn sumcheck_verifier(
         }
         result
     };
+
 
     let mut num_vars = round_proof.polys.len();
 
@@ -599,6 +616,21 @@ pub fn sumcheck_verifier(
         &combination,
         &qe,
     );
+
+    let mut sc31 = verifier_sumcheck_context.type3_1_a_evaluations.as_ref().map(|ctx| {
+        ctx.sumchecks[1].output_2.borrow_mut().evaluate(&evaluation_points.iter().map(|f| {
+            let mut r = field_to_ring_element(f);
+            r.from_homogenized_field_extensions_to_incomplete_ntt();
+            r
+        }).collect::<Vec<_>>()).clone()
+    }).unwrap();
+
+    {
+        println!("Type3_1_A claim: {:?}", sc31);
+        // sc31.from_incomplete_ntt_to_even_odd_coefficients();
+        // sc31.from_even_odd_coefficients_to_coefficients();
+        // println!("Type3_1_A constant term claim: {}", sc31.v[0]);   
+    }
 
     assert_eq!(
         &batched_claim_over_field,
