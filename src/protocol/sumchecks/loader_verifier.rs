@@ -92,8 +92,9 @@ pub fn load_verifier_sumcheck_data(
             .load_from(projection_flatter_0_structured.clone());
 
         // Load flatter_1 · projection_matrix (within-block coefficients)
-        let projection_flatter_1_preprocessed =
-            PreprocessedRow::from_structured_row(&projection_flatter_1_structured);
+        let mut projection_flatter_1_preprocessed =
+            PreprocessedRow::from_structured_row(&projection_flatter_1_structured); // this is over field actually
+
         let flatter_1_times_matrix = projection_flatter_1_times_matrix(
             projection_matrix,
             &projection_flatter_1_preprocessed,

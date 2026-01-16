@@ -21,7 +21,6 @@ pub enum Representation {
 pub struct RingElement {
     pub v: [u64; DEGREE],
     pub representation: Representation,
-    is_zero: bool,
 }
 
 thread_local! {
@@ -35,7 +34,6 @@ impl RingElement {
         Self {
             v: [0; DEGREE],
             representation,
-            is_zero: true,
         }
     }
 
@@ -43,7 +41,6 @@ impl RingElement {
         let mut element = Self {
             v: [0; DEGREE],
             representation,
-            is_zero: false,
         };
 
         RNG.with(|cell| {
@@ -60,7 +57,6 @@ impl RingElement {
         let mut element = Self {
             v: [0; DEGREE],
             representation: Representation::EvenOddCoefficients,
-            is_zero: false,
         };
         element.v[0] = 1;
 
@@ -73,7 +69,6 @@ impl RingElement {
         let mut element = Self {
             v: [0; DEGREE],
             representation: Representation::EvenOddCoefficients,
-            is_zero: false,
         };
         for i in 0..DEGREE {
             element.v[i] = value;
@@ -88,7 +83,6 @@ impl RingElement {
         let mut element = Self {
             v: [0; DEGREE],
             representation,
-            is_zero: true,
         };
         element.v[0] = 0;
 
@@ -99,7 +93,6 @@ impl RingElement {
         let mut element = Self {
             v: [0; DEGREE],
             representation: Representation::EvenOddCoefficients,
-            is_zero: false,
         };
 
         element.v[0] = value;
@@ -113,7 +106,6 @@ impl RingElement {
         let mut element = Self {
             v: [0; DEGREE],
             representation: Representation::Coefficients,
-            is_zero: false,
         };
 
         RNG.with(|cell| {
@@ -326,7 +318,6 @@ impl RingElement {
     #[inline]
     pub fn set_zero(&mut self) {
         self.v.fill(0);
-        self.is_zero = true;
     }
 
     fn conjugate_in_place_ref(&mut self) {
@@ -646,10 +637,6 @@ pub fn incomplete_ntt_multiplication(
     operand1: &RingElement,
     operand2: &RingElement,
 ) {
-    if operand1.is_zero || operand2.is_zero {
-        result.set_zero();
-        return;
-    }
     assert!(
         operand1.representation == Representation::IncompleteNTT,
         "Operand1 not in Incomplete NTT representation"
