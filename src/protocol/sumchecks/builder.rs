@@ -574,9 +574,8 @@ pub fn init_sumcheck(crs: &crs::CRS, config: &Config) -> SumcheckContext {
             };
 
             let (
-                // TODO: rename projection_constant to projection_constant_terms_embedded
-                projection_constant_term_combiner_sumcheck,
-                projection_constant_term_constant_sumcheck,
+                projection_constant_terms_embedded_combiner_sumcheck,
+                projection_constant_terms_embedded_constant_sumcheck,
             ) = composition_sumcheck(
                 projection_recursion
                     .recursion_constant_term
@@ -594,15 +593,16 @@ pub fn init_sumcheck(crs: &crs::CRS, config: &Config) -> SumcheckContext {
                 projection_combiner_constant_sumcheck.clone(),
             ));
 
-            let recomposed_projection_constant_term = ElephantCell::new(DiffSumcheck::new(
-                ElephantCell::new(ProductSumcheck::new(
-                    combined_witness_sumcheck.clone(),
-                    projection_constant_term_combiner_sumcheck.clone(),
-                )),
-                projection_constant_term_constant_sumcheck.clone(),
-            ));
+            let recomposed_projection_constant_terms_embedded =
+                ElephantCell::new(DiffSumcheck::new(
+                    ElephantCell::new(ProductSumcheck::new(
+                        combined_witness_sumcheck.clone(),
+                        projection_constant_terms_embedded_combiner_sumcheck.clone(),
+                    )),
+                    projection_constant_terms_embedded_constant_sumcheck.clone(),
+                ));
 
-            let projection_constant_term_selector_sumcheck = sumcheck_from_prefix(
+            let projection_constant_terms_embedded_selector_sumcheck = sumcheck_from_prefix(
                 &projection_recursion.recursion_constant_term.prefix,
                 total_vars,
             );
@@ -763,10 +763,10 @@ pub fn init_sumcheck(crs: &crs::CRS, config: &Config) -> SumcheckContext {
                 let rhs = ElephantCell::new(ProductSumcheck::new(
                     rhs_scalar_consistency_sumcheck.clone(),
                     ElephantCell::new(ProductSumcheck::new(
-                        projection_constant_term_selector_sumcheck.clone(),
+                        projection_constant_terms_embedded_selector_sumcheck.clone(),
                         ElephantCell::new(ProductSumcheck::new(
                             rhs_consistency_flatter_sumcheck.clone(),
-                            recomposed_projection_constant_term.clone(),
+                            recomposed_projection_constant_terms_embedded.clone(),
                         )),
                     )),
                 ));
@@ -789,11 +789,11 @@ pub fn init_sumcheck(crs: &crs::CRS, config: &Config) -> SumcheckContext {
                 sumchecks: contexts,
                 projection_combiner_constant_sumcheck,
                 projection_combiner_sumcheck,
-                projection_constant_term_combiner_sumcheck,
-                projection_constant_term_constant_sumcheck,
+                projection_constant_terms_embedded_combiner_sumcheck,
+                projection_constant_terms_embedded_constant_sumcheck,
                 rhs_fold_challenge_sumcheck,
                 lhs_scalar_consistency_sumcheck,
-                projection_constant_term_selector_sumcheck
+                projection_constant_terms_embedded_selector_sumcheck,
             })
         }
         _ => None,
@@ -883,13 +883,6 @@ pub fn init_sumcheck(crs: &crs::CRS, config: &Config) -> SumcheckContext {
             all_outputs.push(type3_1_a_ctx.output_2.clone());
         }
     }
-
-    // Add type3_1_a outputs (batched projections)
-    // if let Some(type3_1_a_contexts) = &type3_1_a_sumchecks {
-    //     for type3_1_a_ctx in type3_1_a_contexts.iter() {
-    //         all_outputs.push(type3_1_a_ctx.output.clone());
-    //     }
-    // }
 
     for type4 in &type4sumchecks {
         for layer in &type4.layers {

@@ -213,7 +213,6 @@ pub fn load_verifier_sumcheck_data(
                 .rhs_scalar_consistency_evaluation
                 .borrow_mut()
                 .load_from(&vec![e]);
-            
         }
     }
     // Load combiner challenges

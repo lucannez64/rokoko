@@ -157,15 +157,15 @@ impl SumcheckContext {
                 .borrow_mut()
                 .partial_evaluate(r);
             type3_1_a_sumchecks
-                .projection_constant_term_selector_sumcheck
+                .projection_constant_terms_embedded_selector_sumcheck
                 .borrow_mut()
                 .partial_evaluate(r);
             type3_1_a_sumchecks
-                .projection_constant_term_combiner_sumcheck
+                .projection_constant_terms_embedded_combiner_sumcheck
                 .borrow_mut()
                 .partial_evaluate(r);
             type3_1_a_sumchecks
-                .projection_constant_term_constant_sumcheck
+                .projection_constant_terms_embedded_constant_sumcheck
                 .borrow_mut()
                 .partial_evaluate(r);
 
@@ -562,10 +562,12 @@ pub struct Type3_1ASumcheckContextWrapper {
     pub sumchecks: [Type3_1ASumcheckContext; NOF_BATCHES],
     pub projection_combiner_sumcheck: ElephantCell<LinearSumcheck<RingElement>>,
     pub projection_combiner_constant_sumcheck: ElephantCell<LinearSumcheck<RingElement>>,
-    pub projection_constant_term_combiner_sumcheck: ElephantCell<LinearSumcheck<RingElement>>,
-    pub projection_constant_term_constant_sumcheck: ElephantCell<LinearSumcheck<RingElement>>,
+    pub projection_constant_terms_embedded_combiner_sumcheck:
+        ElephantCell<LinearSumcheck<RingElement>>,
+    pub projection_constant_terms_embedded_constant_sumcheck:
+        ElephantCell<LinearSumcheck<RingElement>>,
     pub rhs_fold_challenge_sumcheck: ElephantCell<LinearSumcheck<RingElement>>,
-    pub projection_constant_term_selector_sumcheck: ElephantCell<SelectorEq<RingElement>>,
+    pub projection_constant_terms_embedded_selector_sumcheck: ElephantCell<SelectorEq<RingElement>>,
     pub lhs_scalar_consistency_sumcheck: ElephantCell<LinearSumcheck<RingElement>>, // for 1 as to scale over all variables
 }
 

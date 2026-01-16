@@ -606,8 +606,6 @@ pub fn sumcheck_verifier(
         &qe,
     );
 
-
-
     assert_eq!(
         &batched_claim_over_field,
         verifier_sumcheck_context
