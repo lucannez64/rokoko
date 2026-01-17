@@ -6,14 +6,15 @@ use crate::{
         arithmetic::{field_to_ring_element, field_to_ring_element_into, inner_product, ONE},
         config::{HALF_DEGREE, NOF_BATCHES},
         hash::HashWrapper,
-        matrix::{self, new_vec_zero_preallocated},
+        matrix::{self, new_vec_zero_preallocated, HorizontallyAlignedMatrix},
         projection_matrix::ProjectionMatrix,
         ring_arithmetic::{QuadraticExtension, Representation, RingElement},
         structured_row::{PreprocessedRow, StructuredRow},
         sumcheck_element::SumcheckElement,
     },
     protocol::{
-        config::{Config, Projection, ProjectionType},
+        commitment::RecursiveCommitment,
+        config::{Config, Projection, ProjectionType, SumcheckConfig},
         crs,
         open::{evaluation_point_to_structured_row, Opening},
         project,
@@ -36,7 +37,7 @@ use crate::{
 use super::{builder::init_sumcheck, loader::load_sumcheck_data};
 
 fn batch_claims(
-    config: &Config,
+    config: &SumcheckConfig,
     claims: &Vec<RingElement>,
     rc_commitment_inner: &Vec<RingElement>,
     rc_opening_inner: &Vec<RingElement>,
@@ -268,7 +269,7 @@ pub use crate::protocol::proof::Proof;
 /// By keeping this sequence explicit, future changes to the folding schedule
 /// can be reasoned about locally without digging through shared state.
 pub fn sumcheck(
-    config: &Config,
+    config: &SumcheckConfig,
     combined_witness: &Vec<RingElement>,
     projection_matrix: &ProjectionMatrix,
     folding_challenges: &Vec<RingElement>,
@@ -450,29 +451,72 @@ pub fn sumcheck(
     )
 }
 
-pub struct RoundProof {
+pub enum Commitment {
+    Recursive(Vec<RingElement>),
+    Simple(HorizontallyAlignedMatrix<RingElement>),
+}
+
+pub enum CommitmentWithAuxData {
+    Recursive(RecursiveCommitment),
+    Simple(HorizontallyAlignedMatrix<RingElement>),
+}
+
+impl CommitmentWithAuxData {
+    pub fn most_inner_commitment(&self) -> Commitment {
+        match self {
+            CommitmentWithAuxData::Recursive(recursive_commitment) => {
+                Commitment::Recursive(
+                    recursive_commitment
+                        .most_inner_commitment()
+                        .clone(),
+                )
+            }
+            CommitmentWithAuxData::Simple(matrix) => {
+                Commitment::Simple(matrix.clone())
+            }   
+        }
+    }
+}
+
+pub struct SumcheckRoundProof {
     pub polys: Vec<Polynomial<QuadraticExtension>>,
     pub claim_over_witness: RingElement,
     pub claim_over_witness_conjugate: RingElement,
     pub norm_claim: RingElement,
-    pub rc_commitment_inner: Vec<RingElement>,
+    pub rc_commitment_inner: Option<Commitment>, // for the next round
     pub rc_opening_inner: Vec<RingElement>,
     pub rc_projection_inner: Option<Vec<RingElement>>,
     pub rcs_projection_1_inner: Option<(Vec<RingElement>, Vec<RingElement>)>,
     pub constant_term_claims: Option<Vec<RingElement>>,
-    pub next: Option<Box<RoundProof>>,
+    pub next: Option<Box<SumcheckRoundProof>>,
+}
+
+pub struct SimpleRoundProof {
+    // TODO
 }
 
 pub fn sumcheck_verifier(
-    config: &Config,
+    config: &SumcheckConfig,
     verifier_sumcheck_context: &mut VerifierSumcheckContext,
-    round_proof: &RoundProof,
+    rc_commitment_inner: &Vec<RingElement>,
+    round_proof: &SumcheckRoundProof,
     evaluation_points_inner: &Vec<StructuredRow>,
     evaluation_points_outer: &Vec<StructuredRow>,
     claims: &Vec<RingElement>,
     hash_wrapper: &mut HashWrapper,
 ) -> Vec<RingElement> {
-    hash_wrapper.update_with_ring_element_slice(&round_proof.rc_commitment_inner);
+
+    if let Some(current_round_rc_commitment_inner) = &round_proof.rc_commitment_inner {
+        match current_round_rc_commitment_inner {
+            Commitment::Recursive(current_round_rc_commitment_inner) => {
+                hash_wrapper.update_with_ring_element_slice(&current_round_rc_commitment_inner);
+            }
+            Commitment::Simple(_) => {
+                println!("TODO: update Fiat Shamir state here.");
+            }
+        }
+    } // technically else case should not happen (see comment in execution.rs)
+    
     hash_wrapper.update_with_ring_element_slice(&round_proof.rc_opening_inner);
     let mut projection_matrix =
         ProjectionMatrix::new(config.projection_ratio, config.projection_height);
@@ -542,7 +586,7 @@ pub fn sumcheck_verifier(
     let mut batched_claim = batch_claims(
         config,
         claims,
-        &round_proof.rc_commitment_inner,
+        &rc_commitment_inner, // from the previous round
         &round_proof.rc_opening_inner,
         &round_proof.rc_projection_inner,
         &round_proof.rcs_projection_1_inner,

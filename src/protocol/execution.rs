@@ -4,11 +4,10 @@ use num::range;
 
 use crate::{
     common::{
-        arithmetic::inner_product,
-        config::{self, MOD_Q},
+        config::{MOD_Q},
         decomposition::{compose_from_decomposed, decompose},
         hash::HashWrapper,
-        matrix::{new_vec_zero_preallocated, HorizontallyAlignedMatrix, VerticallyAlignedMatrix},
+        matrix::{HorizontallyAlignedMatrix, VerticallyAlignedMatrix, new_vec_zero_preallocated},
         norms,
         projection_matrix::ProjectionMatrix,
         ring_arithmetic::{Representation, RingElement},
@@ -16,16 +15,17 @@ use crate::{
         structured_row::{self, PreprocessedRow, StructuredRow},
     },
     protocol::{
-        commitment::{commit_basic, recursive_commit, RecursiveCommitment},
-        config::{paste_by_prefix, paste_recursive_commitment, Config, Projection, CONFIG},
+        commitment::{RecursiveCommitment, commit_basic, recursive_commit},
+        config::{
+            CONFIG, Config, Projection, SumcheckConfig, paste_by_prefix, paste_recursive_commitment
+        },
         crs::{CK, CRS},
         fold::fold,
-        open::{claim, evaluation_point_to_structured_row, open_at, Opening},
-        prefix::check_prefixing_correctness,
+        open::{Opening, claim, evaluation_point_to_structured_row, evaluation_point_to_structured_row_conjugate, open_at},
         project::project,
         project_2::{batch_projection_n_times, project_coefficients},
         proof::Proof,
-        sumcheck::{self, init_sumcheck, sumcheck, SumcheckContext},
+        sumcheck::{self, SumcheckContext, init_sumcheck, sumcheck},
         sumcheck_utils::{
             common::{EvaluationSumcheckData, HighOrderSumcheckData, SumcheckBaseData},
             linear::{LinearSumcheck, StructuredRowEvaluationLinearSumcheck},
@@ -34,15 +34,16 @@ use crate::{
             builder_verifier::init_verifier,
             context_verifier::VerifierSumcheckContext,
             helpers::projection_coefficients,
-            runner::{sumcheck_verifier, RoundProof},
+            runner::{Commitment, CommitmentWithAuxData, SumcheckRoundProof, sumcheck_verifier},
         }, // sumcheck::sumcheck,
     },
 };
 
 fn verifier_round(
     crs: &CRS,
-    config: &Config,
-    round_proof: &RoundProof,
+    config: &SumcheckConfig,
+    rc_commitment: &Vec<RingElement>,
+    round_proof: &SumcheckRoundProof,
     evaluation_points_inner: &Vec<StructuredRow>,
     evaluation_points_outer: &Vec<StructuredRow>,
     claims: &Vec<RingElement>,
@@ -54,6 +55,7 @@ fn verifier_round(
     let evaluation_points = sumcheck_verifier(
         &config,
         sumcheck_context_verifier,
+        rc_commitment,
         &round_proof,
         &evaluation_points_inner,
         &evaluation_points_outer,
@@ -62,59 +64,65 @@ fn verifier_round(
     );
     let elapsed = start.elapsed().as_nanos();
     println!("Verifier: {} ns", elapsed);
-    match &round_proof.next {
-        Some(next_round_proof) => {
-            let mut conjugated_evaluation_points =
-                new_vec_zero_preallocated(evaluation_points.len());
-            for (i, ep) in evaluation_points.iter().enumerate() {
-                ep.conjugate_into(&mut conjugated_evaluation_points[i]);
-            }
 
-            let (new_evaluation_points_outer, new_evaluation_points_inner) = evaluation_points
-                .split_at(config.next.as_ref().unwrap().witness_width.ilog2() as usize);
-            let (new_conjugated_evaluation_points_outer, new_conjugated_evaluation_points_inner) =
-                conjugated_evaluation_points
-                    .split_at(config.next.as_ref().unwrap().witness_width.ilog2() as usize);
-            verifier_round(
-                crs,
-                &config.next.as_ref().unwrap(),
-                next_round_proof,
-                &vec![
-                    StructuredRow {
-                        tensor_layers: new_evaluation_points_inner.to_vec(),
-                    },
-                    StructuredRow {
-                        tensor_layers: new_conjugated_evaluation_points_inner.to_vec(),
-                    },
-                ],
-                &vec![
-                    StructuredRow {
-                        tensor_layers: new_evaluation_points_outer.to_vec(),
-                    },
-                    StructuredRow {
-                        tensor_layers: new_conjugated_evaluation_points_outer.to_vec(),
-                    },
-                ],
-                &vec![
-                    round_proof.claim_over_witness.clone(),
-                    round_proof.claim_over_witness_conjugate.conjugate(),
-                ],
-                sumcheck_context_verifier.next.as_mut().unwrap(),
-            );
+    match (&round_proof.next, &config.next, &round_proof.rc_commitment_inner) {
+        (Some(next_round_proof), Some(next_config), Some(next_level_commitment_inner)) => {
+
+            match (next_config.as_ref(), next_level_commitment_inner) {
+                (Config::Sumcheck(next_config), Commitment::Recursive(next_level_commitment_inner)) => {
+                    let (new_evaluation_points_outer, new_evaluation_points_inner) = evaluation_points
+                        .split_at(next_config.witness_width.ilog2() as usize);
+
+                    verifier_round(
+                        crs,
+                        &next_config,
+                        &next_level_commitment_inner,
+                        next_round_proof,
+                        &vec![
+                            evaluation_point_to_structured_row(&new_evaluation_points_inner.to_vec()),
+                            evaluation_point_to_structured_row_conjugate(
+                                &new_evaluation_points_inner.to_vec(),
+                            ),
+                        ],
+                        &vec![
+                            evaluation_point_to_structured_row(&new_evaluation_points_outer.to_vec()),
+                            evaluation_point_to_structured_row_conjugate(
+                                &new_evaluation_points_outer.to_vec(),
+                            ),
+                        ],
+                        &vec![
+                            round_proof.claim_over_witness.clone(),
+                            round_proof.claim_over_witness_conjugate.conjugate(),
+                        ],
+                        sumcheck_context_verifier.next.as_mut().unwrap(),
+                    );
+                }
+                (Config::SimpleRound(_), Commitment::Simple(_)) => {
+                    println!(
+                        "Next round is SimpleRound, TODO."
+                    );
+                }
+                _ => {
+                    panic!("Mismatched next round commitment and config types");
+                }
+            }
         }
-        None => {}
+        (None, None, None) => {}
+        _ => {
+            panic!("Next round proof and config and commitment must be both Some or both None");
+        }
     }
 }
 
 pub fn prover_round(
     crs: &CRS,
-    config: &Config,
+    config: &SumcheckConfig,
     rc_commitment: &RecursiveCommitment,
     witness: &VerticallyAlignedMatrix<RingElement>,
     evaluation_points_inner: &Vec<StructuredRow>,
     evaluation_points_outer: &Vec<StructuredRow>,
     sumcheck_context: &mut SumcheckContext,
-) -> RoundProof {
+) -> SumcheckRoundProof {
     let mut hash_wrapper = HashWrapper::new();
 
     let start = std::time::Instant::now();
@@ -198,6 +206,7 @@ pub fn prover_round(
         }
         _ => None,
     };
+    
     let mut fold_challenge = vec![RingElement::zero(Representation::IncompleteNTT); witness.width];
 
     hash_wrapper.sample_biased_ternary_ring_element_vec_into(&mut fold_challenge);
@@ -273,52 +282,79 @@ pub fn prover_round(
 
     let t6 = std::time::Instant::now();
 
-    // if let Some(config) = &config.next {
-    //     let new_commtment = commit_basic(crs, witness, rank);
-    // }
+    let next_round_config = config.next_round_config_base();
 
     let next_round_witness = VerticallyAlignedMatrix {
-        height: if let Some(next_config) = &config.next {
-            next_config.witness_height
+        height: if let Some(next_config) = &next_round_config {
+            next_config.witness_height()
         } else {
             config.composed_witness_length // do nothing further
         },
-        width: if let Some(next_config) = &config.next {
-            next_config.witness_width
+        width: if let Some(next_config) = &next_round_config {
+            next_config.witness_width()
         } else {
             1 // do nothing further
         },
         data: next_round_data,
     };
 
-    let next_round_commitment = if let Some(next_config) = &config.next {
-        assert_eq!(
-            next_round_witness.data.len(),
-            next_config.witness_height * next_config.witness_width
-        );
-        let basic_commitment =
-            commit_basic(&crs, &next_round_witness, next_config.basic_commitment_rank);
+    let next_round_commitment_with_trace = 
+    // match &config.next {
+        // Some(next_config) => Some(
+            match next_config.as_ref() {
+            Config::SimpleRound(simple_config) => {
+                let basic_commitment = commit_basic(
+                    &crs,
+                    &next_round_witness,
+                    simple_config.basic_commitment_rank,
+                );
 
-        println!(
-            "Next round basic commitment created of width {} and height {}.",
-            basic_commitment.width, basic_commitment.height
-        );
+                println!(
+                    "Next round basic commitment created of width {} and height {}.",
+                    basic_commitment.width, basic_commitment.height
+                );
 
-        let rc_commitment = recursive_commit(
-            &crs,
-            &next_config.commitment_recursion,
-            &basic_commitment.data,
-        );
+                // TODO: update Fiat Shamir state here
 
-        println!(
-            "Next round commitment created of length {}.",
-            rc_commitment.committed_data.len()
-        );
+                CommitmentWithAuxData::Simple(basic_commitment)
+            }
+            Config::Sumcheck(sumcheck_config) => {
+                let basic_commitment = commit_basic(
+                    &crs,
+                    &next_round_witness,
+                    sumcheck_config.basic_commitment_rank,
+                );
 
-        Some(rc_commitment)
-    } else {
-        None
+                println!(
+                    "Next round basic commitment created of width {} and height {}.",
+                    basic_commitment.width, basic_commitment.height
+                );
+
+                let rc_commitment = recursive_commit(
+                    &crs,
+                    &sumcheck_config.commitment_recursion,
+                    &basic_commitment.data,
+                );
+
+                hash_wrapper
+                    .update_with_ring_element_slice(&rc_commitment.most_inner_commitment());
+
+                println!(
+                    "Next round commitment created of length {}.",
+                    rc_commitment.committed_data.len()
+                );
+
+                CommitmentWithAuxData::Recursive(rc_commitment)
+            }
+        }
+        // None => {
+        //     // this should technically not happen as when we run sumcheck, there should be a next round
+        //     // but i let it be none for testing purposes
+        //     None
+        // },
     };
+
+    let next_round_commitment = next_round_commitment_with_trace.as_ref().map(|c| c.most_inner_commitment());
 
     let (
         claim_over_witness,
@@ -346,53 +382,52 @@ pub fn prover_round(
         "norm too large, aborting"
     );
 
-    let next_level_proof = match next_round_commitment {
-        None => None,
-        Some(rc_commitment) => {
-            let (new_evaluation_points_outer, new_evaluation_points_inner) = evaluation_points
-                .split_at(config.next.as_ref().unwrap().witness_width.ilog2() as usize);
-            Some(prover_round(
-                &crs,
-                config.next.as_ref().unwrap(),
-                &rc_commitment,
-                &next_round_witness,
-                &vec![
-                    evaluation_point_to_structured_row(&new_evaluation_points_inner.to_vec()),
-                    evaluation_point_to_structured_row(
-                        &new_evaluation_points_inner
-                            .iter()
-                            .map(|f| {
-                                let mut f = f.clone();
-                                f.conjugate_in_place();
-                                f
-                            })
-                            .collect::<Vec<_>>(),
-                    ),
-                ],
-                &vec![
-                    evaluation_point_to_structured_row(&new_evaluation_points_outer.to_vec()),
-                    evaluation_point_to_structured_row(
-                        &new_evaluation_points_outer
-                            .iter()
-                            .map(|f| {
-                                let mut f = f.clone();
-                                f.conjugate_in_place();
-                                f
-                            })
-                            .collect::<Vec<_>>(),
-                    ),
-                ],
-                sumcheck_context.next.as_mut().unwrap(),
-            ))
-        }
+    let next_level_proof = match (next_round_commitment_with_trace, &config.next) {
+        (Some(rc_commitment), Some(next_config)) => match (rc_commitment, next_config.as_ref()) {
+            (CommitmentWithAuxData::Recursive(rc_commitment), Config::Sumcheck(next_config)) => {
+                let (new_evaluation_points_outer, new_evaluation_points_inner) =
+                    evaluation_points.split_at(next_config.witness_width.ilog2() as usize);
+
+                Some(prover_round(
+                    &crs,
+                    next_config,
+                    &rc_commitment,
+                    &next_round_witness,
+                    &vec![
+                        evaluation_point_to_structured_row(&new_evaluation_points_inner.to_vec()),
+                        evaluation_point_to_structured_row_conjugate(
+                            &new_evaluation_points_inner.to_vec(),
+                        ),
+                    ],
+                    &vec![
+                        evaluation_point_to_structured_row(&new_evaluation_points_outer.to_vec()),
+                        evaluation_point_to_structured_row_conjugate(
+                            &new_evaluation_points_outer.to_vec(),
+                        ),
+                    ],
+                    sumcheck_context.next.as_mut().unwrap(),
+                ))
+            }
+            (CommitmentWithAuxData::Simple(_), Config::SimpleRound(_)) => {
+                println!(
+                    "Next round is SimpleRound, TODO."
+                );
+                None
+            }
+            _ => panic!("Mismatched next round commitment and config types"),
+        },
+        (None, None) => None,
+        _ => panic!("Next round commitment and config must be both Some or both None"),
     };
 
-    let rp = RoundProof {
+    let rp = SumcheckRoundProof {
         polys: sumcheck_transcript,
         claim_over_witness: claim_over_witness,
         claim_over_witness_conjugate: claim_over_witness_conjugate,
         norm_claim: norm_claim,
-        rc_commitment_inner: rc_commitment.most_inner_commitment().clone(),
+        // rc_commitment_inner: next_level_proof,
+        rc_commitment_inner: next_round_commitment,
+        // rc_commitment_inner: rc_commitment.most_inner_commitment().clone(),
         rc_opening_inner: rc_opening.most_inner_commitment().clone(),
         rc_projection_inner: rc_projection_image
             .as_ref()
@@ -413,19 +448,23 @@ pub fn prover_round(
 }
 
 pub fn execute() {
+    let config = match CONFIG.clone() {
+        Config::Sumcheck(cfg) => cfg.clone(),
+        _ => panic!("Top-level config must be SumcheckConfig"),
+    };
     // check_prefixing_correctness(&CONFIG);
     println!("Generating CRS...");
-    let crs = CRS::gen_crs(CONFIG.composed_witness_length, CONFIG.basic_commitment_rank);
+    let crs = CRS::gen_crs(config.composed_witness_length, config.basic_commitment_rank);
 
-    let mut sumcheck_context = init_sumcheck(&crs, &CONFIG);
-    let mut sumcheck_context_verifier = init_verifier(&crs, &CONFIG);
+    let mut sumcheck_context = init_sumcheck(&crs, &config);
+    let mut sumcheck_context_verifier = init_verifier(&crs, &config);
     println!("Sumcheck contexts initialized.");
 
     let witness = VerticallyAlignedMatrix {
-        height: CONFIG.witness_height,
-        width: CONFIG.witness_width,
+        height: config.witness_height,
+        width: config.witness_width,
         data: sample_random_short_vector(
-            CONFIG.witness_height * CONFIG.witness_width,
+            config.witness_height * config.witness_width,
             2,
             Representation::IncompleteNTT,
         ),
@@ -433,7 +472,7 @@ pub fn execute() {
 
     println!("Witness generated.");
 
-    let basic_commitment = commit_basic(&crs, &witness, CONFIG.basic_commitment_rank);
+    let basic_commitment = commit_basic(&crs, &witness, config.basic_commitment_rank);
 
     println!(
         "Basic commitment created of width {} and height {}.",
@@ -441,7 +480,7 @@ pub fn execute() {
     );
 
     let rc_commitment =
-        recursive_commit(&crs, &CONFIG.commitment_recursion, &basic_commitment.data);
+        recursive_commit(&crs, &config.commitment_recursion, &basic_commitment.data);
 
     let evaluation_points_inner = vec![evaluation_point_to_structured_row(
         &range(0, witness.height.ilog2() as usize)
@@ -462,7 +501,7 @@ pub fn execute() {
     )];
     let proof = prover_round(
         &crs,
-        &CONFIG,
+        &config,
         &rc_commitment,
         &witness,
         &evaluation_points_inner,
@@ -472,7 +511,8 @@ pub fn execute() {
 
     verifier_round(
         &crs,
-        &CONFIG,
+        &config,
+        &rc_commitment.most_inner_commitment(),
         &proof,
         &evaluation_points_inner,
         &evaluation_points_outer,

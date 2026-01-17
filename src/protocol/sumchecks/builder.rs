@@ -3,7 +3,7 @@ use std::rc::Rc;
 
 use crate::common::arithmetic::ONE;
 use crate::common::config::DEGREE;
-use crate::protocol::config::Projection;
+use crate::protocol::config::{Projection, SumcheckConfig};
 use crate::protocol::project;
 use crate::protocol::sumchecks::builder;
 use crate::protocol::sumchecks::context::Type3_1SumcheckContextWrapper;
@@ -225,7 +225,7 @@ fn build_type4_sumcheck_context(
 /// decomposition offsets are preloaded so the recomposition gadgets mirror the
 /// commitment arithmetic exactly. When the folding schedule changes, this is the
 /// single place to update the plumbing.
-pub fn init_sumcheck(crs: &crs::CRS, config: &Config) -> SumcheckContext {
+pub fn init_sumcheck(crs: &crs::CRS, config: &SumcheckConfig) -> SumcheckContext {
     let total_vars = config.composed_witness_length.ilog2() as usize;
 
     let mut combined_witness_sumcheck = ElephantCell::new(LinearSumcheck::<RingElement>::new(
@@ -922,7 +922,11 @@ pub fn init_sumcheck(crs: &crs::CRS, config: &Config) -> SumcheckContext {
         combiner,
         field_combiner,
         next: match &config.next {
-            Some(next_config) => Some(Box::new(init_sumcheck(crs, &next_config))),
+            Some(next_config) => match next_config.as_ref() {
+                Config::Sumcheck(next_config) => Some(Box::new(init_sumcheck(crs, next_config))),
+                _ => None,
+                
+            },
             None => None,
         },
     }

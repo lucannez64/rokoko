@@ -4,7 +4,7 @@ use crate::{
     common::ring_arithmetic::RingElement,
     protocol::{
         commitment::{Prefix, RecursionConfig, RecursiveCommitment},
-        config_generator::{AuxConfig, AuxProjection, AuxRecursionConfig},
+        config_generator::{AuxProjection, AuxRecursionConfig, SumcheckAuxConfig},
     },
 };
 
@@ -32,8 +32,14 @@ pub enum Projection {
     Type1(Type1ProjectionConfig),
 }
 
+#[derive(Clone)]
+pub enum AuxConfig {
+    Sumcheck(SumcheckAuxConfig),
+    Simple(SimpleConfig),
+}
+
 pub static REAL_CONFIG: LazyLock<Config> = LazyLock::new(|| {
-    AuxConfig {
+    SumcheckAuxConfig {
         witness_height: 2usize.pow(15),   // 2^15
         witness_width: 2usize.pow(6),     // 2^6
         projection_ratio: 2usize.pow(6),  // 2^6
@@ -68,7 +74,7 @@ pub static REAL_CONFIG: LazyLock<Config> = LazyLock::new(|| {
         witness_decomposition_chunks: 2,
         witness_decomposition_base_log: 10, // no decomposition
 
-        next: Some(Box::new(AuxConfig {
+        next: Some(Box::new(AuxConfig::Sumcheck(SumcheckAuxConfig {
             witness_height: 2usize.pow(10),
             witness_width: 2usize.pow(7),
             projection_ratio: 2usize.pow(7),
@@ -112,13 +118,13 @@ pub static REAL_CONFIG: LazyLock<Config> = LazyLock::new(|| {
             witness_decomposition_base_log: 10, // no decomposition
 
             next: None,
-        })),
+        }))),
     }
     .generate_config()
 });
 
 pub static TOY_CONFIG: LazyLock<Config> = LazyLock::new(|| {
-    AuxConfig {
+    SumcheckAuxConfig {
         witness_height: 512,
         witness_width: 16,
         projection_ratio: 32,
@@ -158,7 +164,7 @@ pub static TOY_CONFIG: LazyLock<Config> = LazyLock::new(|| {
 });
 
 pub static TOY_CONFIG_II: LazyLock<Config> = LazyLock::new(|| {
-    AuxConfig {
+    SumcheckAuxConfig {
         witness_height: 1024,
         witness_width: 16,
         projection_ratio: 32,
@@ -208,8 +214,23 @@ pub static TOY_CONFIG_II: LazyLock<Config> = LazyLock::new(|| {
 
 pub static CONFIG: LazyLock<Config> = LazyLock::new(|| TOY_CONFIG_II.clone());
 
+pub trait ConfigBase {
+    fn witness_height(&self) -> usize;
+    fn witness_width(&self) -> usize;
+    fn projection_ratio(&self) -> usize;
+    fn projection_height(&self) -> usize;
+    fn nof_openings(&self) -> usize;
+    fn basic_commitment_rank(&self) -> usize;
+}
+
 #[derive(Clone)]
-pub struct Config {
+pub enum Config {
+    Sumcheck(SumcheckConfig),
+    SimpleRound(SimpleConfig),
+}
+
+#[derive(Clone)]
+pub struct SumcheckConfig {
     pub witness_height: usize,
     pub witness_width: usize,
     pub projection_ratio: usize,  // shall be likely the witness_height
@@ -227,6 +248,70 @@ pub struct Config {
     pub composed_witness_length: usize,
 
     pub next: Option<Box<Config>>, // for multiple rounds
+}
+
+impl SumcheckConfig {
+    pub fn next_round_config_base(&self) -> Option<&dyn ConfigBase> {
+        match &self.next {
+            Some(boxed_config) => match boxed_config.as_ref() {
+                Config::Sumcheck(config) => Some(config as &dyn ConfigBase),
+                Config::SimpleRound(config) => Some(config as &dyn ConfigBase),
+            },
+            None => None,
+        }
+    }
+}
+
+impl ConfigBase for SumcheckConfig {
+    fn witness_height(&self) -> usize {
+        self.witness_height
+    }
+    fn witness_width(&self) -> usize {
+        self.witness_width
+    }
+    fn projection_ratio(&self) -> usize {
+        self.projection_ratio
+    }
+    fn projection_height(&self) -> usize {
+        self.projection_height
+    }
+    fn nof_openings(&self) -> usize {
+        self.nof_openings
+    }
+    fn basic_commitment_rank(&self) -> usize {
+        self.basic_commitment_rank
+    }
+}
+
+#[derive(Clone)]
+pub struct SimpleConfig {
+    pub witness_height: usize,
+    pub witness_width: usize,
+    pub projection_ratio: usize, // assume Type 1
+    pub projection_height: usize,
+    pub nof_openings: usize,
+    pub basic_commitment_rank: usize,
+}
+
+impl ConfigBase for SimpleConfig {
+    fn witness_height(&self) -> usize {
+        self.witness_height
+    }
+    fn witness_width(&self) -> usize {
+        self.witness_width
+    }
+    fn projection_ratio(&self) -> usize {
+        self.projection_ratio
+    }
+    fn projection_height(&self) -> usize {
+        self.projection_height
+    }
+    fn nof_openings(&self) -> usize {
+        self.nof_openings
+    }
+    fn basic_commitment_rank(&self) -> usize {
+        self.basic_commitment_rank
+    }
 }
 
 #[inline]

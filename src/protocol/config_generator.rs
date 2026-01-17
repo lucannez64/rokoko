@@ -1,6 +1,10 @@
+use std::iter::Sum;
+
 use crate::common::config;
 use crate::protocol::commitment::{Prefix, RecursionConfig};
-use crate::protocol::config::{Config, Projection, Type0ProjectionConfig, Type1ProjectionConfig};
+use crate::protocol::config::{
+    AuxConfig, Config, Projection, SumcheckConfig, Type0ProjectionConfig, Type1ProjectionConfig,
+};
 
 #[derive(Clone)]
 pub struct AuxRecursionConfig {
@@ -21,7 +25,7 @@ pub enum AuxProjection {
 }
 
 #[derive(Clone)]
-pub struct AuxConfig {
+pub struct SumcheckAuxConfig {
     pub witness_height: usize,
     pub witness_width: usize,
     pub projection_ratio: usize,
@@ -43,7 +47,7 @@ struct ComponentInfo {
     path: Vec<String>,
 }
 
-impl AuxConfig {
+impl SumcheckAuxConfig {
     pub fn generate_config(&self) -> Config {
         self.generate_config_inner(0)
     }
@@ -319,7 +323,7 @@ impl AuxConfig {
         // Get folded witness prefix
         let folded_witness_prefix = find_prefix(&["folded_witness".to_string()]);
 
-        Config {
+        Config::Sumcheck(SumcheckConfig {
             witness_height: self.witness_height,
             witness_width: self.witness_width,
             projection_ratio: self.projection_ratio,
@@ -333,11 +337,13 @@ impl AuxConfig {
             witness_decomposition_chunks: self.witness_decomposition_chunks,
             folded_witness_prefix,
             composed_witness_length,
-            next: self
-                .next
-                .as_ref()
-                .map(|next| Box::new(next.generate_config_inner(depth + 1))),
-        }
+            next: self.next.as_ref().map(|next| {
+                Box::new(match **next {
+                    AuxConfig::Sumcheck(ref aux) => aux.generate_config_inner(depth + 1),
+                    AuxConfig::Simple(ref aux) => Config::SimpleRound(aux.clone()),
+                })
+            }),
+        })
     }
 
     fn build_recursion_config(
@@ -380,7 +386,7 @@ mod tests {
 
     #[test]
     fn test_toy_config_generation() {
-        let aux_config = AuxConfig {
+        let aux_config = SumcheckAuxConfig {
             witness_height: 512,
             witness_width: 16,
             projection_ratio: 32,
@@ -420,7 +426,7 @@ mod tests {
 
     #[test]
     fn test_toy_config_ii_generation() {
-        let aux_config = AuxConfig {
+        let aux_config = SumcheckAuxConfig {
             witness_height: 512,
             witness_width: 16,
             projection_ratio: 64,

@@ -22,6 +22,14 @@ pub fn evaluation_point_to_structured_row(evaluation_point: &Vec<RingElement>) -
     }
 }
 
+pub fn evaluation_point_to_structured_row_conjugate(
+    evaluation_point: &Vec<RingElement>,
+) -> StructuredRow {
+    StructuredRow {
+        tensor_layers: evaluation_point.iter().map(|el| el.conjugate()).collect(),
+    }
+}
+
 pub fn open_at(
     witness: &VerticallyAlignedMatrix<RingElement>,
     structured_points_inner: &Vec<StructuredRow>,
