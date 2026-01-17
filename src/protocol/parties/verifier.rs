@@ -1,33 +1,13 @@
 use crate::{
-    common::{
-        config::{self, MOD_Q},
-        decomposition::{compose_from_decomposed, decompose},
-        hash::HashWrapper,
-        matrix::{new_vec_zero_preallocated, HorizontallyAlignedMatrix, VerticallyAlignedMatrix},
-        norms,
-        ring_arithmetic::{Representation, RingElement},
-        sampling::sample_random_short_vector,
-        structured_row::{self, PreprocessedRow, StructuredRow},
-    },
+    common::{hash::HashWrapper, ring_arithmetic::RingElement, structured_row::StructuredRow},
     protocol::{
-        commitment::{commit_basic, recursive_commit, RecursiveCommitmentWithAux},
-        config::{paste_by_prefix, paste_recursive_commitment, Config, Projection, CONFIG},
-        crs::{CK, CRS},
-        fold::fold,
-        open::{
-            claim, evaluation_point_to_structured_row,
-            evaluation_point_to_structured_row_conjugate, open_at, Opening,
-        },
-        prefix::check_prefixing_correctness,
-        project::project,
-        project_2::{batch_projection_n_times, project_coefficients},
-        proof::Proof,
-        sumcheck::{self, init_sumcheck, sumcheck, SumcheckContext},
+        config::Config,
+        crs::CRS,
+        open::{evaluation_point_to_structured_row, evaluation_point_to_structured_row_conjugate},
         sumchecks::{
-            builder_verifier::init_verifier,
             context_verifier::VerifierSumcheckContext,
             runner_verifier::{sumcheck_verifier, RoundProof},
-        }, // sumcheck::sumcheck,
+        },
     },
 };
 

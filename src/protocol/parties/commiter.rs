@@ -1,5 +1,5 @@
 use crate::{
-    common::{config, matrix::VerticallyAlignedMatrix, ring_arithmetic::RingElement},
+    common::{matrix::VerticallyAlignedMatrix, ring_arithmetic::RingElement},
     protocol::{
         commitment::{commit_basic, recursive_commit, RecursiveCommitmentWithAux},
         config::Config,

@@ -1,43 +1,24 @@
-use std::{process::exit, sync::LazyLock};
-
-use num::range;
-
 use crate::{
     common::{
-        arithmetic::inner_product,
-        config::{self, MOD_Q},
-        decomposition::{compose_from_decomposed, decompose},
+        config::MOD_Q,
+        decomposition::decompose,
         hash::HashWrapper,
         matrix::{new_vec_zero_preallocated, HorizontallyAlignedMatrix, VerticallyAlignedMatrix},
         norms,
         projection_matrix::ProjectionMatrix,
         ring_arithmetic::{Representation, RingElement},
-        sampling::sample_random_short_vector,
-        structured_row::{self, PreprocessedRow, StructuredRow},
+        structured_row::{PreprocessedRow, StructuredRow},
     },
     protocol::{
-        commitment::{
-            commit_basic, commit_basic_internal, recursive_commit, RecursiveCommitmentWithAux,
-        },
-        config::{paste_by_prefix, paste_recursive_commitment, Config, Projection, CONFIG},
-        crs::{CK, CRS},
+        commitment::{commit_basic, recursive_commit, RecursiveCommitmentWithAux},
+        config::{paste_by_prefix, paste_recursive_commitment, Config, Projection},
+        crs::CRS,
         fold::fold,
         open::{evaluation_point_to_structured_row, open_at},
-        prefix::check_prefixing_correctness,
         project::project,
         project_2::{batch_projection_n_times, project_coefficients},
-        proof::Proof,
-        sumcheck::{self, init_sumcheck, sumcheck, SumcheckContext},
-        sumcheck_utils::{
-            common::{EvaluationSumcheckData, HighOrderSumcheckData, SumcheckBaseData},
-            linear::{LinearSumcheck, StructuredRowEvaluationLinearSumcheck},
-        },
-        sumchecks::{
-            builder_verifier::init_verifier,
-            context_verifier::VerifierSumcheckContext,
-            helpers::projection_coefficients,
-            runner_verifier::{sumcheck_verifier, RoundProof},
-        }, // sumcheck::sumcheck,
+        sumcheck::{sumcheck, SumcheckContext},
+        sumchecks::runner_verifier::RoundProof,
     },
 };
 
