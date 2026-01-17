@@ -22,7 +22,6 @@ use crate::{
 
 use super::loader::load_sumcheck_data;
 
-pub use crate::protocol::proof::Proof;
 /// Executes the complete sumcheck protocol for all constraints in the prover's proof.
 ///
 /// This is the main entry point for running the sumcheck layer of the protocol. It's
