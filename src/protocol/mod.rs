@@ -1,6 +1,5 @@
 pub mod commitment;
 pub mod crs;
-pub mod execution;
 // pub mod execution_simple;
 pub mod config;
 pub mod config_generator;
@@ -15,3 +14,5 @@ pub mod sumcheck;
 pub mod sumcheck_utils;
 pub mod sumchecks;
 pub mod verifier;
+pub mod parties;
+

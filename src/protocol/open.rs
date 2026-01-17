@@ -22,6 +22,12 @@ pub fn evaluation_point_to_structured_row(evaluation_point: &Vec<RingElement>) -
     }
 }
 
+pub fn evaluation_point_to_structured_row_conjugate(evaluation_point: &Vec<RingElement>) -> StructuredRow {
+    StructuredRow {
+        tensor_layers: evaluation_point.iter().map(|x| x.conjugate()).collect(),
+    }
+}
+
 pub fn open_at(
     witness: &VerticallyAlignedMatrix<RingElement>,
     structured_points_inner: &Vec<StructuredRow>,
@@ -47,19 +53,19 @@ pub fn open_at(
     // it's not a commitment, but we can reuse the same structure
     let mut rhs = commit_basic_internal(&preprocessed_points_inner, witness, nof_evaluation_points);
 
-    let mut evaluations =
-        vec![RingElement::zero(Representation::IncompleteNTT); nof_evaluation_points];
+    // let mut evaluations =
+    //     vec![RingElement::zero(Representation::IncompleteNTT); nof_evaluation_points];
 
-    for (i, preprocessed_row_outer) in preprocessed_points_outer.iter().enumerate() {
-        let mut temp = RingElement::zero(Representation::IncompleteNTT);
-        for col in 0..rhs.width {
-            temp *= (
-                &rhs[(i, col)],
-                &preprocessed_row_outer.preprocessed_row[col],
-            );
-            evaluations[i] += &temp;
-        }
-    }
+    // for (i, preprocessed_row_outer) in preprocessed_points_outer.iter().enumerate() {
+    //     let mut temp = RingElement::zero(Representation::IncompleteNTT);
+    //     for col in 0..rhs.width {
+    //         temp *= (
+    //             &rhs[(i, col)],
+    //             &preprocessed_row_outer.preprocessed_row[col],
+    //         );
+    //         evaluations[i] += &temp;
+    //     }
+    // }
 
     Opening {
         rhs,                                                // Y
