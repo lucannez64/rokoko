@@ -9,7 +9,7 @@ use crate::{
         structured_row::PreprocessedRow,
     },
     protocol::{
-        config::{Config, Projection},
+        config::{Config, Projection, SumcheckConfig},
         open::{evaluation_point_to_structured_row, Opening},
         project_2::BatchedProjectionChallenges,
         sumcheck::SumcheckContext,
@@ -151,7 +151,7 @@ use super::loader::load_sumcheck_data;
 /// By keeping this sequence explicit, future changes to the folding schedule
 /// can be reasoned about locally without digging through shared state.
 pub fn sumcheck(
-    config: &Config,
+    config: &SumcheckConfig,
     combined_witness: &Vec<RingElement>,
     projection_matrix: &ProjectionMatrix,
     folding_challenges: &Vec<RingElement>,

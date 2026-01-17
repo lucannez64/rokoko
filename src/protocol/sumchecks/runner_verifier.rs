@@ -1,3 +1,5 @@
+use std::iter::Sum;
+
 use crate::{
     common::{
         arithmetic::{field_to_ring_element, inner_product},
@@ -10,7 +12,7 @@ use crate::{
         sumcheck_element::SumcheckElement,
     },
     protocol::{
-        config::{Config, Projection},
+        config::{Config, Projection, SumcheckConfig, SumcheckRoundProof},
         open::evaluation_point_to_structured_row,
         project_2::{
             verifier_sample_projection_challenges, BatchedProjectionChallenges,
@@ -24,7 +26,7 @@ use crate::{
 };
 
 fn batch_claims(
-    config: &Config,
+    config: &SumcheckConfig,
     claims: &Vec<RingElement>,
     rc_commitment_inner: &Vec<RingElement>,
     rc_opening_inner: &Vec<RingElement>,
@@ -126,24 +128,11 @@ fn batch_claims(
     batched_claim
 }
 
-pub struct RoundProof {
-    pub polys: Vec<Polynomial<QuadraticExtension>>,
-    pub claim_over_witness: RingElement,
-    pub claim_over_witness_conjugate: RingElement,
-    pub norm_claim: RingElement,
-    pub rc_opening_inner: Vec<RingElement>,
-    pub rc_projection_inner: Option<Vec<RingElement>>,
-    pub rcs_projection_1_inner: Option<(Vec<RingElement>, Vec<RingElement>)>,
-    pub constant_term_claims: Option<Vec<RingElement>>,
-    pub next_round_commitment: Option<Vec<RingElement>>,
-    pub next: Option<Box<RoundProof>>,
-}
-
 pub fn sumcheck_verifier(
-    config: &Config,
+    config: &SumcheckConfig,
     verifier_sumcheck_context: &mut VerifierSumcheckContext,
     rc_commitment: &Vec<RingElement>,
-    round_proof: &RoundProof,
+    round_proof: &SumcheckRoundProof,
     evaluation_points_inner: &Vec<StructuredRow>,
     evaluation_points_outer: &Vec<StructuredRow>,
     claims: &Vec<RingElement>,
@@ -164,9 +153,7 @@ pub fn sumcheck_verifier(
         hash_wrapper.update_with_ring_element_slice(rcs_projection_1_ct);
         let challenges_3_1: [BatchedProjectionChallengesSuccinct; NOF_BATCHES] =
             std::array::from_fn(|_| {
-                // let challenges =
                 verifier_sample_projection_challenges(&projection_matrix, config, hash_wrapper)
-                // challenges
             });
 
         // verifier_sample_projection_challenges(&projection_matrix, config, hash_wrapper);

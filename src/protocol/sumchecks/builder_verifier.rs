@@ -7,7 +7,7 @@ use crate::{
     },
     protocol::{
         commitment::{self, Prefix},
-        config::{Config, Projection},
+        config::{Config, Projection, SumcheckConfig},
         crs::CRS,
         sumcheck_utils::{
             combiner::CombinerEvaluation,
@@ -215,7 +215,7 @@ fn build_type4_verifier_context(
     }
 }
 
-pub fn init_verifier(crs: &CRS, config: &Config) -> VerifierSumcheckContext {
+pub fn init_verifier(crs: &CRS, config: &SumcheckConfig) -> VerifierSumcheckContext {
     let total_vars = config.composed_witness_length.ilog2() as usize;
 
     let combined_witness_evaluation =
@@ -916,7 +916,12 @@ pub fn init_verifier(crs: &CRS, config: &Config) -> VerifierSumcheckContext {
         combiner_evaluation,
         field_combiner_evaluation,
         next: match &config.next {
-            Some(next_config) => Some(Box::new(init_verifier(crs, &next_config))),
+            Some(next_config) => match next_config.as_ref() {
+                Config::Sumcheck(next_sumcheck_config) => {
+                    Some(Box::new(init_verifier(crs, next_sumcheck_config)))
+                }
+                _ => None,
+            },
             None => None,
         },
     }

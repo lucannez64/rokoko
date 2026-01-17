@@ -7,7 +7,7 @@ use crate::{
         sampling::sample_random_short_vector,
     },
     protocol::{
-        config::CONFIG,
+        config::{Config, CONFIG},
         crs::CRS,
         open::{claim, evaluation_point_to_structured_row},
         parties::{commiter::commit, prover::prover_round, verifier::verifier_round},
@@ -19,23 +19,29 @@ use crate::{
 pub fn execute() {
     // check_prefixing_correctness(&CONFIG);
     println!("Generating CRS...");
-    let crs = CRS::gen_crs(CONFIG.composed_witness_length, CONFIG.basic_commitment_rank);
 
-    let mut sumcheck_context = init_sumcheck(&crs, &CONFIG);
-    let mut sumcheck_context_verifier = init_verifier(&crs, &CONFIG);
+    let config = match &*CONFIG {
+        Config::Sumcheck(config) => config,
+        _ => panic!("Expected sumcheck config at the top level."),
+    };
+
+    let crs = CRS::gen_crs(config.composed_witness_length, config.basic_commitment_rank);
+
+    let mut sumcheck_context = init_sumcheck(&crs, &config);
+    let mut sumcheck_context_verifier = init_verifier(&crs, &config);
     println!("Sumcheck contexts initialized.");
 
     let witness = VerticallyAlignedMatrix {
-        height: CONFIG.witness_height,
-        width: CONFIG.witness_width,
+        height: config.witness_height,
+        width: config.witness_width,
         data: sample_random_short_vector(
-            CONFIG.witness_height * CONFIG.witness_width,
+            config.witness_height * config.witness_width,
             2,
             Representation::IncompleteNTT,
         ),
     };
 
-    let (rc_commitment_with_aux, rc_commitment) = commit(&crs, &CONFIG, &witness);
+    let (rc_commitment_with_aux, rc_commitment) = commit(&crs, &config, &witness);
 
     println!("Witness generated.");
 
@@ -59,7 +65,7 @@ pub fn execute() {
 
     let (proof, claims) = prover_round(
         &crs,
-        &CONFIG,
+        &config,
         &rc_commitment_with_aux,
         &witness,
         &evaluation_points_inner,
@@ -72,7 +78,7 @@ pub fn execute() {
 
     verifier_round(
         &crs,
-        &CONFIG,
+        &config,
         &rc_commitment,
         &proof,
         &evaluation_points_inner,

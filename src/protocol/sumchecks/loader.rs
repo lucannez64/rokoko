@@ -1,3 +1,5 @@
+use std::iter::Sum;
+
 use crate::{
     common::{
         arithmetic::{field_to_ring_element_into, precompute_structured_values_fast},
@@ -8,7 +10,7 @@ use crate::{
         structured_row::{PreprocessedRow, StructuredRow},
     },
     protocol::{
-        config::Config,
+        config::{Config, SumcheckConfig},
         open::Opening,
         project_2::BatchedProjectionChallenges,
         sumchecks::helpers::{
@@ -39,7 +41,7 @@ use super::helpers::{projection_coefficients, tensor_product};
 /// * `projection_matrix_flatter_preprocessed` - Preprocessed flattening point for projection
 pub fn load_sumcheck_data(
     sumcheck_context: &mut SumcheckContext,
-    config: &Config,
+    config: &SumcheckConfig,
     combined_witness: &Vec<RingElement>,
     conjugated_combined_witness: &Vec<RingElement>,
     folding_challenges: &Vec<RingElement>,

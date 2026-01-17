@@ -2,14 +2,14 @@ use crate::{
     common::{matrix::VerticallyAlignedMatrix, ring_arithmetic::RingElement},
     protocol::{
         commitment::{commit_basic, recursive_commit, RecursiveCommitmentWithAux},
-        config::Config,
+        config::{ConfigBase, SumcheckConfig},
         crs::CRS,
     },
 };
 
 pub fn commit(
     crs: &CRS,
-    config: &Config,
+    config: &SumcheckConfig,
     witness: &VerticallyAlignedMatrix<RingElement>,
 ) -> (RecursiveCommitmentWithAux, Vec<RingElement>) {
     let basic_commitment = commit_basic(&crs, &witness, config.basic_commitment_rank);

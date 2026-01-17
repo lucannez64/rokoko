@@ -16,7 +16,7 @@ use crate::{
     },
     hexl::bindings::{add_mod, eltwise_reduce_mod, multiply_mod, sub_mod},
     protocol::{
-        config::Config,
+        config::{Config, ConfigBase},
         open::evaluation_point_to_structured_row,
         sumchecks::helpers::{tensor_product, tensor_product_u64},
     },
@@ -519,13 +519,14 @@ pub fn batch_projection_n_times(
 
 pub fn verifier_sample_projection_challenges(
     projection_matrix: &ProjectionMatrix,
-    config: &Config,
+    // config: &Config,
+    config: &dyn ConfigBase,
     hash_wrapper: &mut HashWrapper,
 ) -> BatchedProjectionChallengesSuccinct {
     let (c_0_layers, c_1_layers, c_2_layers) = sample_layers(
         projection_matrix,
-        config.witness_width,
-        config.witness_height,
+        config.witness_width(),
+        config.witness_height(),
         hash_wrapper,
     );
 

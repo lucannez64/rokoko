@@ -11,14 +11,16 @@ use crate::{
     },
     protocol::{
         commitment::{commit_basic, recursive_commit, RecursiveCommitmentWithAux},
-        config::{paste_by_prefix, paste_recursive_commitment, Config, Projection},
+        config::{
+            paste_by_prefix, paste_recursive_commitment, Config, ConfigBase, NextRoundCommitment,
+            Projection, RoundProof, SumcheckConfig, SumcheckRoundProof,
+        },
         crs::CRS,
         fold::fold,
         open::{evaluation_point_to_structured_row, open_at},
         project::project,
         project_2::{batch_projection_n_times, project_coefficients},
         sumcheck::{sumcheck, SumcheckContext},
-        sumchecks::runner_verifier::RoundProof,
     },
 };
 
@@ -42,16 +44,23 @@ pub fn claims(
     result
 }
 
+fn config_base_from_config(config: &Config) -> &dyn ConfigBase {
+    match config {
+        Config::Sumcheck(sumcheck_config) => sumcheck_config,
+        Config::Simple(simple_config) => simple_config,
+    }
+}
+
 pub fn prover_round(
     crs: &CRS,
-    config: &Config,
+    config: &SumcheckConfig,
     rc_commitment: &RecursiveCommitmentWithAux,
     witness: &VerticallyAlignedMatrix<RingElement>,
     evaluation_points_inner: &Vec<StructuredRow>,
     evaluation_points_outer: &Vec<StructuredRow>,
     sumcheck_context: &mut SumcheckContext,
     with_claims: bool,
-) -> (RoundProof, Option<Vec<RingElement>>) {
+) -> (SumcheckRoundProof, Option<Vec<RingElement>>) {
     let mut hash_wrapper = HashWrapper::new();
 
     let start = std::time::Instant::now();
@@ -68,8 +77,8 @@ pub fn prover_round(
         None
     };
     println!("  open_at: {} ms", t0.elapsed().as_millis());
-
     let t1 = std::time::Instant::now();
+
     let rc_opening = recursive_commit(crs, &config.opening_recursion, &opening.rhs.data);
     println!("  rc_opening: {} ms", t1.elapsed().as_millis());
 
@@ -218,72 +227,183 @@ pub fn prover_round(
 
     let t6 = std::time::Instant::now();
 
+    let base_next_roung_config = config.next.as_ref().map(|c| config_base_from_config(c));
+
     let next_round_witness = VerticallyAlignedMatrix {
-        height: if let Some(next_config) = &config.next {
-            next_config.witness_height
+        height: if let Some(next_config) = &base_next_roung_config {
+            next_config.witness_height()
         } else {
             config.composed_witness_length // do nothing further
         },
-        width: if let Some(next_config) = &config.next {
-            next_config.witness_width
+        width: if let Some(next_config) = &base_next_roung_config {
+            next_config.witness_width()
         } else {
             1 // do nothing further
         },
         data: next_round_data,
     };
 
-    let next_round_rc_commitment_with_aux = if let Some(next_config) = &config.next {
-        assert_eq!(
-            next_round_witness.data.len(),
-            next_config.witness_height * next_config.witness_width
-        );
-        let basic_commitment =
-            commit_basic(&crs, &next_round_witness, next_config.basic_commitment_rank);
+    let next_level_data = match &config.next {
+        None => {
+            let sumcheck_output = sumcheck(
+                &config,
+                &next_round_witness.data,
+                &projection_matrix,
+                &fold_challenge,
+                &rcs_projection_1
+                    .as_ref()
+                    .map(|(_, _, challenges)| challenges),
+                &opening,
+                sumcheck_context,
+                &mut hash_wrapper,
+            );
+            (None, sumcheck_output, None) // this should never happen, but we let it be for test purposes
+        }
+        Some(next_config) => {
+            let sumcheck_output = sumcheck(
+                &config,
+                &next_round_witness.data,
+                &projection_matrix,
+                &fold_challenge,
+                &rcs_projection_1
+                    .as_ref()
+                    .map(|(_, _, challenges)| challenges),
+                &opening,
+                sumcheck_context,
+                &mut hash_wrapper,
+            );
 
-        println!(
-            "Next round basic commitment created of width {} and height {}.",
-            basic_commitment.width, basic_commitment.height
-        );
+            let (
+                claim_over_witness,
+                claim_over_witness_conjugate,
+                norm_claim,
+                sumcheck_transcript,
+                evaluation_points,
+                constant_term_claims,
+            ) = &sumcheck_output;
 
-        let rc_commitment = recursive_commit(
-            &crs,
-            &next_config.commitment_recursion,
-            &basic_commitment.data,
-        );
+            match &next_config.as_ref() {
+                Config::Sumcheck(next_sumcheck_config) => {
+                    // let next_round_rc_commitment_with_aux =
+                    // if let Some(next_config) = &base_next_roung_config {
+                    assert_eq!(
+                        next_round_witness.data.len(),
+                        next_sumcheck_config.witness_height * next_sumcheck_config.witness_width
+                    );
+                    let basic_commitment = commit_basic(
+                        &crs,
+                        &next_round_witness,
+                        next_sumcheck_config.basic_commitment_rank,
+                    );
 
-        println!(
-            "Next round commitment created of length {}.",
-            rc_commitment.committed_data.len()
-        );
+                    println!(
+                        "Next round basic commitment created of width {} and height {}.",
+                        basic_commitment.width, basic_commitment.height
+                    );
 
-        Some(rc_commitment)
-    } else {
-        None
+                    let next_round_rc_commitment_with_aux = recursive_commit(
+                        &crs,
+                        &next_sumcheck_config.commitment_recursion,
+                        &basic_commitment.data,
+                    );
+                    // TODO: we should update FS here!
+
+                    println!(
+                        "Next round commitment created of length {}.",
+                        next_round_rc_commitment_with_aux.committed_data.len()
+                    );
+
+                    let next_round_rc_commitment = next_round_rc_commitment_with_aux
+                        .most_inner_commitment()
+                        .clone();
+
+                    let (new_evaluation_points_outer, new_evaluation_points_inner) =
+                        evaluation_points
+                            .split_at(next_sumcheck_config.witness_width.ilog2() as usize);
+                    (
+                        Some(RoundProof::Sumcheck(
+                            prover_round(
+                                &crs,
+                                next_sumcheck_config,
+                                &next_round_rc_commitment_with_aux,
+                                &next_round_witness,
+                                &vec![
+                                    evaluation_point_to_structured_row(
+                                        &new_evaluation_points_inner.to_vec(),
+                                    ),
+                                    evaluation_point_to_structured_row(
+                                        &new_evaluation_points_inner
+                                            .iter()
+                                            .map(|f| {
+                                                let mut f = f.clone();
+                                                f.conjugate_in_place();
+                                                f
+                                            })
+                                            .collect::<Vec<_>>(),
+                                    ),
+                                ],
+                                &vec![
+                                    evaluation_point_to_structured_row(
+                                        &new_evaluation_points_outer.to_vec(),
+                                    ),
+                                    evaluation_point_to_structured_row(
+                                        &new_evaluation_points_outer
+                                            .iter()
+                                            .map(|f| {
+                                                let mut f = f.clone();
+                                                f.conjugate_in_place();
+                                                f
+                                            })
+                                            .collect::<Vec<_>>(),
+                                    ),
+                                ],
+                                sumcheck_context.next.as_mut().unwrap(),
+                                false,
+                            )
+                            .0,
+                        )),
+                        sumcheck_output,
+                        Some(NextRoundCommitment::Recursive(next_round_rc_commitment)),
+                    )
+                }
+                Config::Simple(next_simple_config) => {
+                    assert_eq!(
+                        next_round_witness.data.len(),
+                        next_simple_config.witness_height * next_simple_config.witness_width
+                    );
+                    let basic_commitment = commit_basic(
+                        &crs,
+                        &next_round_witness,
+                        next_simple_config.basic_commitment_rank,
+                    );
+
+                    println!(
+                        "Next round basic commitment created of width {} and height {}.",
+                        basic_commitment.width, basic_commitment.height
+                    );
+                    // TODO
+                    let sumcheck_output = sumcheck(
+                        &config,
+                        &next_round_witness.data,
+                        &projection_matrix,
+                        &fold_challenge,
+                        &rcs_projection_1
+                            .as_ref()
+                            .map(|(_, _, challenges)| challenges),
+                        &opening,
+                        sumcheck_context,
+                        &mut hash_wrapper,
+                    );
+                    (
+                        None,
+                        sumcheck_output,
+                        Some(NextRoundCommitment::Simple(basic_commitment)),
+                    )
+                }
+            }
+        }
     };
 
-    let next_round_commitment = next_round_rc_commitment_with_aux
-        .as_ref()
-        .map(|rc_commitment_with_aux| rc_commitment_with_aux.most_inner_commitment().clone());
-
-    let (
-        claim_over_witness,
-        claim_over_witness_conjugate,
-        norm_claim,
-        sumcheck_transcript,
-        evaluation_points,
-        constant_term_claims,
-    ) = sumcheck(
-        &config,
-        &next_round_witness.data,
-        &projection_matrix,
-        &fold_challenge,
-        &rcs_projection_1
-            .as_ref()
-            .map(|(_, _, challenges)| challenges),
-        &opening,
-        sumcheck_context,
-        &mut hash_wrapper,
-    );
     println!("  sumcheck: {} ms", t6.elapsed().as_millis());
 
     assert!(
@@ -291,57 +411,21 @@ pub fn prover_round(
         "norm too large, aborting"
     );
 
-    let next_level_proof = match next_round_rc_commitment_with_aux {
-        None => None,
-        Some(rc_commitment_with_aux) => {
-            let (new_evaluation_points_outer, new_evaluation_points_inner) = evaluation_points
-                .split_at(config.next.as_ref().unwrap().witness_width.ilog2() as usize);
-            Some(
-                prover_round(
-                    &crs,
-                    config.next.as_ref().unwrap(),
-                    &rc_commitment_with_aux,
-                    &next_round_witness,
-                    &vec![
-                        evaluation_point_to_structured_row(&new_evaluation_points_inner.to_vec()),
-                        evaluation_point_to_structured_row(
-                            &new_evaluation_points_inner
-                                .iter()
-                                .map(|f| {
-                                    let mut f = f.clone();
-                                    f.conjugate_in_place();
-                                    f
-                                })
-                                .collect::<Vec<_>>(),
-                        ),
-                    ],
-                    &vec![
-                        evaluation_point_to_structured_row(&new_evaluation_points_outer.to_vec()),
-                        evaluation_point_to_structured_row(
-                            &new_evaluation_points_outer
-                                .iter()
-                                .map(|f| {
-                                    let mut f = f.clone();
-                                    f.conjugate_in_place();
-                                    f
-                                })
-                                .collect::<Vec<_>>(),
-                        ),
-                    ],
-                    sumcheck_context.next.as_mut().unwrap(),
-                    false,
-                )
-                .0,
-            )
-        }
-    };
+    let (
+        claim_over_witness,
+        claim_over_witness_conjugate,
+        norm_claim,
+        sumcheck_transcript,
+        _evaluation_points,
+        constant_term_claims,
+    ) = next_level_data.1;
 
-    let rp = RoundProof {
+    let rp = SumcheckRoundProof {
         polys: sumcheck_transcript,
         claim_over_witness: claim_over_witness,
         claim_over_witness_conjugate: claim_over_witness_conjugate,
         norm_claim: norm_claim,
-        next_round_commitment,
+        next_round_commitment: next_level_data.2,
         rc_opening_inner: rc_opening.most_inner_commitment().clone(),
         rc_projection_inner: rc_projection_image
             .as_ref()
@@ -353,7 +437,7 @@ pub fn prover_round(
             )
         }),
         constant_term_claims,
-        next: next_level_proof.map(Box::new),
+        next: next_level_data.0.map(Box::new),
     };
 
     let elapsed = start.elapsed().as_nanos();
