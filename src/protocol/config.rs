@@ -317,6 +317,10 @@ pub enum NextRoundCommitment {
     Simple(HorizontallyAlignedMatrix<RingElement>), // if the next round is simple
 }
 
+pub trait SizeableProof {
+    fn size_in_bits(&self) -> usize;
+}
+
 pub struct SumcheckRoundProof {
     pub polys: Vec<Polynomial<QuadraticExtension>>,
     pub claim_over_witness: RingElement,
@@ -330,11 +334,149 @@ pub struct SumcheckRoundProof {
     pub next: Option<Box<RoundProof>>,
 }
 
+pub fn to_kb(size_in_bits: usize) -> f64 {
+    size_in_bits as f64 / 8.0 / 1024.0
+}
+
+impl SizeableProof for SumcheckRoundProof {
+    fn size_in_bits(&self) -> usize {
+        let mut size = 0;
+        for poly in &self.polys {
+            for coeff in &poly.coefficients[0..poly.num_coefficients] {
+                size += coeff.size_in_bits(); // TODO: erase -1 if we do sumcheck trick
+            }
+        }
+        println!("Polys size: {} KB, ", to_kb(size));
+
+        let mut claims_size = 0;
+        let claims = vec![
+            &self.claim_over_witness,
+            &self.claim_over_witness_conjugate,
+            &self.norm_claim,
+        ];
+        for claim in claims {
+            claims_size += claim.size_in_bits();
+        }
+        size += claims_size;
+        println!("Claims size: {} KB, ", to_kb(claims_size));
+
+        let mut rc_opening_inner_size = 0;
+        for el in &self.rc_opening_inner {
+            rc_opening_inner_size += el.size_in_bits();
+        }
+
+        size += rc_opening_inner_size;
+        println!("RC opening inner size: {} KB, ", to_kb(rc_opening_inner_size));
+
+        if let Some(rc_projection_inner) = &self.rc_projection_inner {
+            let mut rc_projection_inner_size = 0;
+            for el in rc_projection_inner {
+                rc_projection_inner_size += el.size_in_bits();
+            }
+            size += rc_projection_inner_size;
+            println!("RC projection 0 inner size: {} KB, ", to_kb(rc_projection_inner_size));
+        }
+
+        if let Some((rcs_projection_1_inner_0, rcs_projection_1_inner_1)) =
+            &self.rcs_projection_1_inner
+        {
+            let mut rcs_projection_1_inner_size = 0;
+            for el in rcs_projection_1_inner_0 {
+                rcs_projection_1_inner_size += el.size_in_bits();
+            }
+            for el in rcs_projection_1_inner_1 {
+                rcs_projection_1_inner_size += el.size_in_bits();
+            }
+            size += rcs_projection_1_inner_size;
+            println!(
+                "RCs projection 1 inner size: {} KB, ",
+                to_kb(rcs_projection_1_inner_size)
+            );
+        }
+
+        if let Some(constant_term_claims) = &self.constant_term_claims {
+            let mut constant_term_claims_size = 0;
+            for el in constant_term_claims {
+                constant_term_claims_size += el.size_in_bits();
+            }
+            size += constant_term_claims_size;
+            println!("Constant term claims size: {} KB, ", to_kb(constant_term_claims_size));
+        }
+
+        let next_round_size = if let Some(next_round_commitment) = &self.next_round_commitment {
+            match next_round_commitment {
+                NextRoundCommitment::Recursive(rc) => {
+                    let mut rc_size = 0;
+                    for el in rc {
+                        rc_size += el.size_in_bits();
+                    }
+                    rc_size
+                },
+                NextRoundCommitment::Simple(mat) => {
+                    let mut mat_size = 0;
+                    for el in &mat.data {
+                        mat_size += el.size_in_bits();
+                    }
+                    mat_size
+                }
+            }
+        } else {
+            0
+        };
+        size += next_round_size;
+        println!("Next round commitment size: {} KB, ", to_kb(next_round_size));
+        println!("Total sumcheck round proof size: {} KB \n\n\n", to_kb(size));
+
+        size + if let Some(next) = &self.next {
+            match &**next {
+                RoundProof::Sumcheck(sc_next) => sc_next.size_in_bits(),
+                RoundProof::Simple(s_next) => s_next.size_in_bits(),
+            }
+        } else {
+            0
+        }
+    }
+}
+
 pub struct SimpleRoundProof {
     pub folded_witness: VerticallyAlignedMatrix<RingElement>,
     pub projection_image_ct: VerticallyAlignedMatrix<RingElement>, // cosntant term projection image embedded
     pub batched_projection_image: HorizontallyAlignedMatrix<RingElement>,
     pub opening_rhs: HorizontallyAlignedMatrix<RingElement>,
+}
+
+impl SizeableProof for SimpleRoundProof {
+    fn size_in_bits(&self) -> usize {
+        let mut size = 0;
+        for el in &self.folded_witness.data {
+            size += el.size_in_bits();
+        }
+        println!("Folded witness size: {} KB, ", to_kb(size));
+
+        let mut projection_image_ct_size = 0;
+        for el in &self.projection_image_ct.data {
+            projection_image_ct_size += el.size_in_bits();
+        }
+        size += projection_image_ct_size;
+        println!("Projection image ct size: {} KB, ", to_kb(projection_image_ct_size));
+
+        let mut batched_projection_image_size = 0;
+        for el in &self.batched_projection_image.data {
+            batched_projection_image_size += el.size_in_bits();
+        }
+        size += batched_projection_image_size;
+        println!("Batched projection image size: {} KB, ", to_kb(batched_projection_image_size));
+
+        let mut opening_rhs_size = 0;
+        for el in &self.opening_rhs.data {
+            opening_rhs_size += el.size_in_bits();
+        }
+        size += opening_rhs_size;
+        println!("Opening RHS size: {} KB, ", to_kb(opening_rhs_size));
+
+        println!("Total simple round proof size: {} KB \n\n\n", to_kb(size));
+        size
+    }
 }
 
 #[inline]

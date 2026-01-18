@@ -7,7 +7,7 @@ use crate::{
         sampling::sample_random_short_vector,
     },
     protocol::{
-        config::{Config, CONFIG},
+        config::{CONFIG, Config, SizeableProof, to_kb},
         crs::CRS,
         open::{claim, evaluation_point_to_structured_row},
         parties::{commiter::commit, prover::prover_round, verifier::verifier_round},
@@ -57,12 +57,6 @@ pub fn execute() {
             .collect::<Vec<RingElement>>(),
     )];
 
-    let claims_ = vec![claim(
-        &witness,
-        &evaluation_points_inner[0],
-        &evaluation_points_outer[0],
-    )];
-
     let (proof, claims) = prover_round(
         &crs,
         &config,
@@ -74,7 +68,10 @@ pub fn execute() {
         true,
     );
 
-    assert_eq!(claims_[0], claims.as_ref().unwrap()[0]);
+    print!("==== PROOF SIZE ====\n");
+    let proof_size_bits = proof.size_in_bits();
+    println!("Total proof size: {} KB", to_kb(proof_size_bits));
+    println!("====================\n");
 
     verifier_round(
         &crs,

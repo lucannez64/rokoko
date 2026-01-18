@@ -1,5 +1,6 @@
 use crate::common::config::*;
 use crate::hexl::bindings::*;
+use crate::protocol::config::SizeableProof;
 use num::traits::ops::inv;
 use rand::Rng;
 use std::cell::RefCell;
@@ -1137,6 +1138,43 @@ impl<'a> MulAssign<(&'a QuadraticExtension, &'a QuadraticExtension)> for Quadrat
         *self = *lhs * *rhs;
     }
 }
+
+impl SizeableProof for RingElement {
+    fn size_in_bits(&self) -> usize {
+        let mut size = 0;
+        for v in &self.v {
+            if *v > MOD_Q {
+                panic!("Value exceeds modulus in size_in_bits calculation");
+            }
+            let centered = if *v > MOD_Q / 2 {
+                MOD_Q - *v
+            } else {
+                *v
+            };
+            if centered == 0 {
+                continue; // zero contributes 0 bits
+            }
+            size += centered.ilog2() as usize + 1; // +1 for the sign bit
+        }
+        size
+    }
+}
+
+impl SizeableProof for QuadraticExtension {
+    fn size_in_bits(&self) -> usize {
+        let mut size = 0;
+        for v in &self.coeffs {
+            let centered = if *v > MOD_Q / 2 {
+                MOD_Q - *v
+            } else {
+                *v
+            };
+            size += centered.ilog2() as usize + 1; // +1 for the sign bit
+        }
+        size
+    }
+}
+
 
 #[cfg(test)]
 mod tests {
