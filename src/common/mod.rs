@@ -3,6 +3,7 @@ use std::sync::LazyLock;
 pub mod arithmetic;
 pub mod config;
 pub mod decomposition;
+pub mod estimator;
 pub mod hash;
 pub mod matrix;
 pub mod norms;
