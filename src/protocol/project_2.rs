@@ -54,7 +54,6 @@ pub fn compute_j_batched(
 
     #[cfg(all(target_arch = "x86_64", target_feature = "avx512f"))]
     {
-        println!("Using AVX-512 for compute_j_batched");
         use std::arch::x86_64::*;
 
         for i in 0..inner_width_ring {

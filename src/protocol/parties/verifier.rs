@@ -166,6 +166,7 @@ pub fn verifier_round_simple(
     evaluation_points_outer: &Vec<StructuredRow>,
     claims: &Vec<RingElement>,
 ) {
+    let start = std::time::Instant::now();
     let mut hash_wrapper = HashWrapper::new();
     hash_wrapper.update_with_ring_element_slice(&commitment.data);
     hash_wrapper.update_with_ring_element_slice(&round_proof.opening_rhs.data);
@@ -319,6 +320,8 @@ pub fn verifier_round_simple(
     println!("L2 norm of folded witness in simple verifier: {}", l2_norm_witness);
     println!("L2 norm of projection image in simple verifier: {}", l2_norm_proj);
 
+    let elapsed = start.elapsed().as_nanos();
+    println!("Simple verifier: {} ns", elapsed);
 
     assert_eq!(claims, &evaluation);
 }

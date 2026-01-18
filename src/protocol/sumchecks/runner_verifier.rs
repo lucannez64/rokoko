@@ -1,5 +1,7 @@
 use std::iter::Sum;
 
+use num::integer::Roots;
+
 use crate::{
     common::{
         arithmetic::{field_to_ring_element, inner_product},
@@ -217,11 +219,13 @@ pub fn sumcheck_verifier(
 
     if let Some(constant_term_claims) = &round_proof.constant_term_claims {
         for ct_claim in constant_term_claims.iter() {
-            let mut c = ct_claim.clone();
-            c.from_incomplete_ntt_to_even_odd_coefficients();
-            assert_eq!(c.v[0], 0);
+            let ct = ct_claim.constant_term_from_incomplete_ntt();
+            assert_eq!(ct, 0);
         }
     }
+
+    let norm_ct = round_proof.norm_claim.constant_term_from_incomplete_ntt();
+    println!("Norm claim via inner-product: {}", (norm_ct as f64).sqrt() );
 
     let mut batched_claim_over_field = {
         let batched_claim = {

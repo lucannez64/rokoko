@@ -203,16 +203,13 @@ pub fn prover_round(
         }
     }
 
-    println!("Pasting opening_recursion commitments.");
     paste_recursive_commitment(&mut next_round_data, &rc_opening, &config.opening_recursion);
-    println!("Pasting commitment_recursion commitments.");
 
     paste_recursive_commitment(
         &mut next_round_data,
         &rc_commitment,
         &config.commitment_recursion,
     );
-    println!("Pasting done.");
 
     let ell_inf_norm = norms::inf_norm(&next_round_data);
     let ell_2_norm = norms::l2_norm(&next_round_data);
@@ -279,11 +276,6 @@ pub fn prover_round(
                         &crs,
                         &next_round_witness,
                         next_sumcheck_config.basic_commitment_rank,
-                    );
-
-                    println!(
-                        "Next round basic commitment created of width {} and height {}.",
-                        basic_commitment.width, basic_commitment.height
                     );
 
                     let next_round_rc_commitment_with_aux = recursive_commit(
@@ -366,10 +358,6 @@ pub fn prover_round(
 
                     // TODO: we should update FS here!
 
-                    println!(
-                        "Next round basic commitment created of width {} and height {}.",
-                        basic_commitment.width, basic_commitment.height
-                    );
                     let sumcheck_output = sumcheck(
                         &config,
                         &next_round_witness.data,
