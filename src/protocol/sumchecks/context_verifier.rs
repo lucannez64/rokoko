@@ -150,4 +150,7 @@ pub struct Type5VerifierContext {
     pub conjugated_combined_witness_evaluation:
         ElephantCell<FakeEvaluationLinearSumcheck<RingElement>>,
     pub output: ElephantCell<ProductSumcheckEvaluation>,
+
+    pub selectors: Vec<ElephantCell<SelectorEqEvaluation>>,
+    pub output_2: ElephantCell<ProductSumcheckEvaluation>,
 }

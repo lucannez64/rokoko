@@ -204,6 +204,9 @@ impl SumcheckContext {
             .conjugated_combined_witness
             .borrow_mut()
             .partial_evaluate(r);
+        for type5_sc in self.type5sumcheck.selectors.iter() {
+            type5_sc.borrow_mut().partial_evaluate(r);
+        }
     }
 }
 
@@ -531,6 +534,10 @@ pub struct Type4SumcheckContext {
 pub struct Type5SumcheckContext {
     pub conjugated_combined_witness: ElephantCell<LinearSumcheck<RingElement>>,
     pub output: ElephantCell<ProductSumcheck<RingElement>>,
+
+    // we also give an opening to subvectors of the combined witness and its conjugate.
+    pub selectors: Vec<ElephantCell<SelectorEq<RingElement>>>,
+    pub output_2: ElephantCell<ProductSumcheck<RingElement>>,
 }
 
 // This is similar to Type3SumcheckContext, but for the type 3 projections.

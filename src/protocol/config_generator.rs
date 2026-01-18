@@ -168,7 +168,7 @@ impl AuxSumcheckConfig {
         self.collect_recursion_components(
             &self.commitment_recursion,
             "commitment",
-            self.basic_commitment_rank * self.witness_width,
+            self.basic_commitment_rank.next_power_of_two() * self.witness_width, // It seems that we cannot fit into 4 rank, but 8 seems too large, so we use next power of two for simplicity
             components,
             vec!["commitment_recursion".to_string()],
         );

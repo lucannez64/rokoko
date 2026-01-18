@@ -21,6 +21,7 @@ use crate::{
             product::ProductSumcheckEvaluation,
             ring_to_field_combiner::RingToFieldCombinerEvaluation,
             selector_eq::SelectorEqEvaluation,
+            sum::SumSumcheckEvaluation,
         },
         sumchecks::context_verifier::{
             Type0VerifierContext, Type1VerifierContext, Type2VerifierContext, Type3VerifierContext,
@@ -134,7 +135,7 @@ fn build_type4_verifier_context(
                 )
             })
             .collect::<Vec<_>>();
-        
+
         selector_evaluation_from_prefix(&next.prefix, total_vars);
 
         let combiner_eval = load_combiner_evaluation_data(
@@ -179,8 +180,7 @@ fn build_type4_verifier_context(
             })
             .collect::<Vec<_>>();
 
-        let outputs = 
-           (0..current.rank)
+        let outputs = (0..current.rank)
             .map(|i| {
                 let ck_with_data = ElephantCell::new(ProductSumcheckEvaluation::new(
                     ck_evals[i].clone(),
@@ -386,10 +386,10 @@ pub fn init_verifier(crs: &CRS, config: &SumcheckConfig) -> VerifierSumcheckCont
             let row_selector = selector_evaluation_from_prefix(
                 &Prefix {
                     prefix: config.commitment_recursion.prefix.prefix
-                        * config.basic_commitment_rank
+                        * config.basic_commitment_rank.next_power_of_two()
                         + i,
                     length: config.commitment_recursion.prefix.length
-                        + config.basic_commitment_rank.ilog2() as usize,
+                        + config.basic_commitment_rank.next_power_of_two().ilog2() as usize,
                 },
                 total_vars,
             );
@@ -884,12 +884,77 @@ pub fn init_verifier(crs: &CRS, config: &SumcheckConfig) -> VerifierSumcheckCont
     }
     let conjugated_combined_witness_evaluation =
         ElephantCell::new(FakeEvaluationLinearSumcheck::<RingElement>::new());
+
+    let mut most_inner_commitments_selectors = vec![];
+
+    let most_inner_commitment_recursion = selector_evaluation_from_prefix(
+        &config.commitment_recursion.most_inner_config().prefix,
+        total_vars,
+    );
+
+    most_inner_commitments_selectors.push(most_inner_commitment_recursion);
+
+    let most_inner_opening_recursion = selector_evaluation_from_prefix(
+        &config.opening_recursion.most_inner_config().prefix,
+        total_vars,
+    );
+
+    most_inner_commitments_selectors.push(most_inner_opening_recursion);
+
+    match &config.projection_recursion {
+        Projection::Type0(proj_config) => {
+            let most_inner_projection_recursion = selector_evaluation_from_prefix(
+                &proj_config.most_inner_config().prefix,
+                total_vars,
+            );
+            most_inner_commitments_selectors.push(most_inner_projection_recursion);
+        }
+        Projection::Type1(proj_config) => {
+            let most_inner_constant_term_recursion = selector_evaluation_from_prefix(
+                &proj_config
+                    .recursion_constant_term
+                    .most_inner_config()
+                    .prefix,
+                total_vars,
+            );
+            most_inner_commitments_selectors.push(most_inner_constant_term_recursion);
+
+            let most_inner_batched_projection_recursion = selector_evaluation_from_prefix(
+                &proj_config
+                    .recursion_batched_projection
+                    .most_inner_config()
+                    .prefix,
+                total_vars,
+            );
+            most_inner_commitments_selectors.push(most_inner_batched_projection_recursion);
+        }
+    }
+
+    let mut sum_of_selectors: ElephantCell<dyn EvaluationSumcheckData<Element = RingElement>> =
+        most_inner_commitments_selectors[0].clone();
+
+    for selector in most_inner_commitments_selectors.iter().skip(1) {
+        sum_of_selectors = ElephantCell::new(SumSumcheckEvaluation::new(
+            sum_of_selectors.clone(),
+            selector.clone(),
+        ));
+    }
+
+    let output = ElephantCell::new(ProductSumcheckEvaluation::new(
+        combined_witness_evaluation.clone(),
+        conjugated_combined_witness_evaluation.clone(),
+    ));
+
+    let output_2 = ElephantCell::new(ProductSumcheckEvaluation::new(
+        sum_of_selectors.clone(),
+        output.clone(),
+    ));
+
     let type5evaluation = Type5VerifierContext {
         conjugated_combined_witness_evaluation: conjugated_combined_witness_evaluation.clone(),
-        output: ElephantCell::new(ProductSumcheckEvaluation::new(
-            combined_witness_evaluation.clone(),
-            conjugated_combined_witness_evaluation.clone(),
-        )),
+        output,
+        selectors: most_inner_commitments_selectors,
+        output_2,
     };
 
     let mut all_outputs: Vec<ElephantCell<EvalData>> = vec![];
@@ -923,6 +988,7 @@ pub fn init_verifier(crs: &CRS, config: &SumcheckConfig) -> VerifierSumcheckCont
         }
     }
     all_outputs.push(type5evaluation.output.clone());
+    all_outputs.push(type5evaluation.output_2.clone());
 
     let combiner_evaluation = ElephantCell::new(CombinerEvaluation::new(all_outputs));
     let field_combiner_evaluation = ElephantCell::new(RingToFieldCombinerEvaluation::new(

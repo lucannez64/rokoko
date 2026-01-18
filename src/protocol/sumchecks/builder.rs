@@ -5,6 +5,7 @@ use crate::common::arithmetic::ONE;
 use crate::common::config::DEGREE;
 use crate::protocol::config::{Projection, SumcheckConfig};
 use crate::protocol::project;
+use crate::protocol::sumcheck_utils::sum::SumSumcheck;
 use crate::protocol::sumchecks::builder;
 use crate::protocol::sumchecks::context::Type3_1SumcheckContextWrapper;
 use crate::{
@@ -126,7 +127,6 @@ fn build_type4_sumcheck_context(
             })
             .collect::<Vec<_>>();
 
-
         let data_len = 1 << (total_vars - current.prefix.length);
 
         let data_selected_sumcheck = ElephantCell::new(ProductSumcheck::new(
@@ -163,7 +163,6 @@ fn build_type4_sumcheck_context(
             })
             .collect::<Vec<_>>();
 
-
         let mut ck_sumchecks = Vec::with_capacity(current.rank);
         for i in 0..current.rank {
             ck_sumchecks.push(ck_sumcheck(crs, total_vars, data_len, i, 0));
@@ -181,8 +180,7 @@ fn build_type4_sumcheck_context(
         //     })
         //     .collect::<Vec<_>>();
 
-        let outputs = 
-            (0..current.rank)
+        let outputs = (0..current.rank)
             .map(|i| {
                 let lhs = ElephantCell::new(ProductSumcheck::new(
                     ck_sumchecks[i].clone(),
@@ -193,7 +191,7 @@ fn build_type4_sumcheck_context(
                 ElephantCell::new(DiffSumcheck::new(lhs, rhs))
             })
             .collect::<Vec<_>>();
-        
+
         layers.push(Type4LayerSumcheckContext {
             selector_sumcheck,
             child_selector_sumcheck: Some(child_selector_sumchecks),
@@ -322,10 +320,10 @@ pub fn init_sumcheck(crs: &crs::CRS, config: &SumcheckConfig) -> SumcheckContext
             let basic_commitment_row_sumcheck = sumcheck_from_prefix(
                 &Prefix {
                     prefix: config.commitment_recursion.prefix.prefix
-                        * config.basic_commitment_rank
+                        * config.basic_commitment_rank.next_power_of_two()
                         + i,
                     length: config.commitment_recursion.prefix.length
-                        + config.basic_commitment_rank.ilog2() as usize,
+                        + config.basic_commitment_rank.next_power_of_two().ilog2() as usize,
                 },
                 total_vars,
             );
@@ -841,12 +839,72 @@ pub fn init_sumcheck(crs: &crs::CRS, config: &SumcheckConfig) -> SumcheckContext
         LinearSumcheck::<RingElement>::new(config.composed_witness_length),
     );
 
+    let mut most_inner_commitments_selectors = Vec::new();
+
+    let most_inner_commitment_recursion = sumcheck_from_prefix(
+        &config.commitment_recursion.most_inner_config().prefix,
+        total_vars,
+    );
+
+    most_inner_commitments_selectors.push(most_inner_commitment_recursion);
+
+    let most_inner_opening_recursion = sumcheck_from_prefix(
+        &config.opening_recursion.most_inner_config().prefix,
+        total_vars,
+    );
+
+    most_inner_commitments_selectors.push(most_inner_opening_recursion);
+
+    // if let Some(config.p
+    match config.projection_recursion {
+        Projection::Type0(ref proj_config) => {
+            let most_inner_projection_recursion =
+                sumcheck_from_prefix(&proj_config.most_inner_config().prefix, total_vars);
+            most_inner_commitments_selectors.push(most_inner_projection_recursion);
+        }
+        Projection::Type1(ref proj_config) => {
+            let most_inner_constant_term_recursion = sumcheck_from_prefix(
+                &proj_config
+                    .recursion_constant_term
+                    .most_inner_config()
+                    .prefix,
+                total_vars,
+            );
+            most_inner_commitments_selectors.push(most_inner_constant_term_recursion);
+            let most_inner_batched_projection_recursion = sumcheck_from_prefix(
+                &proj_config
+                    .recursion_batched_projection
+                    .most_inner_config()
+                    .prefix,
+                total_vars,
+            );
+            most_inner_commitments_selectors.push(most_inner_batched_projection_recursion);
+        }
+    }
+
+    let mut sum_of_selectors: ElephantCell<dyn HighOrderSumcheckData<Element = RingElement>> =
+        most_inner_commitments_selectors[0].clone();
+
+    for selector in most_inner_commitments_selectors.iter().skip(1) {
+        sum_of_selectors =
+            ElephantCell::new(SumSumcheck::new(sum_of_selectors.clone(), selector.clone()));
+    }
+
+    let output = ElephantCell::new(ProductSumcheck::new(
+        combined_witness_sumcheck.clone(),
+        conjugated_combined_witness_sumcheck.clone(),
+    ));
+
+    let output_2 = ElephantCell::new(ProductSumcheck::new(
+        sum_of_selectors.clone(),
+        output.clone(),
+    ));
+
     let type5sumcheck = Type5SumcheckContext {
         conjugated_combined_witness: conjugated_combined_witness_sumcheck.clone(),
-        output: ElephantCell::new(ProductSumcheck::new(
-            combined_witness_sumcheck.clone(),
-            conjugated_combined_witness_sumcheck.clone(),
-        )),
+        output,
+        selectors: most_inner_commitments_selectors,
+        output_2,
     };
 
     // Type4 sumchecks: Three separate recursive commitment trees
@@ -934,6 +992,7 @@ pub fn init_sumcheck(crs: &crs::CRS, config: &SumcheckConfig) -> SumcheckContext
     }
 
     all_outputs.push(type5sumcheck.output.clone());
+    all_outputs.push(type5sumcheck.output_2.clone());
 
     let combiner = ElephantCell::new(Combiner::new(all_outputs));
 

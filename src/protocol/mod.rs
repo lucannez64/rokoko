@@ -9,8 +9,6 @@ pub mod params;
 pub mod parties;
 pub mod project;
 pub mod project_2;
-pub mod prover;
 pub mod sumcheck;
 pub mod sumcheck_utils;
 pub mod sumchecks;
-pub mod verifier;

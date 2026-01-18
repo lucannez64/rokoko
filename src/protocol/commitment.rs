@@ -18,7 +18,8 @@ pub fn commit_basic_internal(
     witness: &VerticallyAlignedMatrix<RingElement>,
     rank: usize,
 ) -> BasicCommitment {
-    let mut commitment = HorizontallyAlignedMatrix::new_zero_preallocated(rank, witness.width);
+    let mut commitment =
+        HorizontallyAlignedMatrix::new_zero_preallocated(rank.next_power_of_two(), witness.width);
 
     for (i, row) in ck.iter().take(rank).enumerate() {
         for col in 0..witness.width {
@@ -57,6 +58,15 @@ pub struct RecursionConfig {
     pub next: Option<Box<RecursionConfig>>,
 }
 
+impl RecursionConfig {
+    pub fn most_inner_config(&self) -> &RecursionConfig {
+        match &self.next {
+            Some(next_config) => next_config.most_inner_config(),
+            None => self,
+        }
+    }
+}
+
 #[derive(Clone)]
 pub struct RecursiveCommitmentWithAux {
     pub decomposition_base_log: usize,
@@ -71,6 +81,13 @@ impl RecursiveCommitmentWithAux {
         match &self.next {
             Some(next_config) => next_config.most_inner_commitment(),
             None => &self.commitment,
+        }
+    }
+
+    pub fn most_inner_commitment_with_aux(&self) -> &RecursiveCommitmentWithAux {
+        match &self.next {
+            Some(next_config) => next_config.most_inner_commitment_with_aux(),
+            None => self,
         }
     }
 }

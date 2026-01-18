@@ -20,7 +20,7 @@ use crate::{
             verifier_sample_projection_challenges, BatchedProjectionChallenges,
             BatchedProjectionChallengesSuccinct,
         },
-        sumcheck_utils::{common::EvaluationSumcheckData, polynomial::Polynomial},
+        sumcheck_utils::{common::EvaluationSumcheckData, polynomial::Polynomial, sum},
         sumchecks::{
             context_verifier::VerifierSumcheckContext, loader_verifier::load_verifier_sumcheck_data,
         },
@@ -36,6 +36,7 @@ fn batch_claims(
     rcs_projection_1_inner: &Option<(Vec<RingElement>, Vec<RingElement>)>,
     rcs_projection_1_constant_term_claims: &Option<Vec<RingElement>>,
     norm_claim: &RingElement,
+    most_inner_norm_claim: &RingElement,
     combination: &Vec<RingElement>,
 ) -> RingElement {
     let mut batched_claim = RingElement::zero(Representation::IncompleteNTT);
@@ -126,6 +127,11 @@ fn batch_claims(
     let mut weighted_norm = norm_claim.clone();
     weighted_norm *= &combination[idx];
     batched_claim += &weighted_norm;
+    idx += 1;
+
+    let mut weighted_norm = most_inner_norm_claim.clone();
+    weighted_norm *= &combination[idx];
+    batched_claim += &weighted_norm;
 
     batched_claim
 }
@@ -214,6 +220,7 @@ pub fn sumcheck_verifier(
         &round_proof.rcs_projection_1_inner,
         &round_proof.constant_term_claims,
         &round_proof.norm_claim,
+        &round_proof.most_inner_norm_claim,
         &combination,
     );
 
@@ -226,6 +233,14 @@ pub fn sumcheck_verifier(
 
     let norm_ct = round_proof.norm_claim.constant_term_from_incomplete_ntt();
     println!("Norm claim via inner-product: {}", (norm_ct as f64).sqrt());
+
+    let most_inner_norm_ct = round_proof
+        .most_inner_norm_claim
+        .constant_term_from_incomplete_ntt();
+    println!(
+        "Most inner norm claim via inner-product: {}",
+        (most_inner_norm_ct as f64).sqrt()
+    );
 
     let mut batched_claim_over_field = {
         let batched_claim = {
@@ -290,12 +305,14 @@ pub fn sumcheck_verifier(
             .evaluate(&evaluation_points)
     );
 
-    evaluation_points
+    let eps = evaluation_points
         .iter()
         .map(|f| {
             let mut r = field_to_ring_element(f);
             r.from_homogenized_field_extensions_to_incomplete_ntt();
             r
         })
-        .collect()
+        .collect();
+
+    eps
 }

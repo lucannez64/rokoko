@@ -221,19 +221,60 @@ pub fn prover_round(
         let recommited_ell_inf_norm = norms::inf_norm(&next_round_data);
         let recommited_ell_2_norm = norms::l2_norm(&next_round_data);
 
+        let mut most_inner_commitment_data_ell_2 = {
+            let commitment_data = &rc_commitment
+                .most_inner_commitment_with_aux()
+                .committed_data;
+            let norm_commitment_data_ell_2_sq = norms::l2_norm(&commitment_data).powf(2.0) as u64;
+
+            let opening_data = &rc_opening.most_inner_commitment_with_aux().committed_data;
+            let norm_opening_data_ell_2_sq = norms::l2_norm(&opening_data).powf(2.0) as u64;
+
+            let norm_projection_data_ell_2_sq = match &config.projection_recursion {
+                Projection::Type0(_) => {
+                    let rc_proj = rc_projection_image.as_ref().unwrap();
+                    let proj_data = &rc_proj.most_inner_commitment_with_aux().committed_data;
+                    norms::l2_norm(&proj_data).powf(2.0) as u64
+                }
+                Projection::Type1(_) => {
+                    let (rc_ct, rc_batched, _) = rcs_projection_1.as_ref().unwrap();
+                    let proj_ct_data = &rc_ct.most_inner_commitment_with_aux().committed_data;
+                    let proj_batched_data =
+                        &rc_batched.most_inner_commitment_with_aux().committed_data;
+                    norms::l2_norm(&proj_ct_data).powf(2.0) as u64
+                        + norms::l2_norm(&proj_batched_data).powf(2.0) as u64
+                }
+            };
+            ((norm_commitment_data_ell_2_sq
+                + norm_opening_data_ell_2_sq
+                + norm_projection_data_ell_2_sq) as f64)
+                .sqrt()
+        };
+        println!(
+            "Most inner commitment data L_2 norm: {}",
+            most_inner_commitment_data_ell_2
+        );
+
         fn debug_hardness_recursive_commitment(
             rc: &RecursiveCommitmentWithAux,
             config: &RecursionConfig,
             name: &str,
             extracted_norm: f64,
+            extracted_norm_most_inner: f64,
             depth: usize,
         ) {
             let ell_inf_norm = norms::inf_norm(&rc.committed_data);
             let ell_2_norm = norms::l2_norm(&rc.committed_data);
+
+            let current_extracted_norm = match config.next {
+                Some(_) => extracted_norm,
+                None => extracted_norm_most_inner,
+            };
+
             let hardness = estimate_rsis_security(&RSISParameters {
                 m: rc.committed_data.len() as u64,
                 n: config.rank as u64,
-                length_bound: extracted_norm.ceil() as u64,
+                length_bound: current_extracted_norm.ceil() as u64,
             });
             let indent = "  ".repeat(depth);
             println!(
@@ -252,6 +293,7 @@ pub fn prover_round(
                     next_config,
                     name,
                     extracted_norm,
+                    extracted_norm_most_inner,
                     depth + 1,
                 );
             }
@@ -262,13 +304,16 @@ pub fn prover_round(
             &config.commitment_recursion,
             "Commitment",
             recommited_ell_2_norm,
+            most_inner_commitment_data_ell_2,
             0,
         );
+
         debug_hardness_recursive_commitment(
             &rc_opening,
             &config.opening_recursion,
             "Opening",
             recommited_ell_2_norm,
+            most_inner_commitment_data_ell_2,
             0,
         );
 
@@ -280,6 +325,7 @@ pub fn prover_round(
                 projection_config,
                 "Projection Image",
                 recommited_ell_2_norm,
+                most_inner_commitment_data_ell_2,
                 0,
             );
         }
@@ -292,6 +338,7 @@ pub fn prover_round(
                 &projection_config.recursion_constant_term,
                 "Projection 1 Constant Term",
                 recommited_ell_2_norm,
+                most_inner_commitment_data_ell_2,
                 0,
             );
             debug_hardness_recursive_commitment(
@@ -299,6 +346,7 @@ pub fn prover_round(
                 &projection_config.recursion_batched_projection,
                 "Projection 1 Batched",
                 recommited_ell_2_norm,
+                most_inner_commitment_data_ell_2,
                 0,
             );
         }
@@ -310,9 +358,31 @@ pub fn prover_round(
             MOD_Q
         );
 
+        // this is a bit too conservative as this is norm for the projection image, so the witness is around 3 bits shorter, but we keep it for safety
         assert!(
             recommited_ell_2_norm * recommited_ell_2_norm < (MOD_Q as f64 / 2f64),
             "norm too large, aborting"
+        );
+
+        let recomposed_witness_bound = recommited_ell_2_norm
+            * (config
+                .witness_decomposition_base_log
+                .pow((config.witness_decomposition_chunks - 1) as u32)) as f64;
+
+        let extracted_witness_bound = recomposed_witness_bound * DEGREE as f64 * 4.0; // factor 4 for difference in numerator and denominator in extraction and 2 for ISIS to SIS
+        println!(
+            "Extracted witness L_2 norm bound: {}",
+            extracted_witness_bound
+        ); // we set hardness based on this
+
+        let basic_commitment_security = estimate_rsis_security(&RSISParameters {
+            m: config.witness_height as u64,
+            n: config.basic_commitment_rank as u64,
+            length_bound: extracted_witness_bound.ceil() as u64,
+        });
+        println!(
+            "Basic commitment estimated security for extraction: {:?}",
+            basic_commitment_security
         );
     }
 
@@ -397,7 +467,7 @@ pub fn prover_round(
                     );
                     println!("Next round prover done.");
 
-                    let evaluation_points = &sumcheck_output.4;
+                    let evaluation_points = &sumcheck_output.5;
 
                     let (new_evaluation_points_outer, new_evaluation_points_inner) =
                         evaluation_points
@@ -458,10 +528,9 @@ pub fn prover_round(
                         &opening,
                         sumcheck_context,
                         &mut hash_wrapper,
-                        // TODO: execute basic prover here
                     );
 
-                    let evaluation_points = &sumcheck_output.4;
+                    let evaluation_points = &sumcheck_output.5;
 
                     let (new_evaluation_points_outer, new_evaluation_points_inner) =
                         evaluation_points
@@ -503,6 +572,7 @@ pub fn prover_round(
         claim_over_witness,
         claim_over_witness_conjugate,
         norm_claim,
+        most_inner_norm_claim,
         sumcheck_transcript,
         _evaluation_points,
         constant_term_claims,
@@ -513,6 +583,7 @@ pub fn prover_round(
         claim_over_witness: claim_over_witness,
         claim_over_witness_conjugate: claim_over_witness_conjugate,
         norm_claim: norm_claim,
+        most_inner_norm_claim,
         next_round_commitment: next_level_data.2,
         rc_opening_inner: rc_opening.most_inner_commitment().clone(),
         rc_projection_inner: rc_projection_image

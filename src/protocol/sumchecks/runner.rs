@@ -7,6 +7,7 @@ use crate::{
         projection_matrix::ProjectionMatrix,
         ring_arithmetic::{QuadraticExtension, Representation, RingElement},
         structured_row::PreprocessedRow,
+        sumcheck_element::SumcheckElement,
     },
     protocol::{
         config::{Config, Projection, SumcheckConfig},
@@ -163,6 +164,7 @@ pub fn sumcheck(
     RingElement,
     RingElement,
     RingElement,
+    RingElement,
     Vec<Polynomial<QuadraticExtension>>,
     Vec<RingElement>,
     Option<Vec<RingElement>>,
@@ -232,6 +234,8 @@ pub fn sumcheck(
         t_load.elapsed().as_millis()
     );
 
+    let norm_inner_norm_claim = sumcheck_context.type5sumcheck.output_2.borrow_mut().claim();
+
     sumcheck_context
         .combiner
         .borrow_mut()
@@ -285,7 +289,7 @@ pub fn sumcheck(
         hash_wrapper.update_with_quadratic_extension_slice(&poly_over_field.coefficients);
 
         let mut r = RingElement::zero(Representation::IncompleteNTT);
-        let mut f = QuadraticExtension { coeffs: [0, 0] };
+        let mut f = QuadraticExtension::zero();
 
         hash_wrapper.sample_field_element_into(&mut f);
 
@@ -327,6 +331,7 @@ pub fn sumcheck(
         claim_over_witness,
         claim_over_witness_conjugate,
         norm_claim,
+        norm_inner_norm_claim,
         polys,
         evaluation_points,
         constant_term_claims,

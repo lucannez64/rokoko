@@ -218,7 +218,7 @@ pub static TOY_CONFIG_II: LazyLock<Config> = LazyLock::new(|| {
     .generate_config()
 });
 
-pub static CONFIG: LazyLock<Config> = LazyLock::new(|| P28.clone());
+pub static CONFIG: LazyLock<Config> = LazyLock::new(|| SOMEWHAT_REAL_CONFIG.clone());
 
 #[derive(Clone)]
 pub enum Config {
@@ -327,6 +327,7 @@ pub struct SumcheckRoundProof {
     pub claim_over_witness: RingElement,
     pub claim_over_witness_conjugate: RingElement,
     pub norm_claim: RingElement,
+    pub most_inner_norm_claim: RingElement,
     pub rc_opening_inner: Vec<RingElement>,
     pub rc_projection_inner: Option<Vec<RingElement>>,
     pub rcs_projection_1_inner: Option<(Vec<RingElement>, Vec<RingElement>)>,
@@ -354,6 +355,7 @@ impl SizeableProof for SumcheckRoundProof {
             &self.claim_over_witness,
             &self.claim_over_witness_conjugate,
             &self.norm_claim,
+            &self.most_inner_norm_claim,
         ];
         for claim in claims {
             claims_size += claim.size_in_bits();
@@ -501,7 +503,7 @@ impl SizeableProof for SimpleRoundProof {
 #[inline]
 pub fn paste_by_prefix(dest: &mut Vec<RingElement>, src: &Vec<RingElement>, prefix: &Prefix) {
     assert_eq!(
-        src.len(),
+        src.len().next_power_of_two(),
         1 << dest.len().ilog2() as usize - prefix.length,
         "Pasting failed. Source length does not match prefix length."
     );
