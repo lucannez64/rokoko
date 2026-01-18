@@ -441,7 +441,37 @@ impl RingElement {
         self.conjugate_into(&mut result);
         result
     }
+
+    // pub fn constant_term_from_incomplete_ntt_no_mod(&self) -> u64 { // TODO: I am still curious how to get the constant term without going back to coefficient space
+    //     assert_eq!(self.representation, Representation::IncompleteNTT);
+    //     let buf = &mut *get_temp_buffer();
+    //     buf.copy_from_slice(&self.v);
+    //     unsafe {
+    //         eltwise_mult_mod(
+    //             buf.as_mut_ptr(),
+    //             self.v.as_ptr(),
+    //             CONSTANT_TERM_FACTORS.as_ptr(),
+    //             HALF_DEGREE as u64,
+    //             MOD_Q,
+    //         );
+    //     }
+    //     let mut sum = 0u64;
+    //     for i in 0..DEGREE {
+    //         sum += buf[i];
+    //     }
+    //     sum
+    // }
 }
+
+// pub static CONSTANT_TERM_FACTORS: LazyLock<[u64; DEGREE]> = LazyLock::new(|| {
+//     let mut factors = RingElement::one(Representation::IncompleteNTT);
+//     unsafe {
+//         for i in 0..factors.v.len() {
+//             factors.v[i] = inv_mod(factors.v[i], MOD_Q);
+//         }
+//     }
+//     factors.v
+// });
 
 pub static SHIFT_FACTORS: LazyLock<[u64; HALF_DEGREE]> = LazyLock::new(|| {
     let mut factors = [0u64; HALF_DEGREE];
@@ -1358,6 +1388,17 @@ mod tests {
         assert_eq!(result, expected);
         assert_eq!(a, original);
     }
+
+    // #[test]
+    // fn test_constant_term_from_incomplete_ntt_no_mod() {
+    //     init_common();
+
+    //     let mut a = RingElement::constant(1, Representation::IncompleteNTT);
+
+    //     let computed_constant_term = a.constant_term_from_incomplete_ntt_no_mod() % MOD_Q;
+
+    //     assert_eq!(1, computed_constant_term);
+    // }
 }
 
 // #[test]

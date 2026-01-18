@@ -1,3 +1,5 @@
+use std::any::Any;
+
 use num::traits::ops::mul_add;
 
 use crate::{
@@ -16,7 +18,7 @@ use crate::{
     },
     hexl::bindings::{add_mod, eltwise_reduce_mod, multiply_mod, sub_mod},
     protocol::{
-        config::{Config, ConfigBase},
+        config::{Config, ConfigBase, SimpleConfig},
         open::evaluation_point_to_structured_row,
         sumchecks::helpers::{tensor_product, tensor_product_u64},
     },
@@ -377,6 +379,7 @@ fn batch_projection_into(
     witness: &VerticallyAlignedMatrix<RingElement>,
     projection_matrix: &ProjectionMatrix,
     hash_wrapper: &mut HashWrapper,
+    is_simple_config: bool,
 ) -> BatchedProjectionChallenges {
     // Sample structured challenge layers
     // c'_0 is over d (number of blocks in image_ct when viewed coefficient-wise)
@@ -393,7 +396,7 @@ fn batch_projection_into(
     // TODO: fix randomness consumption
     let (c_0_layers, c_1_layers, c_2_layers) = sample_layers(
         projection_matrix,
-        witness.width,
+        if is_simple_config { 1 } else { witness.width },
         witness.height,
         hash_wrapper,
     );
@@ -459,6 +462,7 @@ pub fn batch_projection_n_times(
     projection_matrix: &ProjectionMatrix,
     hash_wrapper: &mut HashWrapper,
     n: usize,
+    is_simple_config: bool,
 ) -> (
     HorizontallyAlignedMatrix<RingElement>,
     [BatchedProjectionChallenges; NOF_BATCHES],
@@ -471,12 +475,14 @@ pub fn batch_projection_n_times(
             witness,
             projection_matrix,
             hash_wrapper,
+            is_simple_config,
         ),
         batch_projection_into(
             &mut result.row_slice_mut(1),
             witness,
             projection_matrix,
             hash_wrapper,
+            is_simple_config,
         ),
     ];
 
@@ -523,9 +529,15 @@ pub fn verifier_sample_projection_challenges(
     config: &dyn ConfigBase,
     hash_wrapper: &mut HashWrapper,
 ) -> BatchedProjectionChallengesSuccinct {
+    let is_simple_config = (config as &dyn Any).is::<SimpleConfig>(); // we don't batch over columns in simple config
+
     let (c_0_layers, c_1_layers, c_2_layers) = sample_layers(
         projection_matrix,
-        config.witness_width(),
+        if is_simple_config {
+            1
+        } else {
+            config.witness_width()
+        },
         config.witness_height(),
         hash_wrapper,
     );

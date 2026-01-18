@@ -10,14 +10,18 @@ use crate::{
         structured_row::{PreprocessedRow, StructuredRow},
     },
     protocol::{
-        commitment::{commit_basic, recursive_commit, RecursiveCommitmentWithAux},
+        commitment::{commit_basic, recursive_commit, BasicCommitment, RecursiveCommitmentWithAux},
         config::{
             paste_by_prefix, paste_recursive_commitment, Config, ConfigBase, NextRoundCommitment,
-            Projection, RoundProof, SumcheckConfig, SumcheckRoundProof,
+            Projection, RoundProof, SimpleConfig, SimpleRoundProof, SumcheckConfig,
+            SumcheckRoundProof,
         },
         crs::CRS,
         fold::fold,
-        open::{evaluation_point_to_structured_row, open_at},
+        open::{
+            evaluation_point_to_structured_row, evaluation_point_to_structured_row_conjugate,
+            open_at,
+        },
         project::project,
         project_2::{batch_projection_n_times, project_coefficients},
         sumcheck::{sumcheck, SumcheckContext},
@@ -61,7 +65,7 @@ pub fn prover_round(
     sumcheck_context: &mut SumcheckContext,
     with_claims: bool,
 ) -> (SumcheckRoundProof, Option<Vec<RingElement>>) {
-    let mut hash_wrapper = HashWrapper::new();
+    let mut hash_wrapper = HashWrapper::new(); // TODO: there should be one hash wrapper per prover
 
     let start = std::time::Instant::now();
     hash_wrapper.update_with_ring_element_slice(&rc_commitment.most_inner_commitment());
@@ -128,6 +132,7 @@ pub fn prover_round(
                 &projection_matrix,
                 &mut hash_wrapper,
                 proj_config.nof_batches,
+                false,
             );
             println!(
                 "  batch_projection_n_times: {} ms",
@@ -260,27 +265,7 @@ pub fn prover_round(
             (None, sumcheck_output, None) // this should never happen, but we let it be for test purposes
         }
         Some(next_config) => {
-            let sumcheck_output = sumcheck(
-                &config,
-                &next_round_witness.data,
-                &projection_matrix,
-                &fold_challenge,
-                &rcs_projection_1
-                    .as_ref()
-                    .map(|(_, _, challenges)| challenges),
-                &opening,
-                sumcheck_context,
-                &mut hash_wrapper,
-            );
-
-            let (
-                claim_over_witness,
-                claim_over_witness_conjugate,
-                norm_claim,
-                sumcheck_transcript,
-                evaluation_points,
-                constant_term_claims,
-            ) = &sumcheck_output;
+            println!("Starting next round prover...");
 
             match &next_config.as_ref() {
                 Config::Sumcheck(next_sumcheck_config) => {
@@ -317,6 +302,22 @@ pub fn prover_round(
                         .most_inner_commitment()
                         .clone();
 
+                    let sumcheck_output = sumcheck(
+                        &config,
+                        &next_round_witness.data,
+                        &projection_matrix,
+                        &fold_challenge,
+                        &rcs_projection_1
+                            .as_ref()
+                            .map(|(_, _, challenges)| challenges),
+                        &opening,
+                        sumcheck_context,
+                        &mut hash_wrapper,
+                    );
+                    println!("Next round prover done.");
+
+                    let evaluation_points = &sumcheck_output.4;
+
                     let (new_evaluation_points_outer, new_evaluation_points_inner) =
                         evaluation_points
                             .split_at(next_sumcheck_config.witness_width.ilog2() as usize);
@@ -331,30 +332,16 @@ pub fn prover_round(
                                     evaluation_point_to_structured_row(
                                         &new_evaluation_points_inner.to_vec(),
                                     ),
-                                    evaluation_point_to_structured_row(
-                                        &new_evaluation_points_inner
-                                            .iter()
-                                            .map(|f| {
-                                                let mut f = f.clone();
-                                                f.conjugate_in_place();
-                                                f
-                                            })
-                                            .collect::<Vec<_>>(),
+                                    evaluation_point_to_structured_row_conjugate(
+                                        &new_evaluation_points_inner.to_vec(),
                                     ),
                                 ],
                                 &vec![
                                     evaluation_point_to_structured_row(
                                         &new_evaluation_points_outer.to_vec(),
                                     ),
-                                    evaluation_point_to_structured_row(
-                                        &new_evaluation_points_outer
-                                            .iter()
-                                            .map(|f| {
-                                                let mut f = f.clone();
-                                                f.conjugate_in_place();
-                                                f
-                                            })
-                                            .collect::<Vec<_>>(),
+                                    evaluation_point_to_structured_row_conjugate(
+                                        &new_evaluation_points_outer.to_vec(),
                                     ),
                                 ],
                                 sumcheck_context.next.as_mut().unwrap(),
@@ -377,11 +364,12 @@ pub fn prover_round(
                         next_simple_config.basic_commitment_rank,
                     );
 
+                    // TODO: we should update FS here!
+
                     println!(
                         "Next round basic commitment created of width {} and height {}.",
                         basic_commitment.width, basic_commitment.height
                     );
-                    // TODO
                     let sumcheck_output = sumcheck(
                         &config,
                         &next_round_witness.data,
@@ -393,9 +381,37 @@ pub fn prover_round(
                         &opening,
                         sumcheck_context,
                         &mut hash_wrapper,
+                        // TODO: execute basic prover here
                     );
+
+                    let evaluation_points = &sumcheck_output.4;
+
+                    let (new_evaluation_points_outer, new_evaluation_points_inner) =
+                        evaluation_points
+                            .split_at(next_simple_config.witness_width.ilog2() as usize);
+
                     (
-                        None,
+                        Some(RoundProof::Simple(prover_round_simple(
+                            next_simple_config,
+                            &basic_commitment,
+                            &next_round_witness,
+                            &vec![
+                                evaluation_point_to_structured_row(
+                                    &new_evaluation_points_inner.to_vec(),
+                                ),
+                                evaluation_point_to_structured_row_conjugate(
+                                    &new_evaluation_points_inner.to_vec(),
+                                ),
+                            ],
+                            &vec![
+                                evaluation_point_to_structured_row(
+                                    &new_evaluation_points_outer.to_vec(),
+                                ),
+                                evaluation_point_to_structured_row_conjugate(
+                                    &new_evaluation_points_outer.to_vec(),
+                                ),
+                            ],
+                        ))),
                         sumcheck_output,
                         Some(NextRoundCommitment::Simple(basic_commitment)),
                     )
@@ -443,4 +459,57 @@ pub fn prover_round(
     let elapsed = start.elapsed().as_nanos();
     println!("Prover: {} ns", elapsed);
     (rp, claims)
+}
+
+// this is only for the last round
+pub fn prover_round_simple(
+    config: &SimpleConfig,
+    commitment: &BasicCommitment,
+    witness: &VerticallyAlignedMatrix<RingElement>,
+    evaluation_points_inner: &Vec<StructuredRow>,
+    evaluation_points_outer: &Vec<StructuredRow>,
+) -> SimpleRoundProof {
+    let mut hash_wrapper = HashWrapper::new();
+
+    hash_wrapper.update_with_ring_element_slice(&commitment.data);
+
+    let opening = open_at(&witness, &evaluation_points_inner, &evaluation_points_outer);
+
+    hash_wrapper.update_with_ring_element_slice(&opening.rhs.data);
+
+    let mut projection_matrix =
+        ProjectionMatrix::new(config.projection_ratio, config.projection_height);
+
+    projection_matrix.sample(&mut hash_wrapper);
+
+    let projection_image_ct = project_coefficients(&witness, &projection_matrix);
+
+    hash_wrapper.update_with_ring_element_slice(&projection_image_ct.data);
+    // let projection_image = project(&witness, &projection_matrix);
+
+    let (batched_projection_image, _) = batch_projection_n_times(
+        // we don't need the challenges here
+        &witness,
+        &projection_matrix,
+        &mut hash_wrapper,
+        config.projection_nof_batches,
+        true,
+    );
+
+    // let projection_image = project(&witness, &projection_matrix);
+
+    hash_wrapper.update_with_ring_element_slice(&batched_projection_image.data);
+
+    let mut fold_challenge = vec![RingElement::zero(Representation::IncompleteNTT); witness.width];
+
+    hash_wrapper.sample_biased_ternary_ring_element_vec_into(&mut fold_challenge);
+
+    let folded_witness = fold(&witness, &fold_challenge);
+
+    SimpleRoundProof {
+        folded_witness,
+        projection_image_ct,
+        batched_projection_image,
+        opening_rhs: opening.rhs,
+    }
 }

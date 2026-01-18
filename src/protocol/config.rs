@@ -1,8 +1,8 @@
-use std::sync::LazyLock;
+use std::{any::Any, sync::LazyLock};
 
 use crate::{
     common::{
-        matrix::HorizontallyAlignedMatrix,
+        matrix::{HorizontallyAlignedMatrix, VerticallyAlignedMatrix},
         ring_arithmetic::{QuadraticExtension, RingElement},
     },
     protocol::{
@@ -205,12 +205,19 @@ pub static TOY_CONFIG_II: LazyLock<Config> = LazyLock::new(|| {
 
         witness_decomposition_chunks: 2,
         witness_decomposition_base_log: 15,
-        next: None,
+        next: Some(Box::new(AuxConfig::Simple(SimpleConfig {
+            witness_height: 256,
+            witness_width: 16,
+            projection_ratio: 4,
+            projection_height: 256,
+            projection_nof_batches: 2,
+            basic_commitment_rank: 2,
+        }))),
     }
     .generate_config()
 });
 
-pub static CONFIG: LazyLock<Config> = LazyLock::new(|| REAL_CONFIG.clone());
+pub static CONFIG: LazyLock<Config> = LazyLock::new(|| TOY_CONFIG_II.clone());
 
 #[derive(Clone)]
 pub enum Config {
@@ -218,7 +225,7 @@ pub enum Config {
     Simple(SimpleConfig),
 }
 
-pub trait ConfigBase {
+pub trait ConfigBase: Any {
     fn witness_height(&self) -> usize;
     fn witness_width(&self) -> usize;
     fn projection_ratio(&self) -> usize;
@@ -274,17 +281,9 @@ pub struct SimpleConfig {
     pub witness_width: usize,
     pub projection_ratio: usize,  // shall be likely the witness_height
     pub projection_height: usize, // likely 256 unless for testing
-    // pub commitment_recursion: RecursionConfig,
-    // pub opening_recursion: RecursionConfig,
-    // pub projection_recursion: Projection,
-    // pub nof_openings: usize,
-
-    // pub witness_decomposition_base_log: usize,
-    // pub witness_decomposition_chunks: usize,
-    // pub folded_witness_prefix: Prefix,
+    pub projection_nof_batches: usize,
     pub basic_commitment_rank: usize,
-    // pub composed_witness_length: usize,
-    pub next: Option<Box<SimpleConfig>>, // for multiple rounds
+    // pub next: Option<Box<SimpleConfig>>, // for multiple rounds
 }
 
 impl ConfigBase for SimpleConfig {
@@ -332,7 +331,10 @@ pub struct SumcheckRoundProof {
 }
 
 pub struct SimpleRoundProof {
-    next: Option<Box<SimpleRoundProof>>,
+    pub folded_witness: VerticallyAlignedMatrix<RingElement>,
+    pub projection_image_ct: VerticallyAlignedMatrix<RingElement>, // cosntant term projection image embedded
+    pub batched_projection_image: HorizontallyAlignedMatrix<RingElement>,
+    pub opening_rhs: HorizontallyAlignedMatrix<RingElement>,
 }
 
 #[inline]

@@ -1,9 +1,27 @@
 use crate::{
-    common::{hash::HashWrapper, ring_arithmetic::RingElement, structured_row::StructuredRow},
+    common::{
+        config::NOF_BATCHES,
+        hash::HashWrapper,
+        matrix::{
+            new_vec_zero_field_preallocated, new_vec_zero_preallocated, HorizontallyAlignedMatrix,
+            VerticallyAlignedMatrix,
+        },
+        projection_matrix::ProjectionMatrix,
+        ring_arithmetic::{Representation, RingElement},
+        structured_row::{PreprocessedRow, StructuredRow},
+    },
     protocol::{
-        config::{Config, NextRoundCommitment, RoundProof, SumcheckConfig, SumcheckRoundProof},
+        commitment::{commit_basic, BasicCommitment},
+        config::{
+            Config, NextRoundCommitment, RoundProof, SimpleConfig, SimpleRoundProof,
+            SumcheckConfig, SumcheckRoundProof,
+        },
         crs::CRS,
-        open::{evaluation_point_to_structured_row, evaluation_point_to_structured_row_conjugate},
+        open::{
+            evaluation_point_to_structured_row, evaluation_point_to_structured_row_conjugate,
+            open_at,
+        },
+        project_2::{batch_projection_n_times, verifier_sample_projection_challenges},
         sumchecks::{
             context_verifier::VerifierSumcheckContext, runner_verifier::sumcheck_verifier,
         },
@@ -93,11 +111,146 @@ pub fn verifier_round(
                         sumcheck_context_verifier.next.as_mut().unwrap(),
                     );
                 }
-                RoundProof::Simple(_) => {
+                RoundProof::Simple(next_simple_round_proof) => {
+                    let next_simple_config = match &config.next {
+                        Some(next_config) => match next_config.as_ref() {
+                            Config::Simple(next_simple_config) => next_simple_config,
+                            _ => panic!("Expected simple config for next round."),
+                        },
+                        None => panic!("Next simple config must be present."),
+                    };
+
+                    let (new_evaluation_points_outer, new_evaluation_points_inner) =
+                        evaluation_points
+                            .split_at(next_simple_config.witness_width.ilog2() as usize);
+
+                    let commitment = match &next_round_commitment {
+                        NextRoundCommitment::Simple(basic_commitment) => basic_commitment,
+                        _ => panic!("Expected simple commitment for next round."),
+                    };
                     // TODO: implement simple next round verifier
+                    verifier_round_simple(
+                        &crs,
+                        next_simple_config,
+                        commitment,
+                        next_simple_round_proof,
+                        &vec![
+                            evaluation_point_to_structured_row(
+                                &new_evaluation_points_inner.to_vec(),
+                            ),
+                            evaluation_point_to_structured_row_conjugate(
+                                &new_evaluation_points_inner.to_vec(),
+                            ),
+                        ],
+                        &vec![
+                            evaluation_point_to_structured_row(
+                                &new_evaluation_points_outer.to_vec(),
+                            ),
+                            evaluation_point_to_structured_row_conjugate(
+                                &new_evaluation_points_outer.to_vec(),
+                            ),
+                        ],
+                        &vec![
+                            round_proof.claim_over_witness.clone(),
+                            round_proof.claim_over_witness_conjugate.conjugate(),
+                        ],
+                    );
                 }
             }
         }
         None => {}
     }
+}
+
+pub fn verifier_round_simple(
+    crs: &CRS,
+    config: &SimpleConfig,
+    commitment: &BasicCommitment,
+    round_proof: &SimpleRoundProof,
+    evaluation_points_inner: &Vec<StructuredRow>,
+    evaluation_points_outer: &Vec<StructuredRow>,
+    claims: &Vec<RingElement>,
+) {
+    let mut hash_wrapper = HashWrapper::new();
+    hash_wrapper.update_with_ring_element_slice(&commitment.data);
+    hash_wrapper.update_with_ring_element_slice(&round_proof.opening_rhs.data);
+
+    let mut projection_matrix =
+        ProjectionMatrix::new(config.projection_ratio, config.projection_height);
+
+    projection_matrix.sample(&mut hash_wrapper);
+
+    hash_wrapper.update_with_ring_element_slice(&round_proof.projection_image_ct.data);
+
+    let _challenges_0 =
+        verifier_sample_projection_challenges(&projection_matrix, config, &mut hash_wrapper);
+    let _challenges_1 =
+        verifier_sample_projection_challenges(&projection_matrix, config, &mut hash_wrapper);
+
+    hash_wrapper.update_with_ring_element_slice(&round_proof.batched_projection_image.data);
+
+    let mut folding_challenges =
+        vec![RingElement::zero(Representation::IncompleteNTT); config.witness_width];
+
+    hash_wrapper.sample_biased_ternary_ring_element_vec_into(&mut folding_challenges);
+
+    let commitment_of_folded_witness = commit_basic(
+        &crs,
+        &round_proof.folded_witness,
+        config.basic_commitment_rank,
+    );
+
+    let ck = &crs.ck_for_wit_dim(round_proof.folded_witness.height);
+
+    let mut folded_commitment =
+        HorizontallyAlignedMatrix::new_zero_preallocated(config.basic_commitment_rank, 1);
+
+    for i in 0..ck.len() {
+        for col in 0..commitment.width {
+            let mut temp = RingElement::zero(Representation::IncompleteNTT);
+            temp *= (&commitment[(i, col)], &folding_challenges[col]);
+            folded_commitment[(i, 0)] += &temp;
+        }
+    }
+
+    assert_eq!(commitment_of_folded_witness, folded_commitment);
+
+    let opening_to_folded_witness = open_at(
+        &round_proof.folded_witness,
+        evaluation_points_inner,
+        evaluation_points_outer,
+    );
+
+    let mut folded_opening =
+        HorizontallyAlignedMatrix::new_zero_preallocated(round_proof.opening_rhs.height, 1);
+
+    for i in 0..round_proof.opening_rhs.height {
+        let mut temp = RingElement::zero(Representation::IncompleteNTT);
+        for col in 0..commitment.width {
+            temp *= (&round_proof.opening_rhs[(i, col)], &folding_challenges[col]);
+            folded_opening[(i, 0)] += &temp;
+        }
+    }
+
+    assert_eq!(opening_to_folded_witness.rhs, folded_opening);
+
+    // TODO verify consistency of projections
+
+    let mut evaluation = new_vec_zero_preallocated(round_proof.opening_rhs.height);
+
+    for i in 0..round_proof.opening_rhs.height {
+        let preprocessed_row = PreprocessedRow::from_structured_row(&evaluation_points_outer[i]);
+        let mut temp = RingElement::zero(Representation::IncompleteNTT);
+        for col in 0..round_proof.opening_rhs.width {
+            temp *= (
+                &round_proof.opening_rhs[(i, col)],
+                &preprocessed_row.preprocessed_row[col],
+            );
+            evaluation[i] += &temp;
+        }
+    }
+
+    // TODO: verify norms
+
+    assert_eq!(claims, &evaluation);
 }
