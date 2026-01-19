@@ -11,6 +11,7 @@ use crate::{
         crs::CRS,
         open::{claim, evaluation_point_to_structured_row},
         parties::{commiter::commit, prover::prover_round, verifier::verifier_round},
+        project::prepare_i16_witness,
         sumcheck::init_sumcheck,
         sumchecks::builder_verifier::init_verifier,
     },
@@ -34,7 +35,7 @@ pub fn execute() {
     let mut sumcheck_context_verifier = init_verifier(&crs, &config);
     println!("Sumcheck contexts initialized.");
 
-    let witness = VerticallyAlignedMatrix {
+    let mut witness = VerticallyAlignedMatrix {
         height: config.witness_height,
         width: config.witness_width,
         data: sample_random_short_vector(
@@ -45,7 +46,7 @@ pub fn execute() {
         used_cols: config.witness_width,
     };
 
-    let (rc_commitment_with_aux, rc_commitment) = commit(&crs, &config, &witness);
+    let (commitment_with_aux, rc_commitment) = commit(&crs, &config, &witness);
 
     println!("Witness generated.");
 
@@ -68,7 +69,7 @@ pub fn execute() {
     let (proof, claims) = prover_round(
         &crs,
         &config,
-        &rc_commitment_with_aux,
+        &commitment_with_aux,
         &witness,
         &evaluation_points_inner,
         &evaluation_points_outer,

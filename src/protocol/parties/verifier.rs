@@ -229,9 +229,11 @@ pub fn verifier_round_simple(
     }
 
     for i in 0..config.basic_commitment_rank {
-        assert_eq!(commitment_of_folded_witness[(i, 0)], folded_commitment[(i, 0)]);
+        assert_eq!(
+            commitment_of_folded_witness[(i, 0)],
+            folded_commitment[(i, 0)]
+        );
     }
-
 
     let opening_to_folded_witness = open_at(
         &round_proof.folded_witness,
@@ -268,6 +270,7 @@ pub fn verifier_round_simple(
         round_proof.batched_projection_image.height,
         1,
     );
+
     for i in 0..round_proof.batched_projection_image.height {
         for j in 0..commitment.width {
             temp *= (
