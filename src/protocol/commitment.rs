@@ -235,6 +235,7 @@ fn test_commitment_computation() {
         ],
         width: 2,
         height: 8,
+        used_cols: 2,
     };
 
     let commitment = commit_basic_internal(&ck, &witness, 2);

@@ -34,6 +34,7 @@ fn test_fold() {
         ],
         width: 2,
         height: 2,
+        used_cols: 2
     };
 
     let fold_challenge = vec![
@@ -45,6 +46,7 @@ fn test_fold() {
         data: vec![RingElement::zero(Representation::IncompleteNTT); 2 * 2],
         width: 2,
         height: 2,
+        used_cols: 2
     };
 
     let folded_witness = fold(&witness, &fold_challenge);

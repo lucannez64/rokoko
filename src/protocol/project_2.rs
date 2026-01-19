@@ -578,6 +578,7 @@ fn test_batch_projection() {
         data: vec![RingElement::random(Representation::IncompleteNTT); 16],
         width: 2,
         height: 8,
+        used_cols: 2,
     };
 
     let mut projection_matrix = ProjectionMatrix::new(2, 256);
@@ -660,6 +661,7 @@ fn test_const_term_relation_to_prove() {
         data: vec![RingElement::random(Representation::IncompleteNTT); 8 * 64],
         width: 8,
         height: 64,
+        used_cols: 8,
     };
     let mut projection_matrix = ProjectionMatrix::new(4, 256);
 

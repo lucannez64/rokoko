@@ -103,6 +103,7 @@ fn test_opening() {
             RingElement::constant(15, Representation::IncompleteNTT),
             RingElement::constant(16, Representation::IncompleteNTT),
         ],
+        used_cols: 4,
     };
 
     let inner_evaluation_points = vec![

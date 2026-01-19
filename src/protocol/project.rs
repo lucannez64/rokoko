@@ -103,6 +103,7 @@ fn test_projection() {
         ],
         width: 2,
         height: projection_matrix.projection_height * 4,
+        used_cols: 2,
     };
 
     for i in 0..witness.height * witness.width {
@@ -114,7 +115,7 @@ fn test_projection() {
     assert_eq!(
         projection_image[(0, 0)],
         RingElement::constant(
-            (-1 * 1 + -1 * 2 + 1 * 3 + 1 * 4) as u64,
+            (-1i64 * 1 + -1i64 * 2 + 1i64 * 3 + 1i64 * 4) as u64,
             Representation::IncompleteNTT
         )
     );
@@ -154,7 +155,7 @@ fn test_projection() {
     assert_eq!(
         projection_image[(3, 0)],
         RingElement::constant(
-            (-1 * 2 + 1 * 3 + 1 * 7 + 1 * 8) as u64,
+            (-1i64 * 2 + 1 * 3 + 1 * 7 + 1 * 8) as u64,
             Representation::IncompleteNTT
         )
     );
