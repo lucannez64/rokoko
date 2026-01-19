@@ -21,18 +21,11 @@ use crate::{
     },
 };
 
-/// Builds the pair of sumchecks that recompose a base-`2^{base_log}` decomposition.
-/// In our protocol, many objects are stored in a digit-decomposed form to keep
-/// coefficients small. When we want to prove claims about the recomposed values,
-/// we need a gadget that: (1) folds the decomposed digits with the appropriate
-/// radix weights, and (2) accounts for the constant offset introduced by the
-/// signed-digit representation. The first sumcheck returned here carries the
-/// radix weights (`combiner_sumcheck`), while the second holds the constant
-/// offset term that is subtracted from the folded witness. Keeping the offset
-/// in a dedicated linear sumcheck lets us reuse the same folding machinery for
-/// many decompositions without duplicating arithmetic. The variable arity is
-/// expanded with prefix padding so these sumchecks can be plugged into larger
-/// products without re-indexing the hypercube variables.
+/// Builds sumchecks for recomposing base-`2^{base_log}` decomposition:
+/// - `combiner_sumcheck`: carries radix weights (1, base, base², ...)
+/// - `constant_sumcheck`: holds the signed-digit offset to subtract
+///
+/// Prefix padding enables composition without re-indexing the hypercube.
 pub(crate) fn composition_sumcheck(
     base_log: u64,
     chunks: usize,
@@ -76,29 +69,9 @@ pub(crate) fn composition_sumcheck(
     (combiner_sumcheck, witness_combiner_constant_sumcheck)
 }
 
-/// Creates a selector sumcheck that picks out a specific slice from the hypercube.
-///
-/// This function constructs a selector equality (SelectorEq) sumcheck that evaluates to 1
-/// on all points in the hypercube whose first `prefix.length` bits match `prefix.prefix`,
-/// and 0 everywhere else. This is a fundamental building block in our protocol because:
-///
-/// 1. **Selective Commitment Enforcement**: We use selectors to enforce that different
-///    commitments are correctly formed only on their designated slices of the witness vector.
-///    For example, if we have multiple recursive commitment layers at different prefix
-///    positions, each layer's CK·witness check only needs to hold on that layer's slice.
-///
-/// 2. **Memory Layout Optimization**: By organizing the combined witness as a flat vector
-///    where different objects (folded witness, recursive commitments, opening RHS values, etc.)
-///    occupy disjoint prefix regions, we can reuse the same sumcheck machinery across all
-///    constraints without copying data or maintaining separate witnesses.
-///
-/// 3. **Verifier Efficiency**: Instead of proving separate sumchecks for each constraint,
-///    we multiply each constraint by its selector and sum them all together. The verifier
-///    then only needs to fold a single set of challenges across the entire hypercube, which
-///    dramatically reduces round complexity.
-///
-/// The `total_vars` parameter ensures the selector hypercube matches the global witness size,
-/// so prefix padding is inserted automatically when `prefix.length < total_vars`.
+/// Creates a selector (SelectorEq) that evaluates to 1 where the first `prefix.length`
+/// bits match `prefix.prefix`, and 0 elsewhere. Used to enforce constraints only on
+/// specific witness slices. Prefix padding ensures alignment with the global hypercube.
 pub(crate) fn sumcheck_from_prefix(
     prefix: &Prefix,
     total_vars: usize,
@@ -110,35 +83,12 @@ pub(crate) fn sumcheck_from_prefix(
     ))
 }
 
-/// Loads a single row from the commitment key (CK) into a linear sumcheck gadget.
+/// Loads the i-th row of the commitment key into a linear sumcheck with appropriate padding:
+/// - `wit_dim`: dimension for this CK row (varies for recursive layers)
+/// - `sufix`: trailing variables for decomposition chunks
+/// - prefix padding aligns with the global hypercube
 ///
-/// The commitment key is a matrix where each row represents one constraint in the linear
-/// commitment scheme. This function packages the i-th row into a sumcheck-friendly format
-/// with the correct variable padding. The design choices here reflect several protocol needs:
-///
-/// 1. **Dimension Flexibility**: The `wit_dim` parameter specifies how many elements this
-///    CK row operates on. In recursive commitments, inner layers may work on smaller slices
-///    of the witness, so we can't hardcode a single dimension.
-///
-/// 2. **Suffix Padding for Decomposition**: The `sufix` parameter reserves trailing variables
-///    for the decomposition chunks. When we prove that CK·folded_witness matches a commitment,
-///    the folded witness is itself stored in a decomposed form (multiple chunks per entry to
-///    keep coefficients small). By padding with `sufix` trailing variables, the hypercube
-///    layout aligns decomposition indices with the actual memory layout, avoiding expensive
-///    reshuffling during the sumcheck rounds.
-///
-/// 3. **Prefix Padding for Global Context**: The `total_vars - wit_dim.ilog2() - sufix`
-///    computation determines how many leading variables to pad. This ensures the CK row
-///    sumcheck lives in the same hypercube as all other sumchecks (which operate on the
-///    full combined witness), so a single verifier random challenge can fold everything.
-///
-/// 4. **Preprocessing Reuse**: The CK matrix is part of the public CRS and is preprocessed
-///    once. By directly loading `ck[i].preprocessed_row`, we avoid recomputing tensor
-///    structure or evaluation tables during every sumcheck invocation, which speeds up
-///    the prover significantly.
-///
-/// The returned `Rc<RefCell<...>>` allows multiple sumchecks (like different type0 checks
-/// for different commitment rows) to share references to the same CK data.
+/// Uses preprocessed CRS data to avoid recomputing tensor structures.
 pub(crate) fn ck_sumcheck(
     crs: &CRS,
     total_vars: usize,
@@ -161,35 +111,11 @@ pub(crate) fn ck_sumcheck(
     sumcheck
 }
 
-/// Computes the tensor (Kronecker) product of two vectors of ring elements.
+/// Computes tensor product a ⊗ b = [a0·b0, a0·b1, ..., a0·b_{n-1}, a1·b0, ..., a_{m-1}·b_{n-1}].
 ///
-/// Given vectors a = [a0, a1, ..., a_{m-1}] and b = [b0, b1, ..., b_{n-1}], this function
-/// computes their tensor product a ⊗ b, which is the mn-dimensional vector:
-///   [a0·b0, a0·b1, ..., a0·b_{n-1}, a1·b0, a1·b1, ..., a_{m-1}·b_{n-1}]
-///
-/// **Why Tensor Products in Sumcheck?**
-///
-/// In our protocol, tensor products arise naturally when we need to prove properties
-/// about structured matrices or multi-dimensional data:
-///
-/// 1. **Projection Matrix Structure**: The projection matrix has a block structure where
-///    each block is a copy of a smaller projection matrix. To prove that the witness
-///    projects correctly, we need to compute (folding_challenges ⊗ projection_flatter),
-///    which gives us the effective "selector" for which projected elements contribute
-///    to the final folded projection image.
-///
-/// 2. **Hypercube Factorization**: The tensor product corresponds to the multiplication
-///    of multilinear extensions over independent sets of variables. When we evaluate
-///    MLE(x) ⊗ MLE(y) at point (x, y), it factors as MLE_x(x) · MLE_y(y), which is
-///    exactly how the sumcheck verifier combines challenges across different dimensions.
-///
-/// 3. **Fold-Then-Project Commutativity**: By expressing the projection constraint as
-///    an inner product with a tensor, we can prove that folding the witness first and
-///    then projecting gives the same result as projecting each chunk separately and
-///    then folding the images. This is crucial for the recursive structure of the protocol.
-///
-/// The ordering (outer loop over `a`, inner loop over `b`) matches the standard Kronecker
-/// product definition and ensures the indices align with how we lay out the hypercube.
+/// Used in projection constraints: (folding_challenges ⊗ projection_flatter) selects which
+/// projected elements contribute to the folded projection image, exploiting the block structure
+/// of the projection matrix.
 pub(crate) fn tensor_product(a: &Vec<RingElement>, b: &Vec<RingElement>) -> Vec<RingElement> {
     let mut result: Vec<RingElement> = new_vec_zero_preallocated(a.len() * b.len());
     let mut idx = 0;

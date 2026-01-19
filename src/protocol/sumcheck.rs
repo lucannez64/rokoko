@@ -1,7 +1,7 @@
 //! Sumcheck Protocol Implementation
 //!
 //! This module has been refactored into a more maintainable structure under `sumchecks/`.
-//! The sumcheck protocol is complex and involves many types of constraints (Type0-Type4),
+//! The sumcheck protocol is complex and involves many types of constraints (Type0-Type5),
 //! each with its own sumcheck gadgets and verification logic.
 //!
 //! **Constraint Types Overview:**
@@ -9,9 +9,11 @@
 //! - **Type0**: Basic commitment correctness - verifies `CK · folded_witness = commitment · fold_challenge`
 //! - **Type1**: Inner evaluation consistency - verifies opening RHS matches witness evaluation
 //! - **Type2**: Outer evaluation consistency - verifies opening produces the claimed scalar result
-//! - **Type3**: Projection validity - verifies projection image is correctly computed from witness
+//! - **Type3**: Projection validity (block-diagonal) - verifies projection image is correctly computed from witness
+//! - **Type3_1**: Projection validity (Kronecker) - verifies `c^T (I ⊗ P) · witness = c^T projection_image · fold_challenge`
 //! - **Type4**: Recursive commitment well-formedness - verifies the entire recursive commitment
 //!   tree structure (internal layer parent-child consistency + leaf layer anchoring to public values)
+//! - **Type5**: Witness norm check - verifies `<combined_witness, conjugated_witness> = norm_claim`
 //!
 //! **Module Organization:**
 //!

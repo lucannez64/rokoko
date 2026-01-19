@@ -32,76 +32,18 @@ use super::{
     helpers::{ck_sumcheck, composition_sumcheck, sumcheck_from_prefix},
 };
 
-/// Constructs the recursive sumcheck structure for verifying commitment well-formedness.
+/// Builds sumcheck gadgets for recursive commitment verification.
 ///
-/// This function builds the sumcheck gadgets needed to prove that a recursive commitment
-/// is correctly constructed—that is, each layer is properly decomposed from its parent.
-/// The construction follows a tree-like structure where:
+/// For each internal layer i, proves: CK_i · witness_i = compose(child_commitment_{i+1})
+/// where compose() reconstructs the parent from decomposed child chunks.
 ///
-/// **Recursive Commitment Overview:**
-/// In our protocol, commitments are organized hierarchically to keep proof sizes manageable.
-/// Instead of committing to the full witness at once (which would require a huge CK matrix),
-/// we decompose the witness into chunks, commit to each chunk separately, and then recursively
-/// commit to those commitments. This gives us a tree where:
-///   - Leaves: chunks of the original witness
-///   - Internal nodes: commitments to their children's commitments
-///   - Root: the final public commitment
+/// Each layer context contains:
+/// - Selectors: identify witness slices for current and child layers
+/// - Combiner: recomposes values from decomposed chunks (radix weights + signed-digit offset)
+/// - CK sumchecks: one per rank, loaded with commitment key rows
+/// - Output constraints: DiffSumcheck enforcing selector_i · (CK_i · witness_i) = selector_{i+1} · compose(witness_{i+1})
 ///
-/// **What This Function Proves:**
-/// For each internal layer i in the recursion tree, we need to prove:
-///   CK_i · selected_witness_slice_i = compose(child_commitment_{i+1})
-///
-/// where:
-///   - CK_i is the commitment key for layer i (with dimension matching that layer's slice size)
-///   - selected_witness_slice_i is the portion of the combined witness that holds layer i's data
-///   - compose(...) reconstructs the parent value from decomposed child chunks
-///   - child_commitment_{i+1} is the commitment at the next layer down
-///
-/// **Layer-by-Layer Construction:**
-/// The function walks through the recursion config from root to leaves, building a
-/// `Type4LayerSumcheckContext` for each non-leaf layer. Each layer context contains:
-///
-/// 1. **Selectors**: Two selectors that identify which slice of the combined witness belongs
-///    to the current layer and which belongs to the child layer. These ensure we're checking
-///    the right portions of the witness without interference from unrelated data.
-///
-/// 2. **Combiner Sumchecks**: A pair (combiner, constant) that reconstructs the composed
-///    value from decomposed chunks. The combiner holds the radix weights (1, base, base²,
-///    ...) and the constant holds the signed-digit offset that needs to be subtracted.
-///
-/// 3. **CK Sumchecks**: One sumcheck per rank, each loaded with a different row of the
-///    commitment key. The rank determines how many constraints we're batching together
-///    (higher rank = more security but larger proofs).
-///
-/// 4. **Output Constraints**: For each CK row, we create a DiffSumcheck that enforces:
-///       selector_i · (CK_row_i · witness_i) = selector_{i+1} · compose(witness_{i+1})
-///    This is the core recursive constraint. The selectors ensure both sides are only
-///    evaluated on their respective slices, and the compose operation on the RHS mirrors
-///    how the child commitment is stored in decomposed form.
-///
-/// **Why Stop at Non-Leaf Layers:**
-/// The function intentionally does NOT build a sumcheck for the leaf layer (the layer with
-/// `current.next == None`). This is because the leaf layer's commitment is assumed to be
-/// public and trusted as input to the protocol. We're only proving that the recursive
-/// structure above it is correct, not that the leaf itself satisfies any constraint. This
-/// design choice reduces proof size and verification time.
-///
-/// **Shared References and RefCell:**
-/// All the sumcheck gadgets are wrapped in `Rc<RefCell<...>>` because:
-///   - Multiple outputs may share the same underlying data (e.g., all rows use the same
-///     selector sumcheck)
-///   - The sumcheck protocol mutates the gadgets as it folds with verifier challenges
-///   - We want to avoid copying large preprocessed structures
-///
-/// The RefCell provides interior mutability so we can call `partial_evaluate` on shared
-/// references during the sumcheck rounds.
-///
-/// **Returned Structure:**
-/// The function returns a `Type4SumcheckContext` containing:
-///   - `layers`: A vector of `Type4LayerSumcheckContext`, one per internal node level
-///
-/// This nested structure mirrors the tree topology and allows the prover/verifier to fold
-/// constraints level-by-level in a systematic way.
+/// The leaf layer anchors to the public commitment value. RefCell enables shared mutation during folding.
 fn build_type4_sumcheck_context(
     crs: &CRS,
     total_vars: usize,
@@ -247,21 +189,17 @@ fn build_type4_sumcheck_context(
     }
 }
 
-/// Constructs all sumcheck gadgets used across the protocol for a single round.
-/// The function wires every semantic constraint into a dedicated sumcheck:
-///   - commitment key rows against the folded witness (type0)
-///   - inner and outer evaluation consistency for openings (type1/type2)
-///   - projection image consistency (type3)
-///   - recursive commitment well-formedness for every recursion tree (type4)
-///   - inner product of combined witness with its conjugate for norm checking (type5)
-/// It also prepares the folding combiners/constants so that later folds only
-/// require calling `partial_evaluate_all`. The assembled context is reused for
-/// both prover-side simulation (the debug_asserts in `sumcheck`) and as the live
-/// state during interactive folding. Prefix padding is chosen so every helper
-/// sumcheck can be embedded into larger products without reindexing, and the
-/// decomposition offsets are preloaded so the recomposition gadgets mirror the
-/// commitment arithmetic exactly. When the folding schedule changes, this is the
-/// single place to update the plumbing.
+/// Constructs all sumcheck gadgets for constraint verification:
+///   - Type0: CK · folded_witness = commitment · fold_challenge
+///   - Type1: inner_eval · folded_witness = opening.rhs · fold_challenge
+///   - Type2: outer_eval · opening.rhs = claimed_evaluation
+///   - Type3: projection_coeffs · folded_witness = fold_tensor · projection_image (block-diagonal)
+///   - Type3_1: c^T (I ⊗ P) · folded_witness = c^T projection_image · fold_challenge (Kronecker)
+///   - Type4: recursive commitment well-formedness at each layer
+///   - Type5: witness norm via <combined_witness, conjugate>
+///
+/// Prefix padding enables composition without reindexing. Decomposition
+/// offsets are preloaded to match commitment arithmetic.
 pub fn init_sumcheck(crs: &crs::CRS, config: &SumcheckConfig) -> SumcheckContext {
     let total_vars = config.composed_witness_length.ilog2() as usize;
 
