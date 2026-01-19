@@ -140,7 +140,7 @@ pub static P28_4: LazyLock<AuxSumcheckConfig> = LazyLock::new(|| AuxSumcheckConf
     nof_openings: 2,
     commitment_recursion: AuxRecursionConfig {
         decomposition_base_log: 7,
-        decomposition_chunks: 5,
+        decomposition_chunks: 8,
         rank: 2,
         next: Some(Box::new(DECOMP_8_LAST_LEVEL.clone())),
     },
@@ -171,6 +171,8 @@ pub static P28_4: LazyLock<AuxSumcheckConfig> = LazyLock::new(|| AuxSumcheckConf
 
     next: Some(Box::new(AuxConfig::Simple(P28_LAST.clone()))),
 });
+
+
 
 // pub static P28_5: LazyLock<AuxSumcheckConfig> = LazyLock::new(|| AuxSumcheckConfig{
 //     witness_height: 2usize.pow(9),
@@ -214,10 +216,53 @@ pub static P28_4: LazyLock<AuxSumcheckConfig> = LazyLock::new(|| AuxSumcheckConf
 //     next: None,
 // });
 
+// pub static P28_5: LazyLock<AuxSumcheckConfig> = LazyLock::new(|| AuxSumcheckConfig {
+//     witness_height: 2usize.pow(8),
+//     witness_width: 2usize.pow(3),
+//     projection_ratio: 2usize.pow(6),
+//     projection_height: 2usize.pow(8),
+//     basic_commitment_rank: 6,
+//     nof_openings: 2,
+//     commitment_recursion: AuxRecursionConfig {
+//         decomposition_base_log: 7,
+//         decomposition_chunks: 8,
+//         rank: 2,
+//         next: None,
+//     },
+//     opening_recursion: AuxRecursionConfig {
+//         decomposition_base_log: 7,
+//         decomposition_chunks: 8,
+//         rank: 2,
+//         next: None,
+//     },
+//     projection_recursion: AuxProjection::Type1 {
+//         nof_batches: 2,
+//         recursion_constant_term: AuxRecursionConfig {
+//             decomposition_base_log: 10,
+//             decomposition_chunks: 2,
+//             rank: 2,
+//             next: Some(Box::new(DECOMP_8_LAST_LEVEL.clone())),
+//         },
+//         recursion_batched_projection: AuxRecursionConfig {
+//             decomposition_base_log: 7,
+//             decomposition_chunks: 8,
+//             rank: 2,
+//             next: None,
+//         },
+//     },
+
+//     witness_decomposition_chunks: 2,
+//     witness_decomposition_base_log: 8,
+
+//     next: Some(Box::new(AuxConfig::Simple(P28_LAST.clone()))),
+// });
+
+
+
 pub static P28_LAST: LazyLock<SimpleConfig> = LazyLock::new(|| SimpleConfig {
     witness_height: 2usize.pow(7),
     witness_width: 2usize.pow(4),
-    projection_ratio: 2usize.pow(5),
+    projection_ratio: 2usize.pow(6),
     projection_height: 2usize.pow(8),
     basic_commitment_rank: 6,
     projection_nof_batches: 2,

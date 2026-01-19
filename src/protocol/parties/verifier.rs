@@ -221,14 +221,17 @@ pub fn verifier_round_simple(
 
     let mut temp = RingElement::zero(Representation::IncompleteNTT);
 
-    for i in 0..ck.len() {
+    for i in 0..config.basic_commitment_rank {
         for col in 0..commitment.width {
             temp *= (&commitment[(i, col)], &folding_challenges[col]);
             folded_commitment[(i, 0)] += &temp;
         }
     }
 
-    assert_eq!(commitment_of_folded_witness, folded_commitment);
+    for i in 0..config.basic_commitment_rank {
+        assert_eq!(commitment_of_folded_witness[(i, 0)], folded_commitment[(i, 0)]);
+    }
+
 
     let opening_to_folded_witness = open_at(
         &round_proof.folded_witness,
