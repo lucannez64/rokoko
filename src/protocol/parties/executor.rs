@@ -61,6 +61,8 @@ pub fn execute() {
             .collect::<Vec<RingElement>>(),
     )];
 
+    let start = std::time::Instant::now();
+
     println!("==== PROVER STARTING ===");
 
     let (proof, claims) = prover_round(
@@ -74,12 +76,15 @@ pub fn execute() {
         true,
     );
     println!("==== PROVER DONE ===");
+    let prover_duration = start.elapsed().as_nanos();
+    println!("TOTAL Prover time: {:?} ns", prover_duration);
 
     print!("==== PROOF SIZE ====\n");
     let proof_size_bits = proof.size_in_bits();
     println!("Total proof size: {} KB", to_kb(proof_size_bits));
     println!("====================\n");
 
+    let start = std::time::Instant::now();
     println!("==== VERIFIER STARTING ===");
     verifier_round(
         &crs,
@@ -92,4 +97,6 @@ pub fn execute() {
         &mut sumcheck_context_verifier,
     );
     println!("==== VERIFIER DONE ===");
+    let verifier_duration = start.elapsed().as_nanos();
+    println!("TOTAL Verifier time: {:?} ns", verifier_duration);
 }

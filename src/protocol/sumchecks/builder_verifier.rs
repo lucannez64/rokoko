@@ -128,8 +128,8 @@ fn build_type4_verifier_context(
             .map(|i| {
                 selector_evaluation_from_prefix(
                     &Prefix {
-                        prefix: next.prefix.prefix * current.rank + i,
-                        length: next.prefix.length + current.rank.ilog2() as usize,
+                        prefix: next.prefix.prefix * current.rank.next_power_of_two() + i,
+                        length: next.prefix.length + current.rank.next_power_of_two().ilog2() as usize,
                     },
                     total_vars,
                 )

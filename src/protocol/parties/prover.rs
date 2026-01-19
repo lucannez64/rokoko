@@ -56,6 +56,18 @@ fn config_base_from_config(config: &Config) -> &dyn ConfigBase {
     }
 }
 
+pub static mut ROUND_ID: usize = 0;
+
+fn get_and_increment_round_id() -> usize {
+    unsafe {
+        let current_id = ROUND_ID;
+        ROUND_ID += 1;
+        current_id
+    }
+}
+
+static DEBUG_HARDNESS_FROM_ROUND: usize = 4;
+
 pub fn prover_round(
     crs: &CRS,
     config: &SumcheckConfig,
@@ -213,7 +225,7 @@ pub fn prover_round(
     );
 
     #[cfg(feature = "debug-hardness")]
-    {
+    if get_and_increment_round_id() >= DEBUG_HARDNESS_FROM_ROUND{
         use crate::protocol::commitment::RecursionConfig;
 
         println!("=== Debug Hardness Check ===");
@@ -254,6 +266,10 @@ pub fn prover_round(
             "Most inner commitment data L_2 norm: {}",
             most_inner_commitment_data_ell_2
         );
+
+        // we subtract the most inner commitment data norm from the recommited norm to get the rest, including the witness
+        let recommited_ell_2_norm_rest = (recommited_ell_2_norm.powf(2.0)
+            - most_inner_commitment_data_ell_2.powf(2.0)).sqrt();
 
         fn debug_hardness_recursive_commitment(
             rc: &RecursiveCommitmentWithAux,
@@ -303,7 +319,7 @@ pub fn prover_round(
             rc_commitment,
             &config.commitment_recursion,
             "Commitment",
-            recommited_ell_2_norm,
+            recommited_ell_2_norm_rest,
             most_inner_commitment_data_ell_2,
             0,
         );
@@ -312,7 +328,7 @@ pub fn prover_round(
             &rc_opening,
             &config.opening_recursion,
             "Opening",
-            recommited_ell_2_norm,
+            recommited_ell_2_norm_rest,
             most_inner_commitment_data_ell_2,
             0,
         );
@@ -324,7 +340,7 @@ pub fn prover_round(
                 rc_projection_image,
                 projection_config,
                 "Projection Image",
-                recommited_ell_2_norm,
+                recommited_ell_2_norm_rest,
                 most_inner_commitment_data_ell_2,
                 0,
             );
@@ -337,7 +353,7 @@ pub fn prover_round(
                 &rcs_projection_1.0,
                 &projection_config.recursion_constant_term,
                 "Projection 1 Constant Term",
-                recommited_ell_2_norm,
+                recommited_ell_2_norm_rest,
                 most_inner_commitment_data_ell_2,
                 0,
             );
@@ -345,7 +361,7 @@ pub fn prover_round(
                 &rcs_projection_1.1,
                 &projection_config.recursion_batched_projection,
                 "Projection 1 Batched",
-                recommited_ell_2_norm,
+                recommited_ell_2_norm_rest,
                 most_inner_commitment_data_ell_2,
                 0,
             );
@@ -358,7 +374,7 @@ pub fn prover_round(
             MOD_Q
         );
 
-        let recomposed_witness_bound = recommited_ell_2_norm
+        let recomposed_witness_bound = recommited_ell_2_norm_rest
             * (config
                 .witness_decomposition_base_log
                 .pow((config.witness_decomposition_chunks - 1) as u32)) as f64;
@@ -367,7 +383,7 @@ pub fn prover_round(
 
         let recomposed_projection_bound = match &config.projection_recursion {
             Projection::Type0(proj_config) => {
-                recommited_ell_2_norm
+                recommited_ell_2_norm // we don't use rest here, as projection might live in the most inner commitment
                     * (proj_config
                         .decomposition_base_log
                         .pow((proj_config.decomposition_chunks - 1) as u32))
