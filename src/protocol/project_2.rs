@@ -190,8 +190,8 @@ pub fn project_coefficients(
 
     // Verify dimensions: each ring element in image corresponds to projection_ratio
     // ring elements in the witness (after applying the projection matrix J)
-    assert_eq!(image_ct.width, witness.width);
-    assert_eq!(
+    debug_assert_eq!(image_ct.width, witness.width);
+    debug_assert_eq!(
         image_ct.height * projection_matrix.projection_ratio,
         witness.height
     );
@@ -475,7 +475,7 @@ pub fn batch_projection_n_times(
     HorizontallyAlignedMatrix<RingElement>,
     [BatchedProjectionChallenges; NOF_BATCHES],
 ) {
-    assert_eq!(n, NOF_BATCHES, "Only n=NOF_BATCHES is expected");
+    debug_assert_eq!(n, NOF_BATCHES, "Only n=NOF_BATCHES is expected");
     let mut result = HorizontallyAlignedMatrix::new_zero_preallocated(n, witness.width);
     let challenges = [
         batch_projection_into(
@@ -514,7 +514,7 @@ pub fn batch_projection_n_times(
     //     ip += &temp;
     // }
 
-    // assert_eq!(
+    // debug_assert_eq!(
     //     ip,
     //     result[(1, 0)],
     //     "Tensor product folding should match batched projection"
@@ -646,7 +646,7 @@ fn test_batch_projection() {
         let mut col_result = result[col].clone();
         col_result.to_representation(Representation::Coefficients);
 
-        assert_eq!(
+        debug_assert_eq!(
             col_result.v[0], expected_cts[col],
             "batch_projection column {} should produce the same result as computing project_coefficients followed by batching",
             col
@@ -672,9 +672,9 @@ fn test_const_term_relation_to_prove() {
     for el in image_ct.data.iter_mut() {
         el.to_representation(Representation::IncompleteNTT);
     }
-    assert_eq!(image_ct.height, 16);
+    debug_assert_eq!(image_ct.height, 16);
 
-    assert_eq!(image_ct.width, 8);
+    debug_assert_eq!(image_ct.width, 8);
 
     let mut batched_projected_witness =
         HorizontallyAlignedMatrix::new_zero_preallocated(1, witness.width);
@@ -721,7 +721,7 @@ fn test_const_term_relation_to_prove() {
     };
 
     let _tensor_product = tensor_product_u64(&e_0_values, &e_1_values);
-    assert_eq!(_tensor_product, c_1_values);
+    debug_assert_eq!(_tensor_product, c_1_values);
     let lhs_multipier_ring = c_2_values
         .iter()
         .map(|&x| RingElement::constant(x, Representation::IncompleteNTT))
@@ -775,7 +775,7 @@ fn test_const_term_relation_to_prove() {
     };
     lhs.to_representation(Representation::Coefficients);
     rhs.to_representation(Representation::Coefficients);
-    assert_eq!(
+    debug_assert_eq!(
         lhs.v[0], rhs.v[0],
         "Constant terms of LHS and RHS should match"
     );

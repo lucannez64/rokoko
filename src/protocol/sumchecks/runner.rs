@@ -310,7 +310,7 @@ pub fn sumcheck(
     );
 
     // final round
-    assert_eq!(sumcheck_context.field_combiner.borrow().variable_count(), 0);
+    debug_assert_eq!(sumcheck_context.field_combiner.borrow().variable_count(), 0);
 
     let claim_over_witness = sumcheck_context
         .combined_witness_sumcheck

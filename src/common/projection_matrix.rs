@@ -28,7 +28,7 @@ pub struct ProjectionMatrix {
 
 impl ProjectionMatrix {
     pub fn new(projection_ratio: usize, projection_height: usize) -> Self {
-        assert!(
+        debug_assert!(
             projection_height % PROJECTION_BASE_HEIGHT == 0,
             "projection_height must be multiple of PROJECTION_BASE_HEIGHT"
         );
@@ -189,7 +189,7 @@ mod tests {
 
         for outer_col in 0..PROJECTION_BASE_HEIGHT * 16 {
             for row in 0..PROJECTION_BASE_HEIGHT * 4 {
-                assert_eq!(
+                debug_assert_eq!(
                     projection_matrix_1[(row, outer_col)],
                     projection_matrix_2[(row, outer_col)]
                 );
@@ -217,7 +217,7 @@ mod tests {
                 }
             }
         }
-        assert!(differences_found > 0);
+        debug_assert!(differences_found > 0);
     }
 
     #[test]
@@ -228,9 +228,9 @@ mod tests {
         data[1][4] = 1;
         data[2][3] = 0;
         let projection_matrix = ProjectionMatrix::from_i8(data);
-        assert_eq!(projection_matrix[(0, 0)], (true, true));
-        assert_eq!(projection_matrix[(3, 1)], (false, true));
-        assert_eq!(projection_matrix[(1, 4)], (true, true));
-        assert_eq!(projection_matrix[(2, 3)], (false, false));
+        debug_assert_eq!(projection_matrix[(0, 0)], (true, true));
+        debug_assert_eq!(projection_matrix[(3, 1)], (false, true));
+        debug_assert_eq!(projection_matrix[(1, 4)], (true, true));
+        debug_assert_eq!(projection_matrix[(2, 3)], (false, false));
     }
 }

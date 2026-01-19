@@ -37,7 +37,7 @@ pub fn centered_i64_from_u64_mod_q_scalar(x: u64) -> i64 {
 // directly loads the low 16 bit of i64 registers (signed truncating)
 #[inline(always)]
 pub fn pack_i64_to_i16_deg16(dst: &mut [i16], src: &[i64]) {
-    assert_eq!(dst.len(), src.len());
+    debug_assert_eq!(dst.len(), src.len());
     debug_assert!(src.len() % 16 == 0);
 
     #[cfg(all(target_arch = "x86_64", target_feature = "avx512f"))]
@@ -72,7 +72,7 @@ pub fn pack_i64_to_i16_deg16(dst: &mut [i16], src: &[i64]) {
 // out_i64[i] ∈ [-Q/2, Q/2)
 #[inline(always)]
 pub fn centered_coeffs_u64_to_i64_inplace(out_i64: &mut [i64; DEGREE], in_u64: &[u64; DEGREE]) {
-    assert_eq!(out_i64.len(), in_u64.len());
+    debug_assert_eq!(out_i64.len(), in_u64.len());
 
     #[cfg(all(target_arch = "x86_64", target_feature = "avx512f"))]
     unsafe {
@@ -180,7 +180,7 @@ fn convert_i16_as_u64(dst_u64: *mut u64, v16x32: __m512i) {
 
 #[inline]
 pub fn inner_product(a: &Vec<RingElement>, b: &Vec<RingElement>) -> RingElement {
-    assert_eq!(a.len(), b.len());
+    debug_assert_eq!(a.len(), b.len());
     let mut result = RingElement::zero(Representation::IncompleteNTT);
     let mut temp = RingElement::zero(Representation::IncompleteNTT);
     for (x, y) in a.iter().zip(b.iter()) {
@@ -192,7 +192,7 @@ pub fn inner_product(a: &Vec<RingElement>, b: &Vec<RingElement>) -> RingElement 
 
 #[inline]
 pub fn inner_product_into(mut r: &mut RingElement, a: &Vec<RingElement>, b: &Vec<RingElement>) {
-    assert_eq!(a.len(), b.len());
+    debug_assert_eq!(a.len(), b.len());
     let mut temp = RingElement::zero(Representation::IncompleteNTT);
     for (x, y) in a.iter().zip(b.iter()) {
         incomplete_ntt_multiplication(&mut temp, x, y);
@@ -245,7 +245,7 @@ fn test_field_to_ring_roundtrip() {
     let re = field_to_ring_element(&fe);
     let fes = re.split_into_quadratic_extensions();
     for f in fes {
-        assert_eq!(f, fe);
+        debug_assert_eq!(f, fe);
     }
 }
 
@@ -276,6 +276,7 @@ pub fn precompute_structured_values(layers: &[u64]) -> Vec<u64> {
 // Vectorized version using eltwise_mult_mod for better performance
 pub fn precompute_structured_values_fast(layers: &[u64]) -> Vec<u64> {
     let size = 1 << layers.len();
+    // TODO: can we use preallocated pool here? Does it make sense?
     let mut values = vec![1u64; size];
 
     for (layer_idx, &layer) in layers.iter().rev().enumerate() {
@@ -324,7 +325,7 @@ fn test_precompute_structured_values() {
         let result_slow = precompute_structured_values(&layers);
         let result_fast = precompute_structured_values_fast(&layers);
 
-        assert_eq!(
+        debug_assert_eq!(
             result_slow.len(),
             result_fast.len(),
             "Length mismatch for {} layers",
@@ -332,7 +333,7 @@ fn test_precompute_structured_values() {
         );
 
         for (i, (slow, fast)) in result_slow.iter().zip(result_fast.iter()).enumerate() {
-            assert_eq!(
+            debug_assert_eq!(
                 slow, fast,
                 "Mismatch at index {} for {} layers: slow={}, fast={}",
                 i, num_layers, slow, fast
@@ -350,7 +351,7 @@ fn test_precompute_structured_values_properties() {
     let values = precompute_structured_values_fast(&layers);
 
     // Size should be 2^k for k layers
-    assert_eq!(values.len(), 1 << layers.len());
+    debug_assert_eq!(values.len(), 1 << layers.len());
 
     // Test specific properties: values[i] should match the tensor product computation
     // For index i with binary representation b_k...b_1b_0:
@@ -373,7 +374,7 @@ fn test_precompute_structured_values_properties() {
     };
 
     for i in 0..values.len() {
-        assert_eq!(
+        debug_assert_eq!(
             values[i],
             manual_compute(i),
             "Value mismatch at index {} (binary: {:05b})",
@@ -402,12 +403,12 @@ fn test_precompute_structured_values_mathces_preprocessed_row() {
         .map(|&v| RingElement::constant(v, Representation::IncompleteNTT))
         .collect::<Vec<RingElement>>();
 
-    assert_eq!(
+    debug_assert_eq!(
         preprocessed_row.preprocessed_row.len(),
         precomputed_values_ring.len()
     );
     for i in 0..preprocessed_row.preprocessed_row.len() {
-        assert_eq!(
+        debug_assert_eq!(
             preprocessed_row.preprocessed_row[i],
             precomputed_values_ring[i],
         );

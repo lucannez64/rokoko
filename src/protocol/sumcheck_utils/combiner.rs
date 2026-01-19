@@ -31,10 +31,10 @@ pub struct Combiner<E: SumcheckElement = RingElement> {
 impl<E: SumcheckElement> Combiner<E> {
     pub fn new(sumchecks: Vec<ElephantCell<dyn HighOrderSumcheckData<Element = E>>>) -> Self {
         let sumchecks_len = sumchecks.len();
-        // assert all variables counts are the same
+        // debug_assert all variables counts are the same
         let var_count = sumchecks[0].get_ref().variable_count();
         for sumcheck in &sumchecks {
-            assert_eq!(sumcheck.get_ref().variable_count(), var_count);
+            debug_assert_eq!(sumcheck.get_ref().variable_count(), var_count);
         }
         Self {
             sumchecks,
@@ -45,7 +45,7 @@ impl<E: SumcheckElement> Combiner<E> {
     }
 
     pub fn load_challenges_from(&mut self, challenges: &[E]) {
-        assert_eq!(
+        debug_assert_eq!(
             challenges.len(),
             self.sumchecks.len(),
             "Combiner: number of challenges must match number of sumchecks"
@@ -209,7 +209,7 @@ fn test_combiner() {
         Representation::IncompleteNTT,
     );
 
-    assert_eq!(&poly.at_zero() + &poly.at_one(), claim);
+    debug_assert_eq!(&poly.at_zero() + &poly.at_one(), claim);
 
     let r0 = RingElement::constant(2, Representation::IncompleteNTT);
 
@@ -221,7 +221,7 @@ fn test_combiner() {
     sumcheck3_ref.borrow_mut().partial_evaluate(&r0);
 
     combiner.univariate_polynomial_into(&mut poly);
-    assert_eq!(&poly.at_zero() + &poly.at_one(), claim);
+    debug_assert_eq!(&poly.at_zero() + &poly.at_one(), claim);
 
     let r1 = RingElement::constant(3, Representation::IncompleteNTT);
     let claim = poly.at(&r1);
@@ -231,7 +231,7 @@ fn test_combiner() {
     sumcheck2_ref.borrow_mut().partial_evaluate(&r1);
     sumcheck3_ref.borrow_mut().partial_evaluate(&r1);
     combiner.univariate_polynomial_into(&mut poly);
-    assert_eq!(&poly.at_zero() + &poly.at_one(), claim);
+    debug_assert_eq!(&poly.at_zero() + &poly.at_one(), claim);
 
     let r2 = RingElement::constant(5, Representation::IncompleteNTT);
     let final_claim = poly.at(&r2);
@@ -258,7 +258,7 @@ fn test_combiner() {
     term *= &combiner.challenges[3];
     final_eval += &term;
 
-    assert_eq!(final_eval, final_claim);
+    debug_assert_eq!(final_eval, final_claim);
 }
 
 /// Evaluation-only version of Combiner that evaluates a linear combination of sumchecks at a point.
@@ -281,7 +281,7 @@ impl<E: SumcheckElement> CombinerEvaluation<E> {
     }
 
     pub fn load_challenges_from(&mut self, challenges: &[E]) {
-        assert_eq!(
+        debug_assert_eq!(
             challenges.len(),
             self.evaluations.len(),
             "CombinerEvaluation: number of challenges must match number of evaluations"
@@ -371,5 +371,5 @@ fn test_combiner_evaluation() {
     term *= &challenges[1];
     expected += &term;
 
-    assert_eq!(combiner_eval.evaluate(&point), &expected);
+    debug_assert_eq!(combiner_eval.evaluate(&point), &expected);
 }

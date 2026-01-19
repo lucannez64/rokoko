@@ -24,7 +24,7 @@ impl<T> Index<(usize, usize)> for VerticallyAlignedMatrix<T> {
 
     fn index(&self, index: (usize, usize)) -> &Self::Output {
         let (row, col) = index;
-        assert!(
+        debug_assert!(
             row < self.height && col < self.width,
             "{} < {} && {} < {} failed",
             row,
@@ -39,7 +39,7 @@ impl<T> Index<(usize, usize)> for VerticallyAlignedMatrix<T> {
 impl<T> IndexMut<(usize, usize)> for VerticallyAlignedMatrix<T> {
     fn index_mut(&mut self, index: (usize, usize)) -> &mut Self::Output {
         let (row, col) = index;
-        assert!(
+        debug_assert!(
             row < self.height && col < self.width,
             "{} < {} && {} < {} failed",
             row,
@@ -137,7 +137,7 @@ impl<T> Index<(usize, usize)> for HorizontallyAlignedMatrix<T> {
 
     fn index(&self, index: (usize, usize)) -> &Self::Output {
         let (row, col) = index;
-        assert!(
+        debug_assert!(
             row < self.height && col < self.width,
             "{} < {} && {} < {} failed",
             row,
@@ -152,7 +152,7 @@ impl<T> Index<(usize, usize)> for HorizontallyAlignedMatrix<T> {
 impl<T> IndexMut<(usize, usize)> for HorizontallyAlignedMatrix<T> {
     fn index_mut(&mut self, index: (usize, usize)) -> &mut Self::Output {
         let (row, col) = index;
-        assert!(
+        debug_assert!(
             row < self.height && col < self.width,
             "{} < {} && {} < {} failed",
             row,
@@ -204,14 +204,14 @@ mod tests {
             used_cols: 3,
         };
 
-        assert_eq!(m[(0, 0)], 0);
-        assert_eq!(m[(0, 2)], 2);
-        assert_eq!(m[(2, 0)], 6);
-        assert_eq!(m[(2, 1)], 7);
-        assert_eq!(m[(2, 2)], 8);
+        debug_assert_eq!(m[(0, 0)], 0);
+        debug_assert_eq!(m[(0, 2)], 2);
+        debug_assert_eq!(m[(2, 0)], 6);
+        debug_assert_eq!(m[(2, 1)], 7);
+        debug_assert_eq!(m[(2, 2)], 8);
 
         m[(1, 1)] = 42;
-        assert_eq!(m[(1, 1)], 42);
+        debug_assert_eq!(m[(1, 1)], 42);
     }
 
     #[test]

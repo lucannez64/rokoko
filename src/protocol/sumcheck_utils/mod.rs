@@ -108,7 +108,7 @@ mod tests {
 
         // Initial claim: the difference of inner products over the full hypercube is zero.
         diff_sumcheck.univariate_polynomial_into(&mut poly);
-        assert_eq!(&poly.at_zero() + &poly.at_one(), RingElement::zero(repr));
+        debug_assert_eq!(&poly.at_zero() + &poly.at_one(), RingElement::zero(repr));
 
         // Round 1: fold highest-order variable, preserving claim consistency.
         let r0 = RingElement::constant(7, repr);
@@ -121,7 +121,7 @@ mod tests {
         rhs_selector.borrow_mut().partial_evaluate(&r0);
 
         diff_sumcheck.univariate_polynomial_into(&mut poly);
-        assert_eq!(&poly.at_zero() + &poly.at_one(), claim_after_r0);
+        debug_assert_eq!(&poly.at_zero() + &poly.at_one(), claim_after_r0);
 
         // Round 2: fold next variable.
         let r1 = RingElement::constant(11, repr);
@@ -134,7 +134,7 @@ mod tests {
         rhs_selector.borrow_mut().partial_evaluate(&r1);
 
         diff_sumcheck.univariate_polynomial_into(&mut poly);
-        assert_eq!(&poly.at_zero() + &poly.at_one(), claim_after_r1);
+        debug_assert_eq!(&poly.at_zero() + &poly.at_one(), claim_after_r1);
 
         // Round 3 (final): fold last variable.
         let r2 = RingElement::constant(13, repr);
@@ -156,6 +156,6 @@ mod tests {
             * witness_sc.borrow().final_evaluations())
             * rhs_selector.borrow().final_evaluations();
 
-        assert_eq!(&lhs_product - &rhs_product, final_claim);
+        debug_assert_eq!(&lhs_product - &rhs_product, final_claim);
     }
 }

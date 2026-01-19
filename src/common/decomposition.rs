@@ -9,7 +9,7 @@ use crate::{
 
 impl RingElement {
     pub fn bits_into(&mut self, target: &mut RingElement, from: u64, to: u64) {
-        assert!(from < to);
+        debug_assert!(from < to);
 
         let mask: u64 = (1u64 << (to - from)) - 1;
         for i in 0..self.v.len() {
@@ -76,7 +76,7 @@ pub fn decompose(input: &Vec<RingElement>, base_log: u64, radix: usize) -> Vec<R
                 temp_el.to_representation(Representation::IncompleteNTT);
                 temp_el
             };
-            assert_eq!(&recomposed, &el_incomplete_ntt, "Recomposition failed in decomposition. Perhaps base_log and radix are not chosen properly?");
+            debug_assert_eq!(&recomposed, &el_incomplete_ntt, "Recomposition failed in decomposition. Perhaps base_log and radix are not chosen properly?");
         }
     }
 
@@ -137,28 +137,28 @@ fn test_decompose() {
     let base_log = 3; // base 8
     let radix = 4;
     let decomposed = decompose(&mut input, base_log, radix);
-    assert_eq!(
+    debug_assert_eq!(
         input[0],
         RingElement::all(37, Representation::IncompleteNTT)
     );
-    assert_eq!(decomposed.len(), radix * 1);
+    debug_assert_eq!(decomposed.len(), radix * 1);
     // 37 is shifted to 37 + (8^4) / 2 = 2085
     // base 8 representation of 2085 = 4 * 8^3 + 0 * 8^2 + 4 * 8^1 + 5 * 8^0
     // so the decomposed elements should be [5, 4, 0, 4]
     // after removing the shift, they should be [5 - 4, 4 - 4, 0 - 4, 4 - 4] = [1, 0, -4, 0]
-    assert_eq!(
+    debug_assert_eq!(
         decomposed[0],
         RingElement::all(1, Representation::IncompleteNTT)
     );
-    assert_eq!(
+    debug_assert_eq!(
         decomposed[1],
         RingElement::all(0, Representation::IncompleteNTT)
     );
-    assert_eq!(
+    debug_assert_eq!(
         decomposed[2],
         RingElement::all(MOD_Q - 4, Representation::IncompleteNTT)
     );
-    assert_eq!(
+    debug_assert_eq!(
         decomposed[3],
         RingElement::all(0, Representation::IncompleteNTT)
     );
@@ -174,7 +174,7 @@ fn test_decompose() {
         recomposed += &term;
     }
     recomposed -= &RingElement::all(offset, Representation::IncompleteNTT);
-    assert_eq!(recomposed, input[0]);
+    debug_assert_eq!(recomposed, input[0]);
 }
 
 #[test]
@@ -197,7 +197,7 @@ fn test_random_mod_q() {
         recomposed += &term;
     }
     recomposed -= &RingElement::all(offset, Representation::IncompleteNTT);
-    assert_eq!(recomposed, data[0]);
+    debug_assert_eq!(recomposed, data[0]);
 
     let mut inf_norm = 0;
     for d in decomposed.iter_mut() {
@@ -210,7 +210,7 @@ fn test_random_mod_q() {
         }
     }
 
-    assert_eq!(inf_norm < (1u64 << (base_log - 1)), true);
+    debug_assert_eq!(inf_norm < (1u64 << (base_log - 1)), true);
 }
 
 #[test]
@@ -220,5 +220,5 @@ fn test_compose_from_decomposed() {
     let radix = 4;
     let decomposed = decompose(&mut input, base_log, radix);
     let recomposed = compose_from_decomposed(&decomposed, base_log, radix);
-    assert_eq!(recomposed[0], input[0]);
+    debug_assert_eq!(recomposed[0], input[0]);
 }

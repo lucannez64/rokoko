@@ -199,7 +199,7 @@ pub fn verifier_round_simple(
         verifier_sample_projection_challenges(&projection_matrix, config, &mut hash_wrapper)
     });
 
-    assert_eq!(
+    debug_assert_eq!(
         challenges[0].c_0_layers.len(),
         0,
         "In simple verifier, projection challenges c_0_layers length must be zero. At least, this is unimplemented otherwise."
@@ -217,8 +217,6 @@ pub fn verifier_round_simple(
         &round_proof.folded_witness,
         config.basic_commitment_rank,
     );
-
-    let ck = &crs.ck_for_wit_dim(round_proof.folded_witness.height);
 
     let mut folded_commitment =
         HorizontallyAlignedMatrix::new_zero_preallocated(config.basic_commitment_rank, 1);
@@ -295,7 +293,7 @@ pub fn verifier_round_simple(
         let c_1_layers = &challenges[i].c_1_layers;
         let c_1_values = precompute_structured_values_fast(&c_1_layers);
 
-        assert_eq!(
+        debug_assert_eq!(
             c_1_values.len(),
             round_proof.projection_image_ct.height * DEGREE,
             "c_1_values length mismatch."

@@ -33,7 +33,7 @@ pub fn open_at(
     structured_points_inner: &Vec<StructuredRow>,
     structured_points_outer: &Vec<StructuredRow>,
 ) -> Opening {
-    assert_eq!(
+    debug_assert_eq!(
         structured_points_inner[0].tensor_layers.len(),
         witness.height.ilog2() as usize
     );
@@ -130,9 +130,9 @@ fn test_opening() {
 
     let opening = open_at(&witness, &inner_evaluation_points, &outer_evaluation_points);
 
-    // assert_eq!(opening.evaluations.len(), 2);
+    // debug_assert_eq!(opening.evaluations.len(), 2);
 
-    assert_eq!(
+    debug_assert_eq!(
         opening.rhs[(0, 0)],
         RingElement::constant(
             (MOD_Q as i64
@@ -144,7 +144,7 @@ fn test_opening() {
             Representation::IncompleteNTT
         )
     );
-    assert_eq!(
+    debug_assert_eq!(
         opening.rhs[(0, 1)],
         RingElement::constant(
             (MOD_Q as i64
@@ -156,7 +156,7 @@ fn test_opening() {
             Representation::IncompleteNTT
         )
     );
-    assert_eq!(
+    debug_assert_eq!(
         opening.rhs[(0, 2)],
         RingElement::constant(
             (MOD_Q as i64
@@ -168,7 +168,7 @@ fn test_opening() {
             Representation::IncompleteNTT
         )
     );
-    assert_eq!(
+    debug_assert_eq!(
         opening.rhs[(0, 3)],
         RingElement::constant(
             (MOD_Q as i64
@@ -180,7 +180,7 @@ fn test_opening() {
             Representation::IncompleteNTT
         )
     );
-    assert_eq!(
+    debug_assert_eq!(
         opening.rhs[(1, 0)],
         RingElement::constant(
             (MOD_Q as i64
@@ -192,7 +192,7 @@ fn test_opening() {
             Representation::IncompleteNTT
         )
     );
-    assert_eq!(
+    debug_assert_eq!(
         opening.rhs[(1, 1)],
         RingElement::constant(
             (MOD_Q as i64
@@ -204,7 +204,7 @@ fn test_opening() {
             Representation::IncompleteNTT
         )
     );
-    assert_eq!(
+    debug_assert_eq!(
         opening.rhs[(1, 2)],
         RingElement::constant(
             (MOD_Q as i64
@@ -216,7 +216,7 @@ fn test_opening() {
             Representation::IncompleteNTT
         )
     );
-    assert_eq!(
+    debug_assert_eq!(
         opening.rhs[(1, 3)],
         RingElement::constant(
             (MOD_Q as i64
@@ -229,7 +229,7 @@ fn test_opening() {
         )
     );
 
-    // assert_eq!(
+    // debug_assert_eq!(
     //     opening.evaluations[0],
     //     RingElement::constant(
     //         (MOD_Q as i64
@@ -242,7 +242,7 @@ fn test_opening() {
     //     )
     // );
 
-    // assert_eq!(
+    // debug_assert_eq!(
     //     opening.evaluations[1],
     //     RingElement::constant(
     //         (MOD_Q as i64

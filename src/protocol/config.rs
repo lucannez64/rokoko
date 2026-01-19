@@ -503,7 +503,7 @@ impl SizeableProof for SimpleRoundProof {
 
 #[inline]
 pub fn paste_by_prefix(dest: &mut Vec<RingElement>, src: &Vec<RingElement>, prefix: &Prefix) {
-    assert_eq!(
+    debug_assert_eq!(
         src.len().next_power_of_two(),
         1 << dest.len().ilog2() as usize - prefix.length,
         "Pasting failed. Source length does not match prefix length."

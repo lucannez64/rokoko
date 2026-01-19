@@ -93,56 +93,56 @@ fn test_structured_row() {
     ];
     let structured_row = StructuredRow { tensor_layers };
 
-    assert_eq!(
+    debug_assert_eq!(
         structured_row.at(0),
         RingElement::constant(
             (MOD_Q as i64 + (1 - 2) * (1 - 3) * (1 - 5)) as u64, // 0 0 0
             Representation::IncompleteNTT
         )
     );
-    assert_eq!(
+    debug_assert_eq!(
         structured_row.at(1),
         RingElement::constant(
             (MOD_Q as i64 + 2 * (1 - 3) * (1 - 5)) as u64, // 0 0 1
             Representation::IncompleteNTT
         )
     );
-    assert_eq!(
+    debug_assert_eq!(
         structured_row.at(2),
         RingElement::constant(
             (MOD_Q as i64 + (1 - 2) * 3 * (1 - 5)) as u64, // 0 1 0
             Representation::IncompleteNTT
         )
     );
-    assert_eq!(
+    debug_assert_eq!(
         structured_row.at(3),
         RingElement::constant(
             (MOD_Q as i64 + 2 * 3 * (1 - 5)) as u64, // 0 1 1
             Representation::IncompleteNTT
         )
     );
-    assert_eq!(
+    debug_assert_eq!(
         structured_row.at(4),
         RingElement::constant(
             (MOD_Q as i64 + (1 - 2) * (1 - 3) * 5) as u64, // 1 0 0
             Representation::IncompleteNTT
         )
     );
-    assert_eq!(
+    debug_assert_eq!(
         structured_row.at(5),
         RingElement::constant(
             (MOD_Q as i64 + 2 * (1 - 3) * 5) as u64, // 1 0 1
             Representation::IncompleteNTT
         )
     );
-    assert_eq!(
+    debug_assert_eq!(
         structured_row.at(6),
         RingElement::constant(
             (MOD_Q as i64 + (1 - 2) * 3 * 5) as u64, // 1 1 0
             Representation::IncompleteNTT
         )
     );
-    assert_eq!(
+    debug_assert_eq!(
         structured_row.at(7),
         RingElement::constant(
             (MOD_Q as i64 + 2 * 3 * 5) as u64, // 1 1 1
@@ -167,7 +167,7 @@ fn test_preprocessed_row() {
     let preprocessed_row = PreprocessedRow::from_structured_row(&structured_row_unused);
 
     for i in 0..preprocessed_row.preprocessed_row.len() {
-        assert_eq!(preprocessed_row.preprocessed_row[i], structured_row.at(i));
+        debug_assert_eq!(preprocessed_row.preprocessed_row[i], structured_row.at(i));
     }
 }
 
@@ -189,7 +189,7 @@ fn test_at_matches_preprocessed_row_random() {
         for idx in 0..preprocessed_row.preprocessed_row.len() {
             let from_at = structured_row.at(idx);
             let from_pre = &preprocessed_row.preprocessed_row[idx];
-            assert_eq!(
+            debug_assert_eq!(
                 &from_at, from_pre,
                 "Mismatch at idx {} for layers {:?}",
                 idx, tensor_layers

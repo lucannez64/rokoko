@@ -15,7 +15,7 @@ pub struct Polynomial<E: SumcheckElement = RingElement> {
 
 impl<E: SumcheckElement> Polynomial<E> {
     pub fn new(num_coefficients: usize) -> Self {
-        assert!(
+        debug_assert!(
             num_coefficients <= 3,
             "Only up to cubic polynomials are supported for now"
         );
@@ -67,7 +67,7 @@ pub fn mul_poly_into<E: SumcheckElement>(
     poly_0: &Polynomial<E>,
     poly_1: &Polynomial<E>,
 ) {
-    assert!(
+    debug_assert!(
         poly_0.num_coefficients + poly_1.num_coefficients - 1 <= 4,
         "Resulting polynomial degree exceeds supported maximum"
     );

@@ -256,7 +256,7 @@ fn build_type4_sumcheck_context(
 ///   - inner product of combined witness with its conjugate for norm checking (type5)
 /// It also prepares the folding combiners/constants so that later folds only
 /// require calling `partial_evaluate_all`. The assembled context is reused for
-/// both prover-side simulation (the asserts in `sumcheck`) and as the live
+/// both prover-side simulation (the debug_asserts in `sumcheck`) and as the live
 /// state during interactive folding. Prefix padding is chosen so every helper
 /// sumcheck can be embedded into larger products without reindexing, and the
 /// decomposition offsets are preloaded so the recomposition gadgets mirror the

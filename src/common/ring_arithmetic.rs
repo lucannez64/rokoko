@@ -283,7 +283,7 @@ impl RingElement {
 
     // Probably should never be used
     pub fn split_into_quadratic_extensions(&self) -> [QuadraticExtension; HALF_DEGREE] {
-        assert!(
+        debug_assert!(
             self.representation == Representation::HomogenizedFieldExtensions,
             "RingElement not in Homogenized Field Extensions representation"
         );
@@ -302,7 +302,7 @@ impl RingElement {
         &mut self,
         extensions: &[QuadraticExtension; HALF_DEGREE],
     ) {
-        assert!(
+        debug_assert!(
             self.representation == Representation::HomogenizedFieldExtensions,
             "RingElement not in Homogenized Field Extensions representation"
         );
@@ -322,7 +322,7 @@ impl RingElement {
         // True Galois conjugation: X -> X^{-1} = -X^{n-1} in Z_q[X]/(X^n + 1)
         // In coefficient form: [c_0, c_1, ..., c_{n-1}] -> [c_0, -c_{n-1}, -c_{n-2}, ..., -c_1]
         // Reference implementation used for deriving NTT-domain transformations
-        assert_eq!(self.representation, Representation::IncompleteNTT);
+        debug_assert_eq!(self.representation, Representation::IncompleteNTT);
         self.from_incomplete_ntt_to_even_odd_coefficients();
         self.from_even_odd_coefficients_to_coefficients();
 
@@ -387,7 +387,7 @@ impl RingElement {
         // - Provably correct (matches reference implementation by construction)
         // - Robust to HEXL implementation details
 
-        assert_eq!(self.representation, Representation::IncompleteNTT);
+        debug_assert_eq!(self.representation, Representation::IncompleteNTT);
 
         let transform = &*CONJUGATION_NTT_TRANSFORM;
         let mut temp = get_temp_buffer();
@@ -415,7 +415,7 @@ impl RingElement {
 
     #[inline]
     pub fn conjugate_into(&self, result: &mut RingElement) {
-        assert_eq!(self.representation, Representation::IncompleteNTT);
+        debug_assert_eq!(self.representation, Representation::IncompleteNTT);
         result.representation = self.representation;
 
         let transform = &*CONJUGATION_NTT_TRANSFORM;
@@ -445,7 +445,7 @@ impl RingElement {
     }
 
     pub fn constant_term_from_incomplete_ntt(&self) -> u64 {
-        assert_eq!(self.representation, Representation::IncompleteNTT);
+        debug_assert_eq!(self.representation, Representation::IncompleteNTT);
         let buf = &mut *get_temp_buffer();
         buf.copy_from_slice(&self.v);
         unsafe {
@@ -508,8 +508,16 @@ pub struct ConjugationTransform {
 
 pub static mut temp_buffer: LazyLock<[u64; DEGREE]> = LazyLock::new(|| [0u64; DEGREE]);
 
+#[inline(always)]
 fn get_temp_buffer() -> &'static mut [u64; DEGREE] {
     unsafe { &mut temp_buffer }
+}
+
+pub static mut aux: LazyLock<RingElement> = LazyLock::new(|| RingElement::new(Representation::IncompleteNTT));
+
+#[inline(always)]
+fn get_aux() -> &'static mut RingElement {
+    unsafe { &mut aux }
 }
 
 /// Empirically derive the conjugation transformation in NTT domain
@@ -588,11 +596,11 @@ fn derive_conjugation_transform() -> ConjugationTransform {
 ///// Helpers
 
 pub fn addition(result: &mut RingElement, operand1: &RingElement, operand2: &RingElement) {
-    assert!(
+    debug_assert!(
         operand1.representation == operand2.representation,
         "Operands have different representations"
     );
-    assert!(
+    debug_assert!(
         result.representation == operand1.representation,
         "Result has different representation than operands"
     );
@@ -608,7 +616,7 @@ pub fn addition(result: &mut RingElement, operand1: &RingElement, operand2: &Rin
     }
 }
 pub fn addition_in_place(result_op1: &mut RingElement, operand2: &RingElement) {
-    assert!(
+    debug_assert!(
         result_op1.representation == operand2.representation,
         "Operands have different representations"
     );
@@ -625,11 +633,11 @@ pub fn addition_in_place(result_op1: &mut RingElement, operand2: &RingElement) {
 }
 
 pub fn subtraction(result: &mut RingElement, operand1: &RingElement, operand2: &RingElement) {
-    assert!(
+    debug_assert!(
         operand1.representation == operand2.representation,
         "Operands have different representations"
     );
-    assert!(
+    debug_assert!(
         result.representation == operand1.representation,
         "Result has different representation than operands"
     );
@@ -646,7 +654,7 @@ pub fn subtraction(result: &mut RingElement, operand1: &RingElement, operand2: &
 }
 
 pub fn subtraction_in_place(result_op1: &mut RingElement, operand2: &RingElement) {
-    assert!(
+    debug_assert!(
         result_op1.representation == operand2.representation,
         "Operands have different representations"
     );
@@ -662,20 +670,21 @@ pub fn subtraction_in_place(result_op1: &mut RingElement, operand2: &RingElement
     }
 }
 
+#[inline(always)]
 pub fn incomplete_ntt_multiplication(
     result: &mut RingElement,
     operand1: &RingElement,
     operand2: &RingElement,
 ) {
-    assert!(
+    debug_assert!(
         operand1.representation == Representation::IncompleteNTT,
         "Operand1 not in Incomplete NTT representation"
     );
-    assert!(
+    debug_assert!(
         operand2.representation == Representation::IncompleteNTT,
         "Operand2 not in Incomplete NTT representation"
     );
-    assert!(
+    debug_assert!(
         result.representation == Representation::IncompleteNTT,
         "Result not in Incomplete NTT representation"
     );
@@ -683,12 +692,15 @@ pub fn incomplete_ntt_multiplication(
     incomplete_ntt_multiplication_inner(result, operand1, operand2, false);
 }
 
+
+
+#[inline(always)]
 pub fn incomplete_ntt_multiplication_in_place(result: &mut RingElement, operand: &RingElement) {
-    assert!(
+    debug_assert!(
         operand.representation == Representation::IncompleteNTT,
         "Operand not in Incomplete NTT representation"
     );
-    assert!(
+    debug_assert!(
         result.representation == Representation::IncompleteNTT,
         "Result not in Incomplete NTT representation"
     );
@@ -699,7 +711,8 @@ pub fn incomplete_ntt_multiplication_in_place(result: &mut RingElement, operand:
     // Remove this cloning by implementing a proper in-place algorithm.
     // incomplete_ntt_multiplication_in_place_inner(result, operand, false);
     // seems to be broken for in-place multiplication.
-    let original = result.clone();
+    let original = get_aux();
+    original.set_from(result);
     incomplete_ntt_multiplication(result, &original, operand);
 }
 
@@ -708,22 +721,22 @@ pub fn incomplete_ntt_multiplication_homogenized(
     operand1: &RingElement,
     operand2: &RingElement,
 ) {
-    assert!(
+    debug_assert!(
         operand1.representation == Representation::HomogenizedFieldExtensions,
         "Operand1 not in Homogenized Field Extensions representation"
     );
-    assert!(
+    debug_assert!(
         operand2.representation == Representation::HomogenizedFieldExtensions,
         "Operand2 not in Homogenized Field Extensions representation"
     );
-    assert!(
+    debug_assert!(
         result.representation == Representation::HomogenizedFieldExtensions,
         "Result not in Homogenized Field Extensions representation"
     );
     incomplete_ntt_multiplication_inner(result, operand1, operand2, true);
 }
 
-#[inline]
+#[inline(always)]
 pub fn incomplete_ntt_multiplication_inner(
     result: &mut RingElement,
     operand1: &RingElement,
@@ -813,7 +826,7 @@ pub fn incomplete_ntt_multiplication_inner(
     }
 }
 
-#[inline]
+#[inline(always)]
 pub fn incomplete_ntt_multiplication_in_place_inner(
     result: &mut RingElement,
     operand1: &RingElement,
@@ -1195,7 +1208,7 @@ mod tests {
         d.from_incomplete_ntt_to_even_odd_coefficients();
         d.from_even_odd_coefficients_to_coefficients();
 
-        assert_eq!(c.v, d.v);
+        debug_assert_eq!(c.v, d.v);
     }
 
     #[test]
@@ -1209,7 +1222,7 @@ mod tests {
         b_c.from_incomplete_ntt_to_homogenized_field_extensions();
         b_c.from_homogenized_field_extensions_to_incomplete_ntt();
 
-        assert_eq!(b.v, b_c.v);
+        debug_assert_eq!(b.v, b_c.v);
     }
 
     #[test]
@@ -1224,7 +1237,7 @@ mod tests {
         let mut b_reconstructed = RingElement::new(Representation::HomogenizedFieldExtensions);
         b_reconstructed.combine_from_quadratic_extensions(&ext_b);
 
-        assert_eq!(b.v, b_reconstructed.v);
+        debug_assert_eq!(b.v, b_reconstructed.v);
     }
 
     #[test]
@@ -1260,7 +1273,7 @@ mod tests {
         c_c.from_incomplete_ntt_to_even_odd_coefficients();
         c_c.from_even_odd_coefficients_to_coefficients();
 
-        assert_eq!(c.v, c_c.v);
+        debug_assert_eq!(c.v, c_c.v);
     }
 
     #[test]
@@ -1285,7 +1298,7 @@ mod tests {
         e.from_incomplete_ntt_to_even_odd_coefficients();
         e.from_even_odd_coefficients_to_coefficients();
 
-        assert_eq!(c.v, e.v);
+        debug_assert_eq!(c.v, e.v);
     }
 
     #[test]
@@ -1297,7 +1310,7 @@ mod tests {
         a.from_coefficients_to_even_odd_coefficients();
         a.from_even_odd_coefficients_to_coefficients();
 
-        assert_eq!(original.v, a.v);
+        debug_assert_eq!(original.v, a.v);
     }
 
     #[test]
@@ -1317,8 +1330,8 @@ mod tests {
         let expected_c1 =
             unsafe { add_mod(multiply_mod(2, 5, MOD_Q), multiply_mod(3, 4, MOD_Q), MOD_Q) };
 
-        assert_eq!(result.coeffs[0], expected_c0);
-        assert_eq!(result.coeffs[1], expected_c1);
+        debug_assert_eq!(result.coeffs[0], expected_c0);
+        debug_assert_eq!(result.coeffs[1], expected_c1);
     }
 
     #[test]
@@ -1333,7 +1346,7 @@ mod tests {
         // a.conjugate_in_place_ref();
 
         b_conj.conjugate_in_place_ref();
-        // assert_eq!(a.v, a_conj.v);
+        // debug_assert_eq!(a.v, a_conj.v);
 
         let mut a_plus_b = &a + &b;
         let mut a_times_b = &a * &b;
@@ -1344,8 +1357,8 @@ mod tests {
         let mut a_times_b_conj = a_times_b.clone();
         a_times_b_conj.conjugate_in_place_ref();
 
-        assert_eq!(&a_conj + &b_conj, a_plus_b_conj);
-        assert_eq!(&a_conj * &b_conj, a_times_b_conj);
+        debug_assert_eq!(&a_conj + &b_conj, a_plus_b_conj);
+        debug_assert_eq!(&a_conj * &b_conj, a_times_b_conj);
     }
 
     #[test]
@@ -1356,7 +1369,7 @@ mod tests {
         let mut a_conj_ref = a.clone();
         a_conj.conjugate_in_place();
         a_conj_ref.conjugate_in_place_ref();
-        assert_eq!(a_conj.v, a_conj_ref.v);
+        debug_assert_eq!(a_conj.v, a_conj_ref.v);
     }
 
     #[test]
@@ -1403,7 +1416,7 @@ mod tests {
         inner_product.from_even_odd_coefficients_to_coefficients();
         let ct = inner_product.v[0];
 
-        assert_eq!(ct, two_norm_squared);
+        debug_assert_eq!(ct, two_norm_squared);
     }
 
     #[test]
@@ -1422,8 +1435,8 @@ mod tests {
         let mut expected = a.clone();
         expected.conjugate_in_place();
 
-        assert_eq!(result, expected);
-        assert_eq!(a, original);
+        debug_assert_eq!(result, expected);
+        debug_assert_eq!(a, original);
     }
 
     #[test]
@@ -1436,7 +1449,7 @@ mod tests {
         a.from_even_odd_coefficients_to_coefficients();
         let expected_constant_term = a.v[0];
 
-        assert_eq!(expected_constant_term, computed_constant_term % MOD_Q);
+        debug_assert_eq!(expected_constant_term, computed_constant_term % MOD_Q);
     }
 }
 
@@ -1449,5 +1462,5 @@ mod tests {
 //     let mut a_conj = a.clone();
 //     a_conj.conjugate_in_place_ref();
 //     a.conjugate_in_place_ref();
-//     assert_eq!(a.v, a_conj.v);
+//     debug_assert_eq!(a.v, a_conj.v);
 // }

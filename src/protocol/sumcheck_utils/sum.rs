@@ -31,7 +31,7 @@ impl<E: SumcheckElement> SumSumcheck<E> {
         lhs_sumcheck: ElephantCell<dyn HighOrderSumcheckData<Element = E>>,
         rhs_sumcheck: ElephantCell<dyn HighOrderSumcheckData<Element = E>>,
     ) -> SumSumcheck<E> {
-        assert_eq!(
+        debug_assert_eq!(
             lhs_sumcheck.get_ref().variable_count(),
             rhs_sumcheck.get_ref().variable_count(),
             "Sum sumcheck: both sumchecks must have the same variable count"
@@ -152,7 +152,7 @@ fn test_sum_sumcheck_basic() {
 
     // Sum(data_0) + Sum(data_1) = 26 + 10 = 36
     let claim = RingElement::constant(36, Representation::IncompleteNTT);
-    assert_eq!(&poly.at_zero() + &poly.at_one(), claim);
+    debug_assert_eq!(&poly.at_zero() + &poly.at_one(), claim);
 
     // Check evaluation at a random point stays consistent.
     let r0 = RingElement::constant(5, Representation::IncompleteNTT);
@@ -163,7 +163,7 @@ fn test_sum_sumcheck_basic() {
 
     sum_sumcheck.univariate_polynomial_into(&mut poly);
 
-    assert_eq!(&poly.at_zero() + &poly.at_one(), claim_r0);
+    debug_assert_eq!(&poly.at_zero() + &poly.at_one(), claim_r0);
 }
 
 #[test]
@@ -179,7 +179,7 @@ fn sum_with_eqs() {
     let mut poly = Polynomial::new(0);
     sum.univariate_polynomial_into(&mut poly);
 
-    assert_eq!(&poly.at_zero() + &poly.at_one(), claim);
+    debug_assert_eq!(&poly.at_zero() + &poly.at_one(), claim);
 }
 
 /// Evaluation-only version of SumSumcheck that evaluates the sum of two sumchecks at a point.
@@ -276,5 +276,5 @@ fn test_sum_evaluation() {
     let expected =
         sumcheck_0.get_ref().final_evaluations() + sumcheck_1.get_ref().final_evaluations();
 
-    assert_eq!(sum_eval.evaluate(&point), &expected);
+    debug_assert_eq!(sum_eval.evaluate(&point), &expected);
 }

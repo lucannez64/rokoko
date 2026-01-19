@@ -353,7 +353,7 @@ impl<E: SumcheckElement> StructuredRowEvaluationLinearSumcheck<E> {
     }
 
     pub fn load_from(&mut self, src: StructuredRow<E>) {
-        assert!(src.tensor_layers.len() == self.variable_count - self.suffix - self.prefix);
+        debug_assert!(src.tensor_layers.len() == self.variable_count - self.suffix - self.prefix);
         self.data = Some(src);
     }
 }
@@ -450,9 +450,9 @@ fn test_linear_sumcheck() {
 
     sumcheck.partial_evaluate(&r2);
 
-    assert!(sumcheck.data.len() == 1);
+    debug_assert!(sumcheck.data.len() == 1);
 
-    assert_eq!(
+    debug_assert_eq!(
         sumcheck.data[0],
         RingElement::constant(
             (MOD_Q as i64
@@ -495,12 +495,12 @@ fn test_linear_sumcheck_univariate_polynomial() {
 
     // poly 1 + (5 - 1) * x + 2 + (6 - 2) * x + 3 + (7 - 3) * x + 4 + (8 - 4) * x
 
-    assert_eq!(
+    debug_assert_eq!(
         poly.coefficients[0],
         RingElement::constant(1 + 2 + 3 + 4, Representation::IncompleteNTT)
     ); // sum of all elements
 
-    assert_eq!(
+    debug_assert_eq!(
         poly.coefficients[1],
         RingElement::constant(
             (5 - 1) + (6 - 2) + (7 - 3) + (8 - 4),
@@ -536,7 +536,7 @@ fn test_masked_sumcheck_indexing() {
     // the first polynomial is over x_0 which is prefixed and should be ignored.
     // Therefore, the polynomial should be a constant equal to the sum of all data points times 2.
     // The factor of 2 comes from the fact that the sumcheck claim is has to account for dummy variables.
-    assert_eq!(
+    debug_assert_eq!(
         poly.coefficients[0],
         RingElement::constant(
             (1 + 2 + 3 + 4 + 5 + 6 + 7 + 8) * 2,
@@ -544,17 +544,17 @@ fn test_masked_sumcheck_indexing() {
         )
     );
 
-    assert_eq!(
+    debug_assert_eq!(
         poly.coefficients[1],
         RingElement::constant(0, Representation::IncompleteNTT)
     );
 
-    assert_eq!(poly.num_coefficients, 1);
+    debug_assert_eq!(poly.num_coefficients, 1);
 
     let mut claim = poly.at_zero();
     claim += &poly.at_one();
 
-    assert_eq!(
+    debug_assert_eq!(
         claim,
         RingElement::constant(
             (1 + 2 + 3 + 4 + 5 + 6 + 7 + 8) * 4,
@@ -566,7 +566,7 @@ fn test_masked_sumcheck_indexing() {
 
     let new_claim = poly.at(&r0);
 
-    assert_eq!(
+    debug_assert_eq!(
         new_claim,
         RingElement::constant(
             (1 + 2 + 3 + 4 + 5 + 6 + 7 + 8) * 2,
@@ -578,25 +578,25 @@ fn test_masked_sumcheck_indexing() {
 
     sumcheck.univariate_polynomial_into(&mut poly);
 
-    assert_eq!(
+    debug_assert_eq!(
         poly.coefficients[0],
         RingElement::constant(1 + 2 + 3 + 4 + 5 + 6 + 7 + 8, Representation::IncompleteNTT)
     );
 
-    assert_eq!(
+    debug_assert_eq!(
         poly.coefficients[1],
         RingElement::constant(0, Representation::IncompleteNTT)
     );
 
-    assert_eq!(poly.num_coefficients, 1);
+    debug_assert_eq!(poly.num_coefficients, 1);
 
-    assert_eq!(&poly.at_zero() + &poly.at_one(), new_claim);
+    debug_assert_eq!(&poly.at_zero() + &poly.at_one(), new_claim);
 
     let r1 = RingElement::constant(1337, Representation::IncompleteNTT);
 
     let new_claim = poly.at(&r1);
 
-    assert_eq!(
+    debug_assert_eq!(
         new_claim,
         RingElement::constant(1 + 2 + 3 + 4 + 5 + 6 + 7 + 8, Representation::IncompleteNTT)
     );
@@ -605,12 +605,12 @@ fn test_masked_sumcheck_indexing() {
 
     sumcheck.univariate_polynomial_into(&mut poly);
 
-    assert_eq!(
+    debug_assert_eq!(
         poly.coefficients[0],
         RingElement::constant(1 + 2 + 3 + 4, Representation::IncompleteNTT)
     );
 
-    assert_eq!(
+    debug_assert_eq!(
         poly.coefficients[1],
         RingElement::constant(
             (5 - 1) + (6 - 2) + (7 - 3) + (8 - 4),
@@ -618,9 +618,9 @@ fn test_masked_sumcheck_indexing() {
         )
     );
 
-    assert_eq!(poly.num_coefficients, 2);
+    debug_assert_eq!(poly.num_coefficients, 2);
 
-    assert_eq!(&poly.at_zero() + &poly.at_one(), new_claim);
+    debug_assert_eq!(&poly.at_zero() + &poly.at_one(), new_claim);
 
     let r2 = RingElement::constant(42, Representation::IncompleteNTT);
 
@@ -630,7 +630,7 @@ fn test_masked_sumcheck_indexing() {
 
     sumcheck.univariate_polynomial_into(&mut poly);
 
-    assert_eq!(&poly.at_zero() + &poly.at_one(), new_claim);
+    debug_assert_eq!(&poly.at_zero() + &poly.at_one(), new_claim);
 
     let r3 = RingElement::constant(7, Representation::IncompleteNTT);
 
@@ -640,7 +640,7 @@ fn test_masked_sumcheck_indexing() {
 
     sumcheck.univariate_polynomial_into(&mut poly);
 
-    assert_eq!(&poly.at_zero() + &poly.at_one(), new_claim);
+    debug_assert_eq!(&poly.at_zero() + &poly.at_one(), new_claim);
 
     let r4 = RingElement::constant(19, Representation::IncompleteNTT);
 
@@ -648,10 +648,10 @@ fn test_masked_sumcheck_indexing() {
 
     sumcheck.partial_evaluate(&r4);
 
-    assert!(sumcheck.data.len() == 1);
+    debug_assert!(sumcheck.data.len() == 1);
 
     // now, we make a final check using r2, r3, r4
-    assert_eq!(
+    debug_assert_eq!(
         sumcheck.final_evaluations(),
         &RingElement::constant(
             (MOD_Q as i64
@@ -667,7 +667,7 @@ fn test_masked_sumcheck_indexing() {
         )
     );
 
-    assert_eq!(&new_claim, sumcheck.final_evaluations());
+    debug_assert_eq!(&new_claim, sumcheck.final_evaluations());
 }
 
 #[test]
@@ -701,7 +701,7 @@ fn test_linear_sumcheck_with_suffixed_data() {
         Representation::IncompleteNTT,
     );
 
-    assert_eq!(&poly.at_zero() + &poly.at_one(), claim);
+    debug_assert_eq!(&poly.at_zero() + &poly.at_one(), claim);
 }
 
 #[test]
@@ -742,7 +742,7 @@ fn test_evaluation_sumcheck() {
     }
     let expected_evaluation = ref_sumcheck.final_evaluations();
 
-    assert_eq!(evaluation_sumcheck.evaluate(&point), expected_evaluation);
+    debug_assert_eq!(evaluation_sumcheck.evaluate(&point), expected_evaluation);
 }
 
 #[test]
@@ -783,5 +783,5 @@ fn test_structured_row_evaluation_sumcheck() {
         ref_sumcheck.partial_evaluate(r);
     }
     let expected_evaluation = ref_sumcheck.final_evaluations();
-    assert_eq!(evaluation_sumcheck.evaluate(&point), expected_evaluation);
+    debug_assert_eq!(evaluation_sumcheck.evaluate(&point), expected_evaluation);
 }

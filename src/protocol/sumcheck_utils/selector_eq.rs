@@ -106,7 +106,7 @@ impl<E: SumcheckElement> HighOrderSumcheckData for SelectorEq<E> {
 
         let selector_bits = self.selector & ((1 << self.selector_variable_count - 1) - 1); // mask to get only the relevant bits
 
-        assert_eq!(
+        debug_assert_eq!(
             point_higher_bits.coordinates, selector_bits,
             "the polynomial is identically zero at this point. Eval should not be called."
         );
@@ -183,7 +183,7 @@ fn test_selector_eq_basic() {
     //     sumcheck.univariate_polynomial_at_point_into(HypercubePoint::new(0b100), &mut polynomial);
 
     // 0b0100 and 0b1100 do not match the selector in the higher order bits, so the polynomial is identically zero
-    assert_eq!(
+    debug_assert_eq!(
         sumcheck.is_univariate_polynomial_zero_at_point(HypercubePoint::new(0b100)),
         true
     );
@@ -192,7 +192,7 @@ fn test_selector_eq_basic() {
     // sumcheck.univariate_polynomial_at_point_into(HypercubePoint::new(0b101), &mut polynomial);
 
     // 0b0101 and 0b1101 do not match the selector in the higher order bits, so the polynomial is identically zero
-    assert_eq!(
+    debug_assert_eq!(
         sumcheck.is_univariate_polynomial_zero_at_point(HypercubePoint::new(0b101)),
         true
     );
@@ -201,17 +201,17 @@ fn test_selector_eq_basic() {
         sumcheck.univariate_polynomial_at_point_into(HypercubePoint::new(0b010), &mut polynomial);
 
     // 0b1010 matches the selector in the higher order bits
-    assert_eq!(
+    debug_assert_eq!(
         sumcheck.is_univariate_polynomial_zero_at_point(HypercubePoint::new(0b010)),
         false
     );
 
     // as selector = 0b10, the polynomial should be x as it's 1 when the variable is 1, and 0 when the variable is 0
-    assert_eq!(
+    debug_assert_eq!(
         polynomial.coefficients[0],
         RingElement::zero(Representation::IncompleteNTT)
     );
-    assert_eq!(
+    debug_assert_eq!(
         polynomial.coefficients[1],
         RingElement::one(Representation::IncompleteNTT)
     );
@@ -221,7 +221,7 @@ fn test_selector_eq_basic() {
 
     sumcheck.univariate_polynomial_into(&mut polynomial);
 
-    assert_eq!(&polynomial.at_zero() + &polynomial.at_one(), claim);
+    debug_assert_eq!(&polynomial.at_zero() + &polynomial.at_one(), claim);
 
     let r0 = RingElement::constant(53, Representation::IncompleteNTT);
 
@@ -232,14 +232,14 @@ fn test_selector_eq_basic() {
 
     // (0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 0, 0, 0, 0)
     // changes into (r0, r0, r0, r0, 0, 0, 0, 0) after partial evaluation at r0
-    assert_eq!(
+    debug_assert_eq!(
         claim,
         RingElement::constant(4 * 53, Representation::IncompleteNTT)
     );
 
     sumcheck.univariate_polynomial_into(&mut polynomial);
 
-    assert_eq!(&polynomial.at_zero() + &polynomial.at_one(), claim);
+    debug_assert_eq!(&polynomial.at_zero() + &polynomial.at_one(), claim);
 
     let r1 = RingElement::constant(73, Representation::IncompleteNTT);
 
@@ -250,7 +250,7 @@ fn test_selector_eq_basic() {
     // (r0, r0, r0, r0, 0, 0, 0, 0) // at 0 it's r0, at 1 it's 0 so the funtion is r0 * (1 - x)
     // changes into (r0 * (1 - r1), r0 * (1 - r1), r0 * (1 - r1), r0 * (1 - r1)) after partial evaluation at r1
 
-    assert_eq!(
+    debug_assert_eq!(
         claim,
         RingElement::constant(
             4 * 53 * (MOD_Q as i64 + 1 - 73) as u64,
@@ -260,9 +260,9 @@ fn test_selector_eq_basic() {
 
     sumcheck.univariate_polynomial_into(&mut polynomial);
 
-    assert_eq!(&polynomial.at_zero() + &polynomial.at_one(), claim);
+    debug_assert_eq!(&polynomial.at_zero() + &polynomial.at_one(), claim);
 
-    assert_eq!(
+    debug_assert_eq!(
         polynomial.coefficients[1],
         RingElement::zero(Representation::IncompleteNTT)
     );
@@ -277,7 +277,7 @@ fn test_selector_eq_basic() {
     // (r0 * (1 - r1), r0 * (1 - r1), r0 * (1 - r1), r0 * (1 - r1))
     // changes into (r0 * (1 - r1), r0 * (1 - r1)) after partial evaluation at r2 (as the function is constant and the variable is ignored)
 
-    assert_eq!(
+    debug_assert_eq!(
         claim,
         RingElement::constant(
             2 * 53 * (MOD_Q as i64 + 1 - 73) as u64,
@@ -287,7 +287,7 @@ fn test_selector_eq_basic() {
 
     sumcheck.univariate_polynomial_into(&mut polynomial);
 
-    assert_eq!(&polynomial.at_zero() + &polynomial.at_one(), claim);
+    debug_assert_eq!(&polynomial.at_zero() + &polynomial.at_one(), claim);
 
     let r3 = RingElement::constant(743, Representation::IncompleteNTT);
 
@@ -298,7 +298,7 @@ fn test_selector_eq_basic() {
     // (r0 * (1 - r1), r0 * (1 - r1))
     // changes into (r0 * (1 - r1)) after partial evaluation at r3 (as the function is constant and the variable is ignored)
 
-    assert_eq!(
+    debug_assert_eq!(
         claim,
         RingElement::constant(
             53 * (MOD_Q as i64 + 1 - 73) as u64,
@@ -307,7 +307,7 @@ fn test_selector_eq_basic() {
     );
 
     // After exhausting all variables, the stored claim should match the verifier's expectation.
-    assert_eq!(sumcheck.final_evaluations(), &claim);
+    debug_assert_eq!(sumcheck.final_evaluations(), &claim);
 }
 
 pub struct SelectorEqEvaluation {
@@ -404,5 +404,5 @@ fn test_selector_eq_evaluation() {
     }
     let expected_evaluation = ref_sumcheck.final_evaluations();
 
-    assert_eq!(evaluation_sumcheck.evaluate(&point), expected_evaluation);
+    debug_assert_eq!(evaluation_sumcheck.evaluate(&point), expected_evaluation);
 }

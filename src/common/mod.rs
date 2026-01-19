@@ -40,6 +40,7 @@ pub fn init_common() {
     LazyLock::force(&HALF_WAY_MOD_Q_RING_CF);
 
     unsafe { LazyLock::force_mut(&mut crate::common::ring_arithmetic::temp_buffer) };
+    unsafe { LazyLock::force_mut(&mut crate::common::ring_arithmetic::aux) };
 
     // init some caches of HEXL
     let mut a = RingElement::new(Representation::EvenOddCoefficients);

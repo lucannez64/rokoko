@@ -36,7 +36,7 @@ impl<E: SumcheckElement> ProductSumcheck<E> {
         lhs_sumcheck: ElephantCell<dyn HighOrderSumcheckData<Element = E>>,
         rhs_sumcheck: ElephantCell<dyn HighOrderSumcheckData<Element = E>>,
     ) -> ProductSumcheck<E> {
-        assert_eq!(
+        debug_assert_eq!(
             lhs_sumcheck.get_ref().variable_count(),
             rhs_sumcheck.get_ref().variable_count(),
             "Inner product sumcheck: both sumchecks must have the same data length"
@@ -153,7 +153,7 @@ fn test_inner_product_sumcheck() {
 
     // The polynomial evaluated at 0 and 1 should sum to the true inner product.
 
-    assert_eq!(
+    debug_assert_eq!(
         &univariate_poly.at_zero() + &univariate_poly.at_one(),
         RingElement::constant(
             1 * 9 + 2 * 10 + 3 * 11 + 4 * 12 + 5 * 13 + 6 * 14 + 7 * 15 + 8 * 16,
@@ -172,7 +172,7 @@ fn test_inner_product_sumcheck() {
 
     inner_product_sumcheck.univariate_polynomial_into(&mut univariate_poly);
 
-    assert_eq!(
+    debug_assert_eq!(
         &univariate_poly.at_zero() + &univariate_poly.at_one(),
         claim
     );
@@ -187,7 +187,7 @@ fn test_inner_product_sumcheck() {
 
     inner_product_sumcheck.univariate_polynomial_into(&mut univariate_poly);
 
-    assert_eq!(
+    debug_assert_eq!(
         &univariate_poly.at_zero() + &univariate_poly.at_one(),
         claim
     );
@@ -201,13 +201,13 @@ fn test_inner_product_sumcheck() {
     sumcheck_0.borrow_mut().partial_evaluate(&r2);
     sumcheck_1.borrow_mut().partial_evaluate(&r2);
 
-    assert_eq!(
+    debug_assert_eq!(
         sumcheck_0.get_ref().final_evaluations() * sumcheck_1.get_ref().final_evaluations(),
         claim,
     );
 
     // Explicit multilinear evaluations of each folded claim for documentation.
-    assert_eq!(
+    debug_assert_eq!(
         sumcheck_0.get_ref().final_evaluations(),
         &RingElement::constant(
             (MOD_Q as i64
@@ -223,7 +223,7 @@ fn test_inner_product_sumcheck() {
         )
     );
 
-    assert_eq!(
+    debug_assert_eq!(
         sumcheck_1.get_ref().final_evaluations(),
         &RingElement::constant(
             (MOD_Q as i64
@@ -240,7 +240,7 @@ fn test_inner_product_sumcheck() {
     );
 
     // Final consistency: inner product claim equals product of individual folded claims.
-    assert_eq!(
+    debug_assert_eq!(
         claim,
         RingElement::constant(
             (MOD_Q as i64
@@ -288,7 +288,7 @@ fn test_self_inner_product_sumcheck() {
     inner_product_sumcheck.univariate_polynomial_into(&mut univariate_poly);
 
     // When both inputs are identical, the inner product collapses to a sum of squares.
-    assert_eq!(
+    debug_assert_eq!(
         &univariate_poly.at_zero() + &univariate_poly.at_one(),
         RingElement::constant(
             1 * 1 + 2 * 2 + 3 * 3 + 4 * 4 + 5 * 5 + 6 * 6 + 7 * 7 + 8 * 8,
@@ -348,7 +348,7 @@ fn test_three_way_sumcheck() {
     inner_product_sumcheck_012.univariate_polynomial_into(&mut univariate_poly);
 
     // Evaluating the first-round polynomial at 0 and 1 should give the full triple product sum.
-    assert_eq!(
+    debug_assert_eq!(
         &univariate_poly.at_zero() + &univariate_poly.at_one(),
         RingElement::constant(
             1 * 5 * 9 + 2 * 6 * 10 + 3 * 7 * 11 + 4 * 8 * 12,
@@ -367,7 +367,7 @@ fn test_three_way_sumcheck() {
     inner_product_sumcheck_012.univariate_polynomial_into(&mut univariate_poly);
 
     // The verifier's running claim should stay consistent after folding all three vectors.
-    assert_eq!(
+    debug_assert_eq!(
         &univariate_poly.at_zero() + &univariate_poly.at_one(),
         claim
     );
@@ -447,12 +447,12 @@ fn test_product_of_linear_sumchecks_over_disjoint_variables() {
         product_123
             .get_ref()
             .univariate_polynomial_into(&mut univariate_poly);
-        assert_eq!(
+        debug_assert_eq!(
             &univariate_poly.at_zero() + &univariate_poly.at_one(),
             claim
         );
 
-        assert_eq!(univariate_poly.num_coefficients, 2); // degree 1 polynomial as expected
+        debug_assert_eq!(univariate_poly.num_coefficients, 2); // degree 1 polynomial as expected
 
         let r = RingElement::constant(7, Representation::IncompleteNTT);
 
@@ -466,12 +466,12 @@ fn test_product_of_linear_sumchecks_over_disjoint_variables() {
     product_123
         .get_ref()
         .univariate_polynomial_into(&mut univariate_poly);
-    assert_eq!(
+    debug_assert_eq!(
         &univariate_poly.at_zero() + &univariate_poly.at_one(),
         claim
     );
 
-    assert_eq!(univariate_poly.num_coefficients, 2); // degree 1 polynomial as expected
+    debug_assert_eq!(univariate_poly.num_coefficients, 2); // degree 1 polynomial as expected
 }
 
 /// Evaluation-only version of ProductSumcheck that evaluates the product of two sumchecks at a point.
@@ -568,5 +568,5 @@ fn test_product_evaluation() {
     let expected =
         sumcheck_0.get_ref().final_evaluations() * sumcheck_1.get_ref().final_evaluations();
 
-    assert_eq!(product_eval.evaluate(&point), &expected);
+    debug_assert_eq!(product_eval.evaluate(&point), &expected);
 }

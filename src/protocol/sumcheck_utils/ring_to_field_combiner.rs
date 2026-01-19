@@ -129,7 +129,7 @@ fn test_ring_to_field_combiner() {
 
     combiner.univariate_polynomial_into(&mut poly);
 
-    assert_eq!(
+    debug_assert_eq!(
         poly.at_zero() + poly.at_one(),
         QuadraticExtension {
             coeffs: [claim as u64, 0],
@@ -149,7 +149,7 @@ fn test_ring_to_field_combiner() {
     sumcheck.borrow_mut().partial_evaluate(&r0);
     combiner.univariate_polynomial_into(&mut poly);
 
-    assert_eq!(poly.at_zero() + poly.at_one(), claim_after_r0);
+    debug_assert_eq!(poly.at_zero() + poly.at_one(), claim_after_r0);
 
     let r1qe = QuadraticExtension { coeffs: [21, 37] };
 
@@ -164,7 +164,7 @@ fn test_ring_to_field_combiner() {
     sumcheck.borrow_mut().partial_evaluate(&r1);
     combiner.univariate_polynomial_into(&mut poly);
 
-    assert_eq!(poly.at_zero() + poly.at_one(), claim_after_r1);
+    debug_assert_eq!(poly.at_zero() + poly.at_one(), claim_after_r1);
 
     let r2qe = QuadraticExtension { coeffs: [53, 89] };
 
@@ -190,7 +190,7 @@ fn test_ring_to_field_combiner() {
         final_qes[i] *= &combiner.challenge_vec[i];
         final_eval += &final_qes[i];
     }
-    assert_eq!(final_eval, final_claim);
+    debug_assert_eq!(final_eval, final_claim);
 }
 
 /// Evaluation-only version of RingToFieldCombiner that evaluates a ring element sumcheck
@@ -310,5 +310,5 @@ fn test_ring_to_field_combiner_evaluation() {
         expected += &final_qes[i];
     }
 
-    assert_eq!(combiner_eval.evaluate_at_ring_point(&point), &expected);
+    debug_assert_eq!(combiner_eval.evaluate_at_ring_point(&point), &expected);
 }

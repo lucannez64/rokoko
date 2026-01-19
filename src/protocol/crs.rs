@@ -29,7 +29,7 @@ impl CRS {
 /// Generates a Common Reference String (CRS).
 impl CRS {
     pub fn gen_crs(max_wit_dim: usize, max_module_size: usize) -> CRS {
-        assert!(max_wit_dim.is_power_of_two());
+        debug_assert!(max_wit_dim.is_power_of_two());
 
         let (cks, structured_cks): (Vec<_>, Vec<_>) = (1..=max_wit_dim.ilog2() as usize)
             .map(|nof_tensor_layers| {

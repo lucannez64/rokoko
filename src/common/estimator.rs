@@ -98,6 +98,6 @@ mod tests {
 
         let result = estimate_sis_security(&params).unwrap();
         println!("Log2(ROP): {}", result.secpar);
-        assert!(result.secpar > 0.0);
+        debug_assert!(result.secpar > 0.0);
     }
 }

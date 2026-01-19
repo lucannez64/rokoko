@@ -246,7 +246,7 @@ mod tests {
 
         let c1 = t1.sample_bytes(32);
         let c2 = t2.sample_bytes(32);
-        assert_eq!(c1, c2);
+        debug_assert_eq!(c1, c2);
     }
 
     #[test]
@@ -267,7 +267,7 @@ mod tests {
 
         let c1 = t1.sample_bytes(32);
         let c2 = t2.sample_bytes(32);
-        assert_ne!(c1, c2);
+        debug_assert_ne!(c1, c2);
     }
 
     #[test]
@@ -276,7 +276,7 @@ mod tests {
 
         let challenge1 = t1.sample_biased_ternary_ring_element();
         let challenge2 = t1.sample_biased_ternary_ring_element();
-        assert_ne!(challenge1, challenge2);
+        debug_assert_ne!(challenge1, challenge2);
     }
 
     #[test]
@@ -290,7 +290,7 @@ mod tests {
 
         let challenge1 = t1.sample_bytes(16);
         let challenge2 = t2.sample_bytes(16);
-        assert_ne!(challenge1, challenge2);
+        debug_assert_ne!(challenge1, challenge2);
     }
 
     #[test]
@@ -298,7 +298,7 @@ mod tests {
         let mut transcript = HashWrapper::new();
         let first = transcript.sample_bytes(8);
         let second = transcript.sample_bytes(8);
-        assert_ne!(first, second);
+        debug_assert_ne!(first, second);
     }
 
     #[test]
@@ -306,7 +306,7 @@ mod tests {
         let mut transcript = HashWrapper::new();
         let element = transcript.sample_binary_ring_element();
         for &coeff in element.v.iter() {
-            assert!(coeff == 0 || coeff == 1);
+            debug_assert!(coeff == 0 || coeff == 1);
         }
     }
 
@@ -315,7 +315,7 @@ mod tests {
         let mut transcript = HashWrapper::new();
         let element = transcript.sample_biased_ternary_ring_element();
         for &coeff in element.v.iter() {
-            assert!(coeff == MOD_Q - 1 || coeff == 0 || coeff == 1);
+            debug_assert!(coeff == MOD_Q - 1 || coeff == 0 || coeff == 1);
         }
     }
 
@@ -324,7 +324,7 @@ mod tests {
         let mut transcript = HashWrapper::new();
         let element = transcript.sample_ternary_ring_element();
         for &coeff in element.v.iter() {
-            assert!(coeff == MOD_Q - 1 || coeff == 0 || coeff == 1);
+            debug_assert!(coeff == MOD_Q - 1 || coeff == 0 || coeff == 1);
         }
     }
 
@@ -340,6 +340,6 @@ mod tests {
                 break;
             }
         }
-        assert!(found_nonzero);
+        debug_assert!(found_nonzero);
     }
 }

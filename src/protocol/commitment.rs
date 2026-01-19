@@ -179,25 +179,25 @@ fn test_recursive_commit() {
 
     let recursive_commitment = recursive_commit(&crs, &config, &data);
 
-    assert_eq!(recursive_commitment.committed_data.len(), 32);
-    assert_eq!(recursive_commitment.commitment.len(), 2);
-    assert_eq!(
+    debug_assert_eq!(recursive_commitment.committed_data.len(), 32);
+    debug_assert_eq!(recursive_commitment.commitment.len(), 2);
+    debug_assert_eq!(
         recursive_commitment.committed_data[0],
         RingElement::all(1, Representation::IncompleteNTT)
     );
-    assert_eq!(
+    debug_assert_eq!(
         recursive_commitment.committed_data[1],
         RingElement::all(0, Representation::IncompleteNTT)
     );
-    assert_eq!(
+    debug_assert_eq!(
         recursive_commitment.committed_data[2],
         RingElement::all(MOD_Q - 4, Representation::IncompleteNTT)
     );
-    assert_eq!(
+    debug_assert_eq!(
         recursive_commitment.committed_data[3],
         RingElement::all(0, Representation::IncompleteNTT)
     );
-    assert!(recursive_commitment.next.is_none());
+    debug_assert!(recursive_commitment.next.is_none());
 }
 
 #[test]
@@ -261,7 +261,7 @@ fn test_commitment_computation() {
 
     let commitment = commit_basic_internal(&ck, &witness, 2);
 
-    assert_eq!(
+    debug_assert_eq!(
         &commitment[(0, 0)],
         &RingElement::constant(
             1 * 1 + 2 * 2 + 4 * 3 + 8 * 4 + 16 * 5 + 32 * 6 + 64 * 7 + 128 * 8,
@@ -269,7 +269,7 @@ fn test_commitment_computation() {
         )
     );
 
-    assert_eq!(
+    debug_assert_eq!(
         &commitment[(0, 1)],
         &RingElement::constant(
             1 * 9 + 2 * 10 + 4 * 11 + 8 * 12 + 16 * 13 + 32 * 14 + 64 * 15 + 128 * 16,
@@ -277,7 +277,7 @@ fn test_commitment_computation() {
         )
     );
 
-    assert_eq!(
+    debug_assert_eq!(
         &commitment[(1, 0)],
         &RingElement::constant(
             1 * 1 + 4 * 2 + 16 * 3 + 64 * 4 + 256 * 5 + 1024 * 6 + 4096 * 7 + 16384 * 8,
@@ -285,7 +285,7 @@ fn test_commitment_computation() {
         )
     );
 
-    assert_eq!(
+    debug_assert_eq!(
         &commitment[(1, 1)],
         &RingElement::constant(
             1 * 9 + 4 * 10 + 16 * 11 + 64 * 12 + 256 * 13 + 1024 * 14 + 4096 * 15 + 16384 * 16,

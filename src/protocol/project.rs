@@ -43,9 +43,9 @@ pub fn project(
         witness_16.height / projection_matrix.projection_ratio,
         witness_16.width,
     );
-    assert_eq!(projection_image.width, witness_16.width);
+    debug_assert_eq!(projection_image.width, witness_16.width);
 
-    assert_eq!(
+    debug_assert_eq!(
         projection_image.height * projection_matrix.projection_ratio,
         witness_16.height
     );
@@ -127,14 +127,14 @@ fn test_projection() {
 
     let projection_image = project(&witness_i16, &projection_matrix);
 
-    assert_eq!(
+    debug_assert_eq!(
         projection_image[(0, 0)],
         RingElement::constant(
             (-1i64 * 1 + -1i64 * 2 + 1i64 * 3 + 1i64 * 4) as u64,
             Representation::IncompleteNTT
         )
     );
-    assert_eq!(
+    debug_assert_eq!(
         projection_image[(projection_matrix.projection_height, 0)],
         RingElement::constant(
             (-1 * (projection_matrix.projection_height as i64 * 2 + 1)
@@ -145,7 +145,7 @@ fn test_projection() {
         )
     );
 
-    assert_eq!(
+    debug_assert_eq!(
         projection_image[(0, 1)],
         RingElement::constant(
             (-1 * (projection_matrix.projection_height as i64 * 4 + 1)
@@ -156,7 +156,7 @@ fn test_projection() {
         )
     );
 
-    assert_eq!(
+    debug_assert_eq!(
         projection_image[(projection_matrix.projection_height, 1)],
         RingElement::constant(
             (-1 * (projection_matrix.projection_height as i64 * 6 + 1)
@@ -167,7 +167,7 @@ fn test_projection() {
         )
     );
 
-    assert_eq!(
+    debug_assert_eq!(
         projection_image[(3, 0)],
         RingElement::constant(
             (-1i64 * 2 + 1 * 3 + 1 * 7 + 1 * 8) as u64,
@@ -175,7 +175,7 @@ fn test_projection() {
         )
     );
 
-    assert_eq!(
+    debug_assert_eq!(
         projection_image[(projection_matrix.projection_height + 3, 0)],
         RingElement::constant(
             (-1 * (projection_matrix.projection_height as i64 * 2 + 2)
@@ -186,7 +186,7 @@ fn test_projection() {
         )
     );
 
-    assert_eq!(
+    debug_assert_eq!(
         projection_image[(3, 1)],
         RingElement::constant(
             (-1 * (projection_matrix.projection_height as i64 * 4 + 2)
@@ -197,7 +197,7 @@ fn test_projection() {
         )
     );
 
-    assert_eq!(
+    debug_assert_eq!(
         projection_image[(projection_matrix.projection_height + 3, 1)],
         RingElement::constant(
             (-1 * (projection_matrix.projection_height as i64 * 6 + 2)

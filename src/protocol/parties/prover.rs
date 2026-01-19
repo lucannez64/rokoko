@@ -95,7 +95,7 @@ pub fn prover_round(
 
     let claims = if with_claims {
         let cc = claims(&opening.rhs, evaluation_points_outer);
-        // assert_eq!(cc[0], opening);
+        // debug_assert_eq!(cc[0], opening);
         Some(cc)
     } else {
         None
@@ -426,7 +426,7 @@ pub fn prover_round(
             argued_witness_bound
         };
 
-        assert!(
+        debug_assert!(
             argued_witness_bound * argued_witness_bound < (MOD_Q as f64 / 2f64),
             "Witness bound too large for inner-product norm extraction!"
         );
@@ -486,7 +486,7 @@ pub fn prover_round(
                 Config::Sumcheck(next_sumcheck_config) => {
                     // let next_round_rc_commitment_with_aux =
                     // if let Some(next_config) = &base_next_roung_config {
-                    assert_eq!(
+                    debug_assert_eq!(
                         next_round_witness.data.len(),
                         next_sumcheck_config.witness_height * next_sumcheck_config.witness_width
                     );
@@ -572,7 +572,7 @@ pub fn prover_round(
                     )
                 }
                 Config::Simple(next_simple_config) => {
-                    assert_eq!(
+                    debug_assert_eq!(
                         next_round_witness.data.len(),
                         next_simple_config.witness_height * next_simple_config.witness_width
                     );
@@ -743,7 +743,7 @@ pub fn prover_round_simple(
             argued_witness_bound
         };
 
-        assert!(
+        debug_assert!(
             argued_witness_bound * argued_witness_bound < (MOD_Q as f64 / 2f64),
             "Witness bound too large for inner-product norm extraction!"
         );
