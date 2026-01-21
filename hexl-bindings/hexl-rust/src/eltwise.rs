@@ -848,30 +848,67 @@ unsafe fn eltwise_mult_mod_avx512_float_loop<const INPUT_MOD_FACTOR: i32>(
     let mut op1_ptr = vp_operand1;
     let mut op2_ptr = vp_operand2;
 
-    for _ in (0..n).step_by(8) {
-        let mut v_op1 = _mm512_loadu_si512(op1_ptr);
-        v_op1 = mm512_hexl_small_mod_epu64::<INPUT_MOD_FACTOR>(v_op1, v_modulus, Some(&v_twice_mod), None);
-        let mut v_op2 = _mm512_loadu_si512(op2_ptr);
-        v_op2 = mm512_hexl_small_mod_epu64::<INPUT_MOD_FACTOR>(v_op2, v_modulus, Some(&v_twice_mod), None);
+    // Process 2 vectors per iteration for better ILP
+    let n_unroll = (n / 16) * 16;
+    let mut i = 0;
+    
+    while i < n_unroll {
+        // Load 2 vectors from each operand
+        let mut v_op1_a = _mm512_loadu_si512(op1_ptr);
+        let mut v_op1_b = _mm512_loadu_si512(op1_ptr.add(1));
+        let mut v_op2_a = _mm512_loadu_si512(op2_ptr);
+        let mut v_op2_b = _mm512_loadu_si512(op2_ptr.add(1));
 
-        let v_x = _mm512_cvt_roundepu64_pd(v_op1, ROUND_MODE);
-        let v_y = _mm512_cvt_roundepu64_pd(v_op2, ROUND_MODE);
+        // Reduce both pairs (independent operations)
+        v_op1_a = mm512_hexl_small_mod_epu64::<INPUT_MOD_FACTOR>(v_op1_a, v_modulus, Some(&v_twice_mod), None);
+        v_op1_b = mm512_hexl_small_mod_epu64::<INPUT_MOD_FACTOR>(v_op1_b, v_modulus, Some(&v_twice_mod), None);
+        v_op2_a = mm512_hexl_small_mod_epu64::<INPUT_MOD_FACTOR>(v_op2_a, v_modulus, Some(&v_twice_mod), None);
+        v_op2_b = mm512_hexl_small_mod_epu64::<INPUT_MOD_FACTOR>(v_op2_b, v_modulus, Some(&v_twice_mod), None);
 
-        let v_h = _mm512_mul_pd(v_x, v_y);
-        let v_l = _mm512_fmsub_pd(v_x, v_y, v_h);
-        let v_b = _mm512_mul_pd(v_h, v_u);
-        let v_c = _mm512_roundscale_pd(v_b, _MM_FROUND_TO_NEG_INF | _MM_FROUND_NO_EXC);
-        let v_d = _mm512_fnmadd_pd(v_c, v_p, v_h);
-        let mut v_g = _mm512_add_pd(v_d, v_l);
-        let m = _mm512_cmp_pd_mask(v_g, _mm512_setzero_pd(), _CMP_LT_OQ);
-        v_g = _mm512_mask_add_pd(v_g, m, v_g, v_p);
+        // Convert to double (independent)
+        let v_x_a = _mm512_cvt_roundepu64_pd(v_op1_a, ROUND_MODE);
+        let v_x_b = _mm512_cvt_roundepu64_pd(v_op1_b, ROUND_MODE);
+        let v_y_a = _mm512_cvt_roundepu64_pd(v_op2_a, ROUND_MODE);
+        let v_y_b = _mm512_cvt_roundepu64_pd(v_op2_b, ROUND_MODE);
 
-        let v_result = _mm512_cvt_roundpd_epu64(v_g, ROUND_MODE);
-        _mm512_storeu_si512(res_ptr, v_result);
+        // Multiply high parts (independent chains)
+        let v_h_a = _mm512_mul_pd(v_x_a, v_y_a);
+        let v_h_b = _mm512_mul_pd(v_x_b, v_y_b);
+        
+        // Compute low parts (FMA ports)
+        let v_l_a = _mm512_fmsub_pd(v_x_a, v_y_a, v_h_a);
+        let v_l_b = _mm512_fmsub_pd(v_x_b, v_y_b, v_h_b);
+        
+        // Barrett reduction prep
+        let v_b_a = _mm512_mul_pd(v_h_a, v_u);
+        let v_b_b = _mm512_mul_pd(v_h_b, v_u);
+        
+        let v_c_a = _mm512_roundscale_pd(v_b_a, _MM_FROUND_TO_NEG_INF | _MM_FROUND_NO_EXC);
+        let v_c_b = _mm512_roundscale_pd(v_b_b, _MM_FROUND_TO_NEG_INF | _MM_FROUND_NO_EXC);
+        
+        let v_d_a = _mm512_fnmadd_pd(v_c_a, v_p, v_h_a);
+        let v_d_b = _mm512_fnmadd_pd(v_c_b, v_p, v_h_b);
+        
+        let mut v_g_a = _mm512_add_pd(v_d_a, v_l_a);
+        let mut v_g_b = _mm512_add_pd(v_d_b, v_l_b);
+        
+        // Conditional add
+        let m_a = _mm512_cmp_pd_mask(v_g_a, _mm512_setzero_pd(), _CMP_LT_OQ);
+        let m_b = _mm512_cmp_pd_mask(v_g_b, _mm512_setzero_pd(), _CMP_LT_OQ);
+        v_g_a = _mm512_mask_add_pd(v_g_a, m_a, v_g_a, v_p);
+        v_g_b = _mm512_mask_add_pd(v_g_b, m_b, v_g_b, v_p);
 
-        res_ptr = res_ptr.add(1);
-        op1_ptr = op1_ptr.add(1);
-        op2_ptr = op2_ptr.add(1);
+        // Convert back and store
+        let v_result_a = _mm512_cvt_roundpd_epu64(v_g_a, ROUND_MODE);
+        let v_result_b = _mm512_cvt_roundpd_epu64(v_g_b, ROUND_MODE);
+        
+        _mm512_storeu_si512(res_ptr, v_result_a);
+        _mm512_storeu_si512(res_ptr.add(1), v_result_b);
+
+        res_ptr = res_ptr.add(2);
+        op1_ptr = op1_ptr.add(2);
+        op2_ptr = op2_ptr.add(2);
+        i += 16;
     }
 }
 
