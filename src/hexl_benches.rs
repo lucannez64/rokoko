@@ -31,13 +31,7 @@ pub fn run_hexl_benches() {
         eltwise_mult_mod(out.as_mut_ptr(), a.as_ptr(), b.as_ptr(), n as u64, MOD_Q);
     });
     let cpp_time = bench(iters * 10, || unsafe {
-        (wrapper.eltwise_mult_mod)(
-            out.as_mut_ptr(),
-            a.as_ptr(),
-            b.as_ptr(),
-            n as u64,
-            MOD_Q,
-        );
+        (wrapper.eltwise_mult_mod)(out.as_mut_ptr(), a.as_ptr(), b.as_ptr(), n as u64, MOD_Q);
     });
     print_bench("eltwise_mult_mod", rust_time, cpp_time, iters * 10);
 
@@ -50,24 +44,10 @@ pub fn run_hexl_benches() {
     print_bench("eltwise_add_mod", rust_time, cpp_time, iters);
 
     let rust_time = bench(iters, || unsafe {
-        eltwise_fma_mod(
-            out.as_mut_ptr(),
-            a.as_ptr(),
-            7,
-            c.as_ptr(),
-            n as u64,
-            MOD_Q,
-        );
+        eltwise_fma_mod(out.as_mut_ptr(), a.as_ptr(), 7, c.as_ptr(), n as u64, MOD_Q);
     });
     let cpp_time = bench(iters, || unsafe {
-        (wrapper.eltwise_fma_mod)(
-            out.as_mut_ptr(),
-            a.as_ptr(),
-            7,
-            c.as_ptr(),
-            n as u64,
-            MOD_Q,
-        );
+        (wrapper.eltwise_fma_mod)(out.as_mut_ptr(), a.as_ptr(), 7, c.as_ptr(), n as u64, MOD_Q);
     });
     print_bench("eltwise_fma_mod", rust_time, cpp_time, iters);
 
@@ -177,13 +157,7 @@ fn verify_hexl_against_cpp(wrapper: &HexlWrapper) {
             n as u64,
             modulus,
         );
-        (wrapper.eltwise_add_mod)(
-            cpp_out.as_mut_ptr(),
-            a.as_ptr(),
-            b.as_ptr(),
-            n,
-            modulus,
-        );
+        (wrapper.eltwise_add_mod)(cpp_out.as_mut_ptr(), a.as_ptr(), b.as_ptr(), n, modulus);
         assert_eq!(rust_out, cpp_out, "eltwise_add_mod mismatch");
 
         rust_hexl::eltwise_sub_mod(
@@ -193,13 +167,7 @@ fn verify_hexl_against_cpp(wrapper: &HexlWrapper) {
             n as u64,
             modulus,
         );
-        (wrapper.eltwise_sub_mod)(
-            cpp_out.as_mut_ptr(),
-            a.as_ptr(),
-            b.as_ptr(),
-            n,
-            modulus,
-        );
+        (wrapper.eltwise_sub_mod)(cpp_out.as_mut_ptr(), a.as_ptr(), b.as_ptr(), n, modulus);
         assert_eq!(rust_out, cpp_out, "eltwise_sub_mod mismatch");
 
         rust_hexl::eltwise_fma_mod(
@@ -226,12 +194,7 @@ fn verify_hexl_against_cpp(wrapper: &HexlWrapper) {
             n as u64,
             modulus,
         );
-        (wrapper.eltwise_reduce_mod)(
-            cpp_out.as_mut_ptr(),
-            reduce_input.as_ptr(),
-            n,
-            modulus,
-        );
+        (wrapper.eltwise_reduce_mod)(cpp_out.as_mut_ptr(), reduce_input.as_ptr(), n, modulus);
         assert_eq!(rust_out, cpp_out, "eltwise_reduce_mod mismatch");
 
         let mut rust_ntt = a.clone();
@@ -343,9 +306,7 @@ impl HexlWrapper {
             )
             .map_err(|err| err.to_string())?;
         let eltwise_reduce_mod = *lib
-            .get::<unsafe extern "C" fn(*mut u64, *const u64, usize, u64)>(
-                b"eltwise_reduce_mod\0",
-            )
+            .get::<unsafe extern "C" fn(*mut u64, *const u64, usize, u64)>(b"eltwise_reduce_mod\0")
             .map_err(|err| err.to_string())?;
         let eltwise_add_mod = *lib
             .get::<unsafe extern "C" fn(*mut u64, *const u64, *const u64, usize, u64)>(

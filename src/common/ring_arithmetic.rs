@@ -514,7 +514,8 @@ fn get_temp_buffer() -> &'static mut [u64; DEGREE] {
     unsafe { &mut temp_buffer }
 }
 
-pub static mut aux: LazyLock<RingElement> = LazyLock::new(|| RingElement::new(Representation::IncompleteNTT));
+pub static mut aux: LazyLock<RingElement> =
+    LazyLock::new(|| RingElement::new(Representation::IncompleteNTT));
 
 #[inline(always)]
 fn get_aux() -> &'static mut RingElement {
@@ -692,8 +693,6 @@ pub fn incomplete_ntt_multiplication(
 
     incomplete_ntt_multiplication_inner(result, operand1, operand2, false);
 }
-
-
 
 #[inline(always)]
 pub fn incomplete_ntt_multiplication_in_place(result: &mut RingElement, operand: &RingElement) {

@@ -259,7 +259,6 @@ pub struct Type3SumcheckContext {
     pub output: ElephantCell<DiffSumcheck<RingElement>>,
 }
 
-
 /// Type4 layer: One layer in a recursive commitment tree.
 ///
 /// For each internal layer i, proves: `CK_i · selected_witness_i = compose(child_commitment_{i+1})`
