@@ -72,7 +72,7 @@ pub fn mul_poly_into<E: SumcheckElement>(
         "Resulting polynomial degree exceeds supported maximum"
     );
 
-    result.set_zero();
+    // result.set_zero();
 
     if poly_0.num_coefficients == 2 && poly_1.num_coefficients == 2 {
         // Both are linear: (a0 + a1*x) * (b0 + b1*x) = a0*b0 + (a0*b1 + a1*b0)*x + a1*b1*x^2
