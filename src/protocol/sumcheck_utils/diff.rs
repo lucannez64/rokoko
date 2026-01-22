@@ -86,9 +86,6 @@ impl<E: SumcheckElement> HighOrderSumcheckData for DiffSumcheck<E> {
         point: HypercubePoint,
         polynomial: &mut Polynomial<E>,
     ) {
-        // Compute the per-round polynomial as the difference of the two inputs.
-        polynomial.set_zero();
-
         let mut lhs_eval_poly = self.lhs_eval_poly.borrow_mut();
         let lhs_sumcheck = &self.lhs_sumcheck;
         if !lhs_sumcheck
@@ -97,8 +94,10 @@ impl<E: SumcheckElement> HighOrderSumcheckData for DiffSumcheck<E> {
         {
             lhs_sumcheck
                 .get_ref()
-                .univariate_polynomial_at_point_into(point, &mut lhs_eval_poly);
-            add_poly_in_place(polynomial, &lhs_eval_poly);
+                .univariate_polynomial_at_point_into(point, polynomial);
+
+        } else {
+            polynomial.set_zero();        
         }
 
         let mut rhs_eval_poly = self.rhs_eval_poly.borrow_mut();
