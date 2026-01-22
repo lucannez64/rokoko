@@ -95,9 +95,8 @@ impl<E: SumcheckElement> HighOrderSumcheckData for DiffSumcheck<E> {
             lhs_sumcheck
                 .get_ref()
                 .univariate_polynomial_at_point_into(point, polynomial);
-
         } else {
-            polynomial.set_zero();        
+            polynomial.set_zero();
         }
 
         let mut rhs_eval_poly = self.rhs_eval_poly.borrow_mut();

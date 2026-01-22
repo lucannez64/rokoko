@@ -10,6 +10,7 @@ use crate::{
         config::{to_kb, Config, SizeableProof, CONFIG},
         crs::CRS,
         open::{claim, evaluation_point_to_structured_row},
+        params::witness_sampler,
         parties::{commiter::commit, prover::prover_round, verifier::verifier_round},
         project::prepare_i16_witness,
         sumcheck::init_sumcheck,
@@ -35,17 +36,7 @@ pub fn execute() {
     let mut sumcheck_context_verifier = init_verifier(&crs, &config);
     println!("Sumcheck contexts initialized.");
 
-    let mut witness = VerticallyAlignedMatrix {
-        height: config.witness_height,
-        width: config.witness_width,
-        data: sample_random_short_vector(
-            config.witness_height * config.witness_width,
-            2u64.pow(15),
-            Representation::IncompleteNTT,
-        ),
-        used_cols: config.witness_width,
-    };
-
+    let mut witness = witness_sampler();
 
     println!("===== COMMITTING WITNESS =====");
     let start = std::time::Instant::now();
@@ -56,7 +47,6 @@ pub fn execute() {
     println!("TOTAL Commit time: {:?} ns", commit_duration);
 
     println!("===== COMMITTING WITNESS DONE =====");
-
 
     let evaluation_points_inner = vec![evaluation_point_to_structured_row(
         &range(0, witness.height.ilog2() as usize)

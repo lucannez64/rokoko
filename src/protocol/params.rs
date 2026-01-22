@@ -1,8 +1,15 @@
 use std::sync::LazyLock;
 
-use crate::protocol::{
-    config::{Config, SimpleConfig},
-    config_generator::{AuxConfig, AuxProjection, AuxRecursionConfig, AuxSumcheckConfig},
+use crate::{
+    common::{
+        matrix::VerticallyAlignedMatrix,
+        ring_arithmetic::{Representation, RingElement},
+        sampling::sample_random_short_vector,
+    },
+    protocol::{
+        config::{Config, SimpleConfig},
+        config_generator::{AuxConfig, AuxProjection, AuxRecursionConfig, AuxSumcheckConfig},
+    },
 };
 
 pub static DECOMP_8_LAST_LEVEL: AuxRecursionConfig = AuxRecursionConfig {
@@ -16,7 +23,7 @@ pub static P28: LazyLock<Config> = LazyLock::new(|| {
     AuxSumcheckConfig {
         witness_height: 2usize.pow(15), // 2^29 total size, but ths is 2^28 of 2^32 els (as we sample from 2^16 els)
         witness_width: 2usize.pow(7),
-        projection_ratio: 1, // no-op
+        projection_ratio: 1,              // no-op
         projection_height: 2usize.pow(8), // no-op, TODO: make sure this is not used
         basic_commitment_rank: 8,
         nof_openings: 1,
@@ -293,3 +300,25 @@ pub static P28_LAST: LazyLock<SimpleConfig> = LazyLock::new(|| SimpleConfig {
     basic_commitment_rank: 7,
     projection_nof_batches: 2,
 });
+
+// 2^28 Z_q elements of norm 2^32
+// => 2^29 Z_q elements of norm 2^16 (signed 2^15)
+// => 2^22 R_q elements
+// => height 2^15, width 2^7
+
+pub fn witness_sampler() -> VerticallyAlignedMatrix<RingElement> {
+    let config = &*P28;
+    match config {
+        Config::Sumcheck(config) => VerticallyAlignedMatrix {
+            height: config.witness_height,
+            width: config.witness_width,
+            data: sample_random_short_vector(
+                config.witness_height * config.witness_width,
+                2u64.pow(15),
+                Representation::IncompleteNTT,
+            ),
+            used_cols: config.witness_width,
+        },
+        _ => panic!("Expected sumcheck config at the top level."),
+    }
+}

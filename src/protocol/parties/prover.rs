@@ -184,7 +184,9 @@ pub fn prover_round(
 
     match &config.projection_recursion {
         Projection::Skip => {
-            println!("  Skipping projection recursion as per configuration. Likely the first round\n");
+            println!(
+                "  Skipping projection recursion as per configuration. Likely the first round\n"
+            );
         }
         _ => {}
     }
@@ -447,7 +449,6 @@ pub fn prover_round(
                 "Witness bound too large for inner-product norm extraction!"
             );
         }
-        
 
         let basic_commitment_security = estimate_rsis_security(&RSISParameters {
             m: config.witness_height as u64,

@@ -19,7 +19,7 @@ pub enum AuxProjection {
         recursion_constant_term: AuxRecursionConfig,
         recursion_batched_projection: AuxRecursionConfig,
     },
-    Skip
+    Skip,
 }
 
 #[derive(Clone)]
