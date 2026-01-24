@@ -19,10 +19,23 @@ pub static DECOMP_8_LAST_LEVEL: AuxRecursionConfig = AuxRecursionConfig {
     next: None,
 };
 
-pub static P28: LazyLock<Config> = LazyLock::new(|| {
+pub static P: LazyLock<Config> = LazyLock::new(|| {
     AuxSumcheckConfig {
         witness_height: 2usize.pow(15), // 2^29 total size, but ths is 2^28 of 2^32 els (as we sample from 2^16 els)
-        witness_width: 2usize.pow(7),
+        witness_width: {
+            #[cfg(feature = "p-26")]
+            {
+                2usize.pow(5) // 2^27 total size, but ths is 2^26 of 2^32 els (as we sample from 2^16 els)
+            }
+            #[cfg(feature = "p-30")]
+            {
+                2usize.pow(9) // 2^31 total size, but ths is 2^30 of 2^32 els (as we sample from 2^16 els)
+            }
+            #[cfg(not(any(feature = "p-26", feature = "p-30")))]
+            {
+                2usize.pow(7) // 2^29 total size, but ths is 2^28 of 2^32 els (as we sample from 2^16 els)
+            }
+        },
         projection_ratio: 1,              // no-op
         projection_height: 2usize.pow(8), // no-op, TODO: make sure this is not used
         basic_commitment_rank: 8,
@@ -44,12 +57,12 @@ pub static P28: LazyLock<Config> = LazyLock::new(|| {
         witness_decomposition_chunks: 4,
         witness_decomposition_base_log: 7,
 
-        next: Some(Box::new(AuxConfig::Sumcheck(P28_1.clone()))),
+        next: Some(Box::new(AuxConfig::Sumcheck(P_1.clone()))),
     }
     .generate_config()
 });
 
-pub static P28_1: LazyLock<AuxSumcheckConfig> = LazyLock::new(|| {
+pub static P_1: LazyLock<AuxSumcheckConfig> = LazyLock::new(|| {
     AuxSumcheckConfig {
         witness_height: 2usize.pow(14),
         witness_width: 2usize.pow(4),
@@ -79,12 +92,12 @@ pub static P28_1: LazyLock<AuxSumcheckConfig> = LazyLock::new(|| {
         witness_decomposition_chunks: 2,
         witness_decomposition_base_log: 8,
 
-        next: Some(Box::new(AuxConfig::Sumcheck(P28_2.clone()))),
+        next: Some(Box::new(AuxConfig::Sumcheck(P_2.clone()))),
         // next: None,
     }
 });
 
-pub static P28_2: LazyLock<AuxSumcheckConfig> = LazyLock::new(|| AuxSumcheckConfig {
+pub static P_2: LazyLock<AuxSumcheckConfig> = LazyLock::new(|| AuxSumcheckConfig {
     witness_height: 2usize.pow(11),
     witness_width: 2usize.pow(5),
     projection_ratio: 2usize.pow(8),
@@ -122,12 +135,12 @@ pub static P28_2: LazyLock<AuxSumcheckConfig> = LazyLock::new(|| AuxSumcheckConf
     witness_decomposition_chunks: 2,
     witness_decomposition_base_log: 8,
 
-    next: Some(Box::new(AuxConfig::Sumcheck(P28_3.clone()))),
+    next: Some(Box::new(AuxConfig::Sumcheck(P_3.clone()))),
     // To stop here:
     // next: None,
 });
 
-pub static P28_3: LazyLock<AuxSumcheckConfig> = LazyLock::new(|| AuxSumcheckConfig {
+pub static P_3: LazyLock<AuxSumcheckConfig> = LazyLock::new(|| AuxSumcheckConfig {
     witness_height: 2usize.pow(8),
     witness_width: 2usize.pow(5),
     projection_ratio: 2usize.pow(6),
@@ -165,10 +178,10 @@ pub static P28_3: LazyLock<AuxSumcheckConfig> = LazyLock::new(|| AuxSumcheckConf
     witness_decomposition_chunks: 2,
     witness_decomposition_base_log: 8,
 
-    next: Some(Box::new(AuxConfig::Sumcheck(P28_4.clone()))),
+    next: Some(Box::new(AuxConfig::Sumcheck(P_4.clone()))),
 });
 
-pub static P28_4: LazyLock<AuxSumcheckConfig> = LazyLock::new(|| AuxSumcheckConfig {
+pub static P_4: LazyLock<AuxSumcheckConfig> = LazyLock::new(|| AuxSumcheckConfig {
     witness_height: 2usize.pow(9),
     witness_width: 2usize.pow(3),
     projection_ratio: 2usize.pow(6),
@@ -206,10 +219,10 @@ pub static P28_4: LazyLock<AuxSumcheckConfig> = LazyLock::new(|| AuxSumcheckConf
     witness_decomposition_chunks: 2,
     witness_decomposition_base_log: 8,
 
-    next: Some(Box::new(AuxConfig::Sumcheck(P28_5.clone()))),
+    next: Some(Box::new(AuxConfig::Sumcheck(P_5.clone()))),
 });
 
-// pub static P28_5: LazyLock<AuxSumcheckConfig> = LazyLock::new(|| AuxSumcheckConfig{
+// pub static P_5: LazyLock<AuxSumcheckConfig> = LazyLock::new(|| AuxSumcheckConfig{
 //     witness_height: 2usize.pow(9),
 //     witness_width: 2usize.pow(3),
 //     projection_ratio: 2usize.pow(6),
@@ -247,11 +260,11 @@ pub static P28_4: LazyLock<AuxSumcheckConfig> = LazyLock::new(|| AuxSumcheckConf
 //     witness_decomposition_chunks: 2,
 //     witness_decomposition_base_log: 8,
 
-//     // next: Some(Box::new(AuxConfig::Simple(P28_5.clone()))),
+//     // next: Some(Box::new(AuxConfig::Simple(P_5.clone()))),
 //     next: None,
 // });
 
-pub static P28_5: LazyLock<AuxSumcheckConfig> = LazyLock::new(|| AuxSumcheckConfig {
+pub static P_5: LazyLock<AuxSumcheckConfig> = LazyLock::new(|| AuxSumcheckConfig {
     witness_height: 2usize.pow(8),
     witness_width: 2usize.pow(3),
     projection_ratio: 2usize.pow(7),
@@ -289,10 +302,10 @@ pub static P28_5: LazyLock<AuxSumcheckConfig> = LazyLock::new(|| AuxSumcheckConf
     witness_decomposition_chunks: 2,
     witness_decomposition_base_log: 8,
 
-    next: Some(Box::new(AuxConfig::Simple(P28_LAST.clone()))),
+    next: Some(Box::new(AuxConfig::Simple(P_LAST.clone()))),
 });
 
-pub static P28_LAST: LazyLock<SimpleConfig> = LazyLock::new(|| SimpleConfig {
+pub static P_LAST: LazyLock<SimpleConfig> = LazyLock::new(|| SimpleConfig {
     witness_height: 2usize.pow(7),
     witness_width: 2usize.pow(3),
     projection_ratio: 2usize.pow(6),
@@ -307,7 +320,7 @@ pub static P28_LAST: LazyLock<SimpleConfig> = LazyLock::new(|| SimpleConfig {
 // => height 2^15, width 2^7
 
 pub fn witness_sampler() -> VerticallyAlignedMatrix<RingElement> {
-    let config = &*P28;
+    let config = &*P;
     match config {
         Config::Sumcheck(config) => VerticallyAlignedMatrix {
             height: config.witness_height,

@@ -8,6 +8,8 @@ edition = "2021"
 # WARNING: Only safe if mutations never overlap with reads
 unsafe-sumcheck = []
 debug-hardness = []
+p-30 = []
+p-26 = []
 
 [dependencies]
 criterion = "0.7.0"

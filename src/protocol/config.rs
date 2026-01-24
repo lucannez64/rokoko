@@ -8,7 +8,7 @@ use crate::{
     protocol::{
         commitment::{Prefix, RecursionConfig, RecursiveCommitment, RecursiveCommitmentWithAux},
         config_generator::{AuxConfig, AuxProjection, AuxRecursionConfig, AuxSumcheckConfig},
-        params::P28,
+        params::P,
         sumcheck_utils::polynomial::Polynomial,
     },
 };
@@ -219,7 +219,7 @@ pub static TOY_CONFIG_II: LazyLock<Config> = LazyLock::new(|| {
     .generate_config()
 });
 
-pub static CONFIG: LazyLock<Config> = LazyLock::new(|| P28.clone());
+pub static CONFIG: LazyLock<Config> = LazyLock::new(|| P.clone());
 
 #[derive(Clone)]
 pub enum Config {

@@ -94,9 +94,7 @@ pub fn prover_round(
     let opening = open_at(&witness, &evaluation_points_inner, &evaluation_points_outer);
 
     let claims = if with_claims {
-        let cc = claims(&opening.rhs, evaluation_points_outer);
-        // debug_assert_eq!(cc[0], opening);
-        Some(cc)
+        Some(claims(&opening.rhs, evaluation_points_outer))
     } else {
         None
     };
@@ -444,10 +442,18 @@ pub fn prover_round(
 
         if !with_claims {
             // i.e. not the first round
-            debug_assert!(
-                argued_witness_bound * argued_witness_bound < (MOD_Q as f64 / 2f64),
+            
+        }
+        match &config.projection_recursion {
+            Projection::Skip => {
+                // do nothing as we cannot use inner product norm extraction anyway
+            }
+            _ => {
+                assert!(
+                    argued_witness_bound * argued_witness_bound < (MOD_Q as f64 / 2f64),
                 "Witness bound too large for inner-product norm extraction!"
             );
+            }
         }
 
         let basic_commitment_security = estimate_rsis_security(&RSISParameters {
@@ -762,7 +768,7 @@ pub fn prover_round_simple(
             argued_witness_bound
         };
 
-        debug_assert!(
+        assert!(
             argued_witness_bound * argued_witness_bound < (MOD_Q as f64 / 2f64),
             "Witness bound too large for inner-product norm extraction!"
         );
