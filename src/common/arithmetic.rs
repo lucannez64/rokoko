@@ -1,5 +1,7 @@
 use std::sync::LazyLock;
 
+#[cfg(all(target_arch = "x86_64", target_feature = "avx512f"))]
+use crate::protocol::project::Signed16RingElement;
 use crate::{
     common::{
         config::{DEGREE, HALF_DEGREE, MOD_Q},
@@ -107,7 +109,7 @@ pub fn centered_coeffs_u64_to_i64_inplace(out_i64: &mut [i64; DEGREE], in_u64: &
 
 #[cfg(all(target_arch = "x86_64", target_feature = "avx512f"))]
 pub fn project_one_row_i16_to_u64<const DEGREE: usize>(
-    subwitness_i16: &[[i16; DEGREE]], // len = projection_ratio*H
+    subwitness_i16: &[Signed16RingElement], // len = projection_ratio*H
     pos: &[u16],
     neg: &[u16],
     out_u64: &mut [u64; DEGREE],
@@ -122,12 +124,12 @@ pub fn project_one_row_i16_to_u64<const DEGREE: usize>(
             let mut acc = _mm512_setzero_si512();
 
             for &i in pos {
-                let v = _mm512_loadu_si512(subwitness_i16[i as usize].as_ptr().add(k) as *const __m512i);
+                let v = _mm512_loadu_si512(subwitness_i16[i as usize].0.as_ptr().add(k) as *const __m512i);
                 acc = _mm512_add_epi16(acc, v);
             }
 
             for &i in neg {
-                let v = _mm512_loadu_si512(subwitness_i16[i as usize].as_ptr().add(k) as *const __m512i);
+                let v = _mm512_loadu_si512(subwitness_i16[i as usize].0.as_ptr().add(k) as *const __m512i);
                 acc = _mm512_sub_epi16(acc, v);
             }
 

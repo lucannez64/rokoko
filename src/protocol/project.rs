@@ -8,15 +8,14 @@ use crate::common::{
     ring_arithmetic::{Representation, RingElement},
 };
 
+#[derive(Clone, Copy)]
 #[repr(align(64))]
 pub struct Signed16RingElement(pub [i16; DEGREE]);
-#[repr(align(64))]
-pub struct Signed64RingElement(pub [i64; DEGREE]);
 
 pub fn prepare_i16_witness(
     witness: &VerticallyAlignedMatrix<RingElement>,
 ) -> VerticallyAlignedMatrix<Signed16RingElement> {
-    let mut witness_i16: Vec<Signed16RingElement> = vec![[0i16; DEGREE]; witness.data.len()];
+    let mut witness_i16: Vec<Signed16RingElement> = vec![Signed16RingElement([0i16; DEGREE]); witness.data.len()];
 
     let mut ring_el = [0 as i64; DEGREE];
     let mut temp = RingElement::zero(Representation::IncompleteNTT);
@@ -25,7 +24,7 @@ pub fn prepare_i16_witness(
         temp.from_incomplete_ntt_to_even_odd_coefficients();
         centered_coeffs_u64_to_i64_inplace(&mut ring_el, &temp.v);
         unsafe {
-            pack_i64_to_i16_deg16(&mut witness_i16[i], &mut ring_el);
+            pack_i64_to_i16_deg16(&mut witness_i16[i].0, &mut ring_el);
         }
     }
 
