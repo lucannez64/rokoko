@@ -15,7 +15,8 @@ pub struct Signed16RingElement(pub [i16; DEGREE]);
 pub fn prepare_i16_witness(
     witness: &VerticallyAlignedMatrix<RingElement>,
 ) -> VerticallyAlignedMatrix<Signed16RingElement> {
-    let mut witness_i16: Vec<Signed16RingElement> = vec![Signed16RingElement([0i16; DEGREE]); witness.data.len()];
+    let mut witness_i16: Vec<Signed16RingElement> =
+        vec![Signed16RingElement([0i16; DEGREE]); witness.data.len()];
 
     let mut ring_el = [0 as i64; DEGREE];
     let mut temp = RingElement::zero(Representation::IncompleteNTT);
@@ -77,7 +78,6 @@ pub fn build_plan(pm: &ProjectionMatrix) -> ProjectionPlan {
         rows,
     }
 }
-
 
 pub fn project(
     witness_16: &VerticallyAlignedMatrix<Signed16RingElement>,

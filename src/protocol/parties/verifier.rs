@@ -67,10 +67,13 @@ pub fn verifier_round(
 
     match &round_proof.next {
         Some(next_round_proof) => {
-            let next_round_commitment =
-                round_proof.next_round_commitment.as_ref().unwrap_or_else(|| {
-                    panic!("Next round commitment must be present when next round proof is present.")
-                });
+            let next_round_commitment = round_proof.next_round_commitment.as_ref().unwrap_or_else(
+                || {
+                    panic!(
+                        "Next round commitment must be present when next round proof is present."
+                    )
+                },
+            );
 
             match next_round_proof.as_ref() {
                 RoundProof::Sumcheck(next_sumcheck_round_proof) => {
@@ -83,7 +86,8 @@ pub fn verifier_round(
                     };
 
                     let (new_evaluation_points_outer, new_evaluation_points_inner) =
-                        evaluation_points.split_at(next_sumcheck_config.witness_width.ilog2() as usize);
+                        evaluation_points
+                            .split_at(next_sumcheck_config.witness_width.ilog2() as usize);
 
                     let next_round_commiments_recursive = match &next_round_commitment {
                         NextRoundCommitment::Recursive(rc) => rc,
@@ -130,7 +134,8 @@ pub fn verifier_round(
                     };
 
                     let (new_evaluation_points_outer, new_evaluation_points_inner) =
-                        evaluation_points.split_at(next_simple_config.witness_width.ilog2() as usize);
+                        evaluation_points
+                            .split_at(next_simple_config.witness_width.ilog2() as usize);
 
                     let commitment = match &next_round_commitment {
                         NextRoundCommitment::Simple(basic_commitment) => basic_commitment,
@@ -169,8 +174,6 @@ pub fn verifier_round(
         None => {}
     }
 }
-
-
 
 pub fn verifier_round_simple(
     crs: &CRS,

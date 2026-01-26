@@ -1,10 +1,10 @@
-use std::ops::Index;
 use crate::common::hash::HashWrapper;
+use std::ops::Index;
 
 static FALSE_FALSE: (bool, bool) = (false, false);
-static FALSE_TRUE:  (bool, bool) = (false, true);
-static TRUE_FALSE:  (bool, bool) = (true,  false);
-static TRUE_TRUE:   (bool, bool) = (true,  true);
+static FALSE_TRUE: (bool, bool) = (false, true);
+static TRUE_FALSE: (bool, bool) = (true, false);
+static TRUE_TRUE: (bool, bool) = (true, true);
 
 #[inline(always)]
 pub fn plan_idx(inner_row: usize, chunk_idx: usize, chunks_per_row: usize) -> usize {
@@ -24,7 +24,10 @@ pub struct ProjectionMatrix {
 impl ProjectionMatrix {
     pub fn new(projection_ratio: usize, projection_height: usize) -> Self {
         let projection_width = projection_height * projection_ratio;
-        debug_assert!(projection_width % 8 == 0, "projection_width must be multiple of 8");
+        debug_assert!(
+            projection_width % 8 == 0,
+            "projection_width must be multiple of 8"
+        );
         let chunks_per_row = projection_width / 8;
 
         let n = projection_height * chunks_per_row;
@@ -138,9 +141,9 @@ impl Index<(usize, usize)> for ProjectionMatrix {
 
         match (is_positive, is_non_zero) {
             (false, false) => &FALSE_FALSE,
-            (false, true)  => &FALSE_TRUE,
-            (true,  false) => &TRUE_FALSE,
-            (true,  true)  => &TRUE_TRUE,
+            (false, true) => &FALSE_TRUE,
+            (true, false) => &TRUE_FALSE,
+            (true, true) => &TRUE_TRUE,
         }
     }
 }

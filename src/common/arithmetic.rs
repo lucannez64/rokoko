@@ -124,12 +124,16 @@ pub fn project_one_row_i16_to_u64<const DEGREE: usize>(
             let mut acc = _mm512_setzero_si512();
 
             for &i in pos {
-                let v = _mm512_loadu_si512(subwitness_i16[i as usize].0.as_ptr().add(k) as *const __m512i);
+                let v = _mm512_loadu_si512(
+                    subwitness_i16[i as usize].0.as_ptr().add(k) as *const __m512i
+                );
                 acc = _mm512_add_epi16(acc, v);
             }
 
             for &i in neg {
-                let v = _mm512_loadu_si512(subwitness_i16[i as usize].0.as_ptr().add(k) as *const __m512i);
+                let v = _mm512_loadu_si512(
+                    subwitness_i16[i as usize].0.as_ptr().add(k) as *const __m512i
+                );
                 acc = _mm512_sub_epi16(acc, v);
             }
 
@@ -297,7 +301,6 @@ pub fn precompute_structured_values_fast(layers: &[u64]) -> Vec<u64> {
 
     values
 }
-
 
 #[test]
 fn test_precompute_structured_values() {

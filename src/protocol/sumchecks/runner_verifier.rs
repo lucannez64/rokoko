@@ -172,6 +172,7 @@ pub fn sumcheck_verifier(
 
     let mut folding_challenges =
         vec![RingElement::zero(Representation::IncompleteNTT); config.witness_width];
+    hash_wrapper.sample_biased_ternary_ring_element_vec_into(&mut folding_challenges);
 
     let projection_height_flat = config.witness_height / config.projection_ratio;
 
@@ -238,7 +239,10 @@ pub fn sumcheck_verifier(
         rc_commitment,
         &round_proof.rc_opening_inner,
         round_proof.rc_projection_inner.as_deref(),
-        round_proof.rcs_projection_1_inner.as_ref().map(|(a, b)| (a.as_slice(), b.as_slice())),
+        round_proof
+            .rcs_projection_1_inner
+            .as_ref()
+            .map(|(a, b)| (a.as_slice(), b.as_slice())),
         round_proof.constant_term_claims.as_deref(),
         &round_proof.norm_claim,
         &round_proof.most_inner_norm_claim,
