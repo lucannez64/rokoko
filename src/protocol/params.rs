@@ -32,23 +32,41 @@ fn cfg_p30<T>(if_p30: T, if_not_p30: T) -> T {
     if_not_p30
 }
 
+#[inline(always)]
+fn cfg_p26<T>(if_p26: T, if_not_p26: T) -> T {
+    #[cfg(feature = "p-26")]
+    {
+        return if_p26;
+    }
+    if_not_p26
+}
+
+#[inline(always)]
+fn per_config<T>(p26_value: T, p28_value: T, p30_value: T) -> T {
+    #[cfg(feature = "p-30")]
+    {
+        return p30_value;
+    }
+    #[cfg(feature = "p-26")]
+    {
+        return p26_value;
+    }
+    p28_value
+}
+
+
 pub static P: LazyLock<Config> = LazyLock::new(|| {
     AuxSumcheckConfig {
-        witness_height: cfg_p30(2usize.pow(15), 2usize.pow(14)),
-        witness_width: {
-            #[cfg(feature = "p-26")]
-            {
-                2usize.pow(6) // 2^27 total size, but ths is 2^26 of 2^32 els (as we sample from 2^16 els)
-            }
-            #[cfg(feature = "p-30")]
-            {
-                2usize.pow(9) // 2^31 total size, but ths is 2^30 of 2^32 els (as we sample from 2^16 els)
-            }
-            #[cfg(not(any(feature = "p-26", feature = "p-30")))]
-            {
-                2usize.pow(8) // 2^29 total size, but ths is 2^28 of 2^32 els (as we sample from 2^16 els)
-            }
-        },
+        witness_height: per_config(
+            2usize.pow(13), // p-26
+            2usize.pow(14), // p-28
+            2usize.pow(15), // p-30
+        ),
+        witness_width: per_config(
+            2usize.pow(7), // p-26
+            2usize.pow(8), // p-28
+            2usize.pow(9), // p-30
+        ),
         projection_ratio: 1,              // no-op
         projection_height: 2usize.pow(8), // no-op, TODO: make sure this is not used
         basic_commitment_rank: 8,
@@ -78,7 +96,7 @@ pub static P: LazyLock<Config> = LazyLock::new(|| {
 pub static P_1: LazyLock<AuxSumcheckConfig> = LazyLock::new(|| {
     AuxSumcheckConfig {
         witness_height: cfg_p30(2usize.pow(14), 2usize.pow(13)),
-        witness_width: 2usize.pow(4),
+        witness_width: cfg_p26(2usize.pow(3), 2usize.pow(4)),
         projection_ratio: 2usize.pow(5),
         projection_height: 2usize.pow(8),
         basic_commitment_rank: cfg_p30(7, 6),
@@ -146,7 +164,7 @@ pub static P_2: LazyLock<AuxSumcheckConfig> = LazyLock::new(|| AuxSumcheckConfig
     },
 
     witness_decomposition_chunks: 2,
-    witness_decomposition_base_log: 9,
+    witness_decomposition_base_log: cfg_p26(10, 9),
 
     next: Some(Box::new(AuxConfig::Sumcheck(P_3.clone()))),
     // To stop here:
@@ -189,7 +207,7 @@ pub static P_3: LazyLock<AuxSumcheckConfig> = LazyLock::new(|| AuxSumcheckConfig
     },
 
     witness_decomposition_chunks: 2,
-    witness_decomposition_base_log: 8,
+    witness_decomposition_base_log: cfg_p30(8, 9),
 
     next: Some(Box::new(AuxConfig::Sumcheck(P_4.clone()))),
 });
