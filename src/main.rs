@@ -1,9 +1,9 @@
-use cowboys_and_aliens::common::config::HALF_DEGREE;
-use cowboys_and_aliens::common::init_common;
-use cowboys_and_aliens::common::pool::{load_and_preallocate, save_access_stats};
-use cowboys_and_aliens::common::ring_arithmetic::*;
-use cowboys_and_aliens::protocol::parties::executor::execute;
-// use cowboys_and_aliens::protocol::execution::execute;
+use rokoko::common::config::HALF_DEGREE;
+use rokoko::common::init_common;
+use rokoko::common::pool::{load_and_preallocate, save_access_stats};
+use rokoko::common::ring_arithmetic::*;
+use rokoko::protocol::parties::executor::execute;
+// use rokoko::protocol::execution::execute;
 
 fn main() {
     #[cfg(feature = "p-26")]

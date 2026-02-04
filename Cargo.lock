@@ -141,16 +141,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7c74b8349d32d297c9134b8c88677813a227df8f779daa29bfc29c183fe3dca6"
 
 [[package]]
-name = "cowboys-and-aliens"
-version = "0.1.0"
-dependencies = [
- "blake3",
- "criterion",
- "num",
- "rand",
-]
-
-[[package]]
 name = "criterion"
 version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -509,6 +499,16 @@ name = "regex-syntax"
 version = "0.8.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7a2d987857b319362043e95f5353c0535c1f58eec5336fdfcf626430af7def58"
+
+[[package]]
+name = "rokoko"
+version = "0.1.0"
+dependencies = [
+ "blake3",
+ "criterion",
+ "num",
+ "rand",
+]
 
 [[package]]
 name = "rustversion"

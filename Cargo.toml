@@ -1,5 +1,5 @@
 [package]
-name = "cowboys-and-aliens"
+name = "rokoko"
 version = "0.1.0"
 edition = "2021"
 
@@ -11,6 +11,7 @@ debug-hardness = []
 debug-decomp = []
 p-30 = []
 p-26 = []
+p-28 = []
 
 [dependencies]
 criterion = "0.7.0"

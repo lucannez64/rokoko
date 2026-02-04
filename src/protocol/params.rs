@@ -167,8 +167,6 @@ pub static P_2: LazyLock<AuxSumcheckConfig> = LazyLock::new(|| AuxSumcheckConfig
     witness_decomposition_base_log: cfg_p26(10, 9),
 
     next: Some(Box::new(AuxConfig::Sumcheck(P_3.clone()))),
-    // To stop here:
-    // next: None,
 });
 
 pub static P_3: LazyLock<AuxSumcheckConfig> = LazyLock::new(|| AuxSumcheckConfig {
