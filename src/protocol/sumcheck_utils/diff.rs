@@ -9,7 +9,7 @@ use crate::{
         common::{EvaluationSumcheckData, HighOrderSumcheckData},
         elephant_cell::ElephantCell,
         hypercube_point::HypercubePoint,
-        polynomial::{sub_poly_in_place, Polynomial},
+        polynomial::{Polynomial, sub_poly_in_place}, selector_eq::SelectorEq,
     },
 };
 

@@ -8,7 +8,7 @@ use crate::{
         arithmetic::field_to_ring_element_into,
         config::HALF_DEGREE,
         ring_arithmetic::{QuadraticExtension, Representation, RingElement},
-        structured_row::StructuredRow,
+        structured_row::{PreprocessedRow, StructuredRow},
         sumcheck_element::SumcheckElement,
     },
     protocol::sumcheck_utils::{

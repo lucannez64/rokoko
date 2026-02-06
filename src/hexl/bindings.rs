@@ -125,3 +125,24 @@ pub unsafe fn eltwise_fma_mod(
     let operand3 = slice_from_raw(operand3, n);
     hexl::eltwise_fma_mod(result, operand1, operand2, operand3, modulus);
 }
+
+/// Fused incomplete NTT ring multiplication.
+///
+/// Computes for each i in 0..n:
+///   result[i]   = op1[i]*op2[i] + shift[i]*(op1[n+i]*op2[n+i])  (mod modulus)
+///   result[n+i] = op1[n+i]*op2[i] + op1[i]*op2[n+i]             (mod modulus)
+#[inline(always)]
+pub unsafe fn fused_incomplete_ntt_mult(
+    result: *mut u64,
+    operand1: *const u64,
+    operand2: *const u64,
+    shift_factors: *const u64,
+    n: usize,
+    modulus: u64,
+) {
+    let result = std::slice::from_raw_parts_mut(result, 2 * n);
+    let operand1 = std::slice::from_raw_parts(operand1, 2 * n);
+    let operand2 = std::slice::from_raw_parts(operand2, 2 * n);
+    let shift_factors = std::slice::from_raw_parts(shift_factors, n);
+    hexl::fused_incomplete_ntt_mult(result, operand1, operand2, shift_factors, n, modulus);
+}

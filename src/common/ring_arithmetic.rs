@@ -744,10 +744,28 @@ pub fn incomplete_ntt_multiplication_inner(
     operand2: &RingElement,
     homogenized: bool,
 ) {
-    let temp = get_temp_buffer();
-
     let op1_data = &operand1.v;
     let op2_data = &operand2.v;
+
+    if !homogenized {
+        // Fused path: all 5 mults + 2 adds in a single AVX512 pass.
+        // Eliminates per-call dispatch overhead, redundant int↔float
+        // conversions, and intermediate memory traffic.
+        unsafe {
+            fused_incomplete_ntt_mult(
+                result.v.as_mut_ptr(),
+                op1_data.as_ptr(),
+                op2_data.as_ptr(),
+                SHIFT_FACTORS.as_ptr(),
+                HALF_DEGREE,
+                MOD_Q,
+            );
+        }
+        return;
+    }
+
+    // Homogenized path: keep original separate-call implementation
+    let temp = get_temp_buffer();
 
     unsafe {
         // result_even = op1_even * op2_even
@@ -777,35 +795,15 @@ pub fn incomplete_ntt_multiplication_inner(
             MOD_Q,
         );
 
-        if homogenized {
-            // result_even += temp * SHIFT_FACTORS[0]
-            eltwise_fma_mod(
-                result.v.as_mut_ptr(),
-                temp.as_ptr(),
-                SHIFT_FACTORS[0],
-                result.v.as_ptr(),
-                HALF_DEGREE as u64,
-                MOD_Q,
-            );
-        } else {
-            // Apply shift factors
-            eltwise_mult_mod(
-                temp.as_mut_ptr(),
-                temp.as_ptr(),
-                SHIFT_FACTORS.as_ptr(),
-                HALF_DEGREE as u64,
-                MOD_Q,
-            );
-
-            // result_even += temp
-            eltwise_add_mod(
-                result.v.as_mut_ptr(),
-                result.v.as_ptr(),
-                temp.as_ptr(),
-                HALF_DEGREE as u64,
-                MOD_Q,
-            );
-        }
+        // result_even += temp * SHIFT_FACTORS[0]
+        eltwise_fma_mod(
+            result.v.as_mut_ptr(),
+            temp.as_ptr(),
+            SHIFT_FACTORS[0],
+            result.v.as_ptr(),
+            HALF_DEGREE as u64,
+            MOD_Q,
+        );
 
         // Reuse temp for op1_even * op2_odd
         eltwise_mult_mod(
@@ -1451,6 +1449,98 @@ mod tests {
         let expected_constant_term = a.v[0];
 
         debug_assert_eq!(expected_constant_term, computed_constant_term % MOD_Q);
+    }
+
+    /// Verifies that the fused incomplete-NTT multiplication kernel produces
+    /// bit-identical results to the original separate-call implementation.
+    #[test]
+    fn test_fused_incomplete_ntt_mult_matches_separate() {
+        init_common();
+
+        for _ in 0..20 {
+            let op1 = RingElement::random(Representation::IncompleteNTT);
+            let op2 = RingElement::random(Representation::IncompleteNTT);
+
+            // --- Reference: separate eltwise calls (the original algorithm) ---
+            let mut ref_result = RingElement::new(Representation::IncompleteNTT);
+            let temp = &mut [0u64; DEGREE];
+            unsafe {
+                // ref_even = op1_even * op2_even
+                eltwise_mult_mod(
+                    ref_result.v.as_mut_ptr(),
+                    op1.v.as_ptr(),
+                    op2.v.as_ptr(),
+                    HALF_DEGREE as u64,
+                    MOD_Q,
+                );
+                // ref_odd = op1_odd * op2_even
+                eltwise_mult_mod(
+                    ref_result.v.as_mut_ptr().add(HALF_DEGREE),
+                    op1.v.as_ptr().add(HALF_DEGREE),
+                    op2.v.as_ptr(),
+                    HALF_DEGREE as u64,
+                    MOD_Q,
+                );
+                // temp = op1_odd * op2_odd
+                eltwise_mult_mod(
+                    temp.as_mut_ptr(),
+                    op1.v.as_ptr().add(HALF_DEGREE),
+                    op2.v.as_ptr().add(HALF_DEGREE),
+                    HALF_DEGREE as u64,
+                    MOD_Q,
+                );
+                // temp *= shift_factors
+                eltwise_mult_mod(
+                    temp.as_mut_ptr(),
+                    temp.as_ptr(),
+                    SHIFT_FACTORS.as_ptr(),
+                    HALF_DEGREE as u64,
+                    MOD_Q,
+                );
+                // ref_even += temp
+                eltwise_add_mod(
+                    ref_result.v.as_mut_ptr(),
+                    ref_result.v.as_ptr(),
+                    temp.as_ptr(),
+                    HALF_DEGREE as u64,
+                    MOD_Q,
+                );
+                // temp2 = op1_even * op2_odd
+                eltwise_mult_mod(
+                    temp.as_mut_ptr(),
+                    op1.v.as_ptr(),
+                    op2.v.as_ptr().add(HALF_DEGREE),
+                    HALF_DEGREE as u64,
+                    MOD_Q,
+                );
+                // ref_odd += temp2
+                eltwise_add_mod(
+                    ref_result.v.as_mut_ptr().add(HALF_DEGREE),
+                    ref_result.v.as_ptr().add(HALF_DEGREE),
+                    temp.as_ptr(),
+                    HALF_DEGREE as u64,
+                    MOD_Q,
+                );
+            }
+
+            // --- Fused path ---
+            let mut fused_result = RingElement::new(Representation::IncompleteNTT);
+            unsafe {
+                fused_incomplete_ntt_mult(
+                    fused_result.v.as_mut_ptr(),
+                    op1.v.as_ptr(),
+                    op2.v.as_ptr(),
+                    SHIFT_FACTORS.as_ptr(),
+                    HALF_DEGREE,
+                    MOD_Q,
+                );
+            }
+
+            assert_eq!(
+                ref_result.v, fused_result.v,
+                "Fused ring mult diverged from reference"
+            );
+        }
     }
 }
 

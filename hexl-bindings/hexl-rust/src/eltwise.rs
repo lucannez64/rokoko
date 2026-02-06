@@ -1200,3 +1200,158 @@ unsafe fn eltwise_fma_mod_avx512<const BITSHIFT: i32, const INPUT_MOD_FACTOR: i3
         }
     }
 }
+
+/// Fused incomplete NTT ring multiplication.
+///
+/// For each i in 0..n, computes:
+///   result[i]   = op1[i]*op2[i] + shift[i]*(op1[n+i]*op2[n+i])   (mod modulus)
+///   result[n+i] = op1[n+i]*op2[i] + op1[i]*op2[n+i]              (mod modulus)
+///
+/// This fuses 5 modular multiplications and 2 modular additions into a single
+/// pass over the data, eliminating redundant memory traffic, int↔float
+/// conversions, and per-call dispatch overhead.
+#[inline]
+pub fn fused_incomplete_ntt_mult(
+    result: &mut [u64],
+    operand1: &[u64],
+    operand2: &[u64],
+    shift_factors: &[u64],
+    n: usize,
+    modulus: u64,
+) {
+    debug_assert!(n % 8 == 0);
+    debug_assert!(result.len() >= 2 * n);
+    debug_assert!(operand1.len() >= 2 * n);
+    debug_assert!(operand2.len() >= 2 * n);
+    debug_assert!(shift_factors.len() >= n);
+
+    #[cfg(target_arch = "x86_64")]
+    {
+        if *HAS_AVX512DQ && modulus < (1u64 << 50) {
+            unsafe {
+                fused_incomplete_ntt_mult_avx512_float(
+                    result, operand1, operand2, shift_factors, n, modulus,
+                );
+                return;
+            }
+        }
+    }
+
+    fused_incomplete_ntt_mult_native(result, operand1, operand2, shift_factors, n, modulus);
+}
+
+fn fused_incomplete_ntt_mult_native(
+    result: &mut [u64],
+    operand1: &[u64],
+    operand2: &[u64],
+    shift_factors: &[u64],
+    n: usize,
+    modulus: u64,
+) {
+    use crate::number_theory::{add_uint_mod, multiply_mod};
+
+    for i in 0..n {
+        let a = operand1[i];
+        let b = operand1[n + i];
+        let c = operand2[i];
+        let d = operand2[n + i];
+        let s = shift_factors[i];
+
+        let ac = multiply_mod(a, c, modulus);
+        let bd = multiply_mod(b, d, modulus);
+        let sbd = multiply_mod(s, bd, modulus);
+        result[i] = add_uint_mod(ac, sbd, modulus);
+
+        let bc = multiply_mod(b, c, modulus);
+        let ad = multiply_mod(a, d, modulus);
+        result[n + i] = add_uint_mod(bc, ad, modulus);
+    }
+}
+
+#[cfg(target_arch = "x86_64")]
+#[target_feature(enable = "avx512f,avx512dq")]
+#[inline(always)]
+unsafe fn fused_incomplete_ntt_mult_avx512_float(
+    result: &mut [u64],
+    operand1: &[u64],
+    operand2: &[u64],
+    shift_factors: &[u64],
+    n: usize,
+    modulus: u64,
+) {
+    let v_p = _mm512_set1_pd(modulus as f64);
+    let u_bar = (1.0 + f64::EPSILON) / modulus as f64;
+    let v_u = _mm512_set1_pd(u_bar);
+    let v_zero = _mm512_setzero_pd();
+
+    const ROUND_MODE: i32 = _MM_FROUND_TO_POS_INF | _MM_FROUND_NO_EXC;
+    const FLOOR: i32 = _MM_FROUND_TO_NEG_INF | _MM_FROUND_NO_EXC;
+
+    let op1_e = operand1.as_ptr();
+    let op1_o = operand1.as_ptr().add(n);
+    let op2_e = operand2.as_ptr();
+    let op2_o = operand2.as_ptr().add(n);
+    let shift = shift_factors.as_ptr();
+    let res_e = result.as_mut_ptr();
+    let res_o = result.as_mut_ptr().add(n);
+
+    // Float modular multiply: (x * y) mod p
+    // Uses Dekker splitting via FMA for exact error-free product.
+    macro_rules! fmul_mod {
+        ($x:expr, $y:expr) => {{
+            let h = _mm512_mul_pd($x, $y);
+            let l = _mm512_fmsub_pd($x, $y, h);
+            let b = _mm512_mul_pd(h, v_u);
+            let c = _mm512_roundscale_pd(b, FLOOR);
+            let d = _mm512_fnmadd_pd(c, v_p, h);
+            let g = _mm512_add_pd(d, l);
+            let m = _mm512_cmp_pd_mask(g, v_zero, _CMP_LT_OQ);
+            _mm512_mask_add_pd(g, m, g, v_p)
+        }};
+    }
+
+    // Float modular add: (a + b) mod p, both operands in [0, p).
+    macro_rules! fadd_mod {
+        ($a:expr, $b:expr) => {{
+            let sum = _mm512_add_pd($a, $b);
+            let m = _mm512_cmp_pd_mask(v_p, sum, _CMP_LE_OQ);
+            _mm512_mask_sub_pd(sum, m, sum, v_p)
+        }};
+    }
+
+    let mut i = 0usize;
+    while i < n {
+        // Load all 5 input vectors
+        let v_a = _mm512_loadu_si512(op1_e.add(i) as *const __m512i);
+        let v_b = _mm512_loadu_si512(op1_o.add(i) as *const __m512i);
+        let v_c = _mm512_loadu_si512(op2_e.add(i) as *const __m512i);
+        let v_d = _mm512_loadu_si512(op2_o.add(i) as *const __m512i);
+        let v_s = _mm512_loadu_si512(shift.add(i) as *const __m512i);
+
+        // Convert to double (all values < 2^50, exactly representable)
+        let f_a = _mm512_cvt_roundepu64_pd(v_a, ROUND_MODE);
+        let f_b = _mm512_cvt_roundepu64_pd(v_b, ROUND_MODE);
+        let f_c = _mm512_cvt_roundepu64_pd(v_c, ROUND_MODE);
+        let f_d = _mm512_cvt_roundepu64_pd(v_d, ROUND_MODE);
+        let f_s = _mm512_cvt_roundepu64_pd(v_s, ROUND_MODE);
+
+        // result_even = a*c + s*(b*d)
+        let ac = fmul_mod!(f_a, f_c);
+        let bd = fmul_mod!(f_b, f_d);
+        let sbd = fmul_mod!(f_s, bd);
+        let f_re = fadd_mod!(ac, sbd);
+
+        // result_odd = b*c + a*d
+        let bc = fmul_mod!(f_b, f_c);
+        let ad = fmul_mod!(f_a, f_d);
+        let f_ro = fadd_mod!(bc, ad);
+
+        // Convert back to integers and store
+        let v_re = _mm512_cvt_roundpd_epu64(f_re, ROUND_MODE);
+        let v_ro = _mm512_cvt_roundpd_epu64(f_ro, ROUND_MODE);
+        _mm512_storeu_si512(res_e.add(i) as *mut __m512i, v_re);
+        _mm512_storeu_si512(res_o.add(i) as *mut __m512i, v_ro);
+
+        i += 8;
+    }
+}

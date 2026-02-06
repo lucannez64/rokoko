@@ -5,8 +5,8 @@ use crate::{
         config::{DEGREE, HALF_DEGREE, MOD_Q},
         projection_matrix::ProjectionMatrix,
         ring_arithmetic::{
-            incomplete_ntt_multiplication, QuadraticExtension, Representation, RingElement,
-        },
+            QuadraticExtension, Representation, RingElement, incomplete_ntt_multiplication
+        }, structured_row::{PreprocessedRow, StructuredRow},
     },
     hexl::bindings::{multiply_mod, sub_mod},
 };

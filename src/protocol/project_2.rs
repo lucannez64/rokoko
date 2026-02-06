@@ -4,16 +4,16 @@ use std::any::Any;
 use crate::{
     common::{
         arithmetic::{
-            precompute_structured_values_fast, HALF_WAY_MOD_Q_RING_CF,
+            HALF_WAY_MOD_Q_RING_CF, precompute_structured_values_fast
         },
         config::{DEGREE, MOD_Q, NOF_BATCHES},
         hash::HashWrapper,
-        matrix::{HorizontallyAlignedMatrix, VerticallyAlignedMatrix},
+        matrix::{HorizontallyAlignedMatrix, VerticallyAlignedMatrix, new_vec_zero_preallocated},
         projection_matrix::ProjectionMatrix,
         ring_arithmetic::{Representation, RingElement},
     },
     hexl::bindings::{add_mod, eltwise_reduce_mod, multiply_mod},
-    protocol::config::{ConfigBase, SimpleConfig},
+    protocol::{config::{ConfigBase, SimpleConfig}, sumchecks::helpers::tensor_product_u64},
 };
 
 /// Computes J_batched = c'_1^T * J_embedded

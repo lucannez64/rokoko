@@ -1,10 +1,8 @@
 use crate::{
     common::{
-        matrix::VerticallyAlignedMatrix,
-        ring_arithmetic::{Representation, RingElement},
-        structured_row::{PreprocessedRow, StructuredRow},
+        config::MOD_Q, matrix::VerticallyAlignedMatrix, ring_arithmetic::{Representation, RingElement}, structured_row::{PreprocessedRow, StructuredRow}
     },
-    protocol::commitment::{commit_basic_internal, BasicCommitment},
+    protocol::commitment::{BasicCommitment, commit_basic_internal},
 };
 
 pub struct Opening {
