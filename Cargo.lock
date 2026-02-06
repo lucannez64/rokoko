@@ -141,18 +141,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7c74b8349d32d297c9134b8c88677813a227df8f779daa29bfc29c183fe3dca6"
 
 [[package]]
-name = "cowboys-and-aliens"
-version = "0.1.0"
-dependencies = [
- "blake3",
- "criterion",
- "hexl-rust",
- "libloading",
- "num",
- "rand",
-]
-
-[[package]]
 name = "criterion"
 version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -535,6 +523,8 @@ version = "0.1.0"
 dependencies = [
  "blake3",
  "criterion",
+ "hexl-rust",
+ "libloading",
  "num",
  "rand",
 ]
