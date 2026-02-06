@@ -1339,19 +1339,22 @@ unsafe fn fused_incomplete_ntt_mult_avx512_float(
 
     let mut i = 0usize;
     while i < n {
-        // Load 4 operand vectors as u64, 1 shift vector as precomputed f64
-        let v_a = _mm512_loadu_si512(op1_e.add(i) as *const __m512i);
-        let v_b = _mm512_loadu_si512(op1_o.add(i) as *const __m512i);
-        let v_c = _mm512_loadu_si512(op2_e.add(i) as *const __m512i);
-        let v_d = _mm512_loadu_si512(op2_o.add(i) as *const __m512i);
+        // Load 4 operand vectors as u64, 1 shift vector as precomputed f64.
+        // All pointers are 64-byte aligned (RingElement has repr(align(64)),
+        // shift_factors_f64 uses AlignedF64), and `n` is a multiple of 8,
+        // so every load/store lands on a cache-line boundary.
+        let v_a = _mm512_load_si512(op1_e.add(i) as *const __m512i);
+        let v_b = _mm512_load_si512(op1_o.add(i) as *const __m512i);
+        let v_c = _mm512_load_si512(op2_e.add(i) as *const __m512i);
+        let v_d = _mm512_load_si512(op2_o.add(i) as *const __m512i);
 
         // Convert operands to double (all values < 2^50, exactly representable)
         let f_a = _mm512_cvt_roundepu64_pd(v_a, ROUND_MODE);
         let f_b = _mm512_cvt_roundepu64_pd(v_b, ROUND_MODE);
         let f_c = _mm512_cvt_roundepu64_pd(v_c, ROUND_MODE);
         let f_d = _mm512_cvt_roundepu64_pd(v_d, ROUND_MODE);
-        // Shift factors already f64 — direct load, no conversion needed
-        let f_s = _mm512_loadu_pd(shift_f.add(i));
+        // Shift factors already f64 — direct aligned load, no conversion needed
+        let f_s = _mm512_load_pd(shift_f.add(i));
 
         // Karatsuba prep: (a+b) mod q, (c+d) mod q — cheap float adds
         let f_ab = fadd_mod!(f_a, f_b);
@@ -1375,8 +1378,8 @@ unsafe fn fused_incomplete_ntt_mult_avx512_float(
         // Convert back to integers and store
         let v_re = _mm512_cvt_roundpd_epu64(f_re, ROUND_MODE);
         let v_ro = _mm512_cvt_roundpd_epu64(f_ro, ROUND_MODE);
-        _mm512_storeu_si512(res_e.add(i) as *mut __m512i, v_re);
-        _mm512_storeu_si512(res_o.add(i) as *mut __m512i, v_ro);
+        _mm512_store_si512(res_e.add(i) as *mut __m512i, v_re);
+        _mm512_store_si512(res_o.add(i) as *mut __m512i, v_ro);
 
         i += 8;
     }
