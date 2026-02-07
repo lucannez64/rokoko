@@ -8,13 +8,15 @@ use crate::common::{
     ring_arithmetic::{Representation, RingElement},
 };
 
-pub type Signed16RingElement = [i16; DEGREE];
-pub type Signed64RingElement = [i64; DEGREE];
+#[derive(Clone, Copy)]
+#[repr(align(64))]
+pub struct Signed16RingElement(pub [i16; DEGREE]);
 
 pub fn prepare_i16_witness(
     witness: &VerticallyAlignedMatrix<RingElement>,
 ) -> VerticallyAlignedMatrix<Signed16RingElement> {
-    let mut witness_i16: Vec<Signed16RingElement> = vec![[0i16; DEGREE]; witness.data.len()];
+    let mut witness_i16: Vec<Signed16RingElement> =
+        vec![Signed16RingElement([0i16; DEGREE]); witness.data.len()];
 
     let mut ring_el = [0 as i64; DEGREE];
     let mut temp = RingElement::zero(Representation::IncompleteNTT);
@@ -22,7 +24,7 @@ pub fn prepare_i16_witness(
         temp.set_from(cr);
         temp.from_incomplete_ntt_to_even_odd_coefficients();
         centered_coeffs_u64_to_i64_inplace(&mut ring_el, &temp.v);
-        pack_i64_to_i16_deg16(&mut witness_i16[i], &mut ring_el);
+        pack_i64_to_i16_deg16(&mut witness_i16[i].0, &mut ring_el);
     }
 
     VerticallyAlignedMatrix::<Signed16RingElement> {
@@ -41,8 +43,8 @@ pub fn project(
         witness_16.height / projection_matrix.projection_ratio,
         witness_16.width,
     );
-    debug_assert_eq!(projection_image.width, witness_16.width);
 
+    debug_assert_eq!(projection_image.width, witness_16.width);
     debug_assert_eq!(
         projection_image.height * projection_matrix.projection_ratio,
         witness_16.height
@@ -50,6 +52,29 @@ pub fn project(
 
     for i in projection_image.data.iter_mut() {
         i.from_incomplete_ntt_to_even_odd_coefficients();
+    }
+
+    let row_len = projection_matrix.projection_ratio * projection_matrix.projection_height;
+
+    let mut pos_by_row: Vec<Vec<u16>> = (0..projection_matrix.projection_height)
+        .map(|_| Vec::<u16>::new())
+        .collect();
+    let mut neg_by_row: Vec<Vec<u16>> = (0..projection_matrix.projection_height)
+        .map(|_| Vec::<u16>::new())
+        .collect();
+
+    for inner_row in 0..projection_matrix.projection_height {
+        for i in 0..row_len {
+            let (is_positive, is_non_zero) = projection_matrix[(inner_row, i)];
+            if !is_non_zero {
+                continue;
+            }
+            if is_positive {
+                pos_by_row[inner_row].push(i as u16);
+            } else {
+                neg_by_row[inner_row].push(i as u16);
+            }
+        }
     }
 
     for col in 0..witness_16.width {
@@ -73,8 +98,8 @@ pub fn project(
             for inner_row in 0..projection_matrix.projection_height {
                 project_one_row_i16_to_u64::<DEGREE>(
                     subwitness_i16,
-                    projection_matrix,
-                    inner_row,
+                    &pos_by_row[inner_row],
+                    &neg_by_row[inner_row],
                     &mut projection_subimage[inner_row].v,
                 );
             }

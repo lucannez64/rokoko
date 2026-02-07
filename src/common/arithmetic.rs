@@ -1,9 +1,9 @@
 use std::sync::LazyLock;
 
+use crate::protocol::project::Signed16RingElement;
 use crate::{
     common::{
         config::{DEGREE, HALF_DEGREE, MOD_Q},
-        projection_matrix::ProjectionMatrix,
         ring_arithmetic::{
             incomplete_ntt_multiplication, QuadraticExtension, Representation, RingElement,
         },
@@ -16,9 +16,9 @@ use crate::common::structured_row::{PreprocessedRow, StructuredRow};
 
 #[cfg(all(target_arch = "x86_64", target_feature = "avx512f"))]
 use std::arch::x86_64::{
-    __m128i, __m512i, __mmask8, _mm512_cmpgt_epu64_mask, _mm512_cvtepi64_epi16, _mm512_loadu_si512,
-    _mm512_mask_sub_epi64, _mm512_set1_epi64, _mm512_setzero_si512, _mm512_storeu_si512,
-    _mm_storeu_si128,
+    __m128i, __m512i, __mmask8, _mm512_add_epi16, _mm512_cmpgt_epu64_mask, _mm512_cvtepi64_epi16,
+    _mm512_load_si512, _mm512_mask_sub_epi64, _mm512_set1_epi64, _mm512_setzero_si512,
+    _mm512_store_si512, _mm512_sub_epi16, _mm_store_si128,
 };
 
 #[inline(always)]
@@ -52,15 +52,15 @@ pub fn pack_i64_to_i16_deg16(dst: &mut [i16], src: &[i64]) {
             unsafe {
                 let i = k * 16;
                 // Load 16 i64 (two zmm registers of 8 i64)
-                let a0 = _mm512_loadu_si512(src.as_ptr().add(i) as *const __m512i);
-                let a1 = _mm512_loadu_si512(src.as_ptr().add(i + 8) as *const __m512i);
+                let a0 = _mm512_load_si512(src.as_ptr().add(i) as *const __m512i);
+                let a1 = _mm512_load_si512(src.as_ptr().add(i + 8) as *const __m512i);
 
                 // Narrow 8 i64 -> 8 i16 (signed truncating), result is 128-bit each
                 let w0: __m128i = _mm512_cvtepi64_epi16(a0);
                 let w1: __m128i = _mm512_cvtepi64_epi16(a1);
 
-                _mm_storeu_si128(dst.as_mut_ptr().add(i) as *mut __m128i, w0);
-                _mm_storeu_si128(dst.as_mut_ptr().add(i + 8) as *mut __m128i, w1);
+                _mm_store_si128(dst.as_mut_ptr().add(i) as *mut __m128i, w0);
+                _mm_store_si128(dst.as_mut_ptr().add(i + 8) as *mut __m128i, w1);
             }
         }
     }
@@ -91,7 +91,7 @@ pub fn centered_coeffs_u64_to_i64_inplace(out_i64: &mut [i64; DEGREE], in_u64: &
         // 8 u64 lanes per __m512i
         for k in 0..(n / 8) {
             let i = k * 8;
-            let a = _mm512_loadu_si512(in_u64.as_ptr().add(i) as *const __m512i);
+            let a = _mm512_load_si512(in_u64.as_ptr().add(i) as *const __m512i);
 
             // neg lanes are ones where x > halfQ
             let neg: __mmask8 = _mm512_cmpgt_epu64_mask(a, vhalfq);
@@ -100,7 +100,7 @@ pub fn centered_coeffs_u64_to_i64_inplace(out_i64: &mut [i64; DEGREE], in_u64: &
             let signed = _mm512_mask_sub_epi64(a, neg, a, vq);
 
             // store as i64
-            _mm512_storeu_si512(out_i64.as_mut_ptr().add(i) as *mut __m512i, signed);
+            _mm512_store_si512(out_i64.as_mut_ptr().add(i) as *mut __m512i, signed);
         }
     }
 
@@ -112,47 +112,37 @@ pub fn centered_coeffs_u64_to_i64_inplace(out_i64: &mut [i64; DEGREE], in_u64: &
 
 #[cfg(all(target_arch = "x86_64", target_feature = "avx512f"))]
 pub fn project_one_row_i16_to_u64<const DEGREE: usize>(
-    subwitness_i16: &[[i16; DEGREE]], // len = projection_ratio*H
-    projection_matrix: &ProjectionMatrix,
-    inner_row: usize,
+    subwitness_i16: &[Signed16RingElement], // len = projection_ratio*H
+    pos: &[u16],
+    neg: &[u16],
     out_u64: &mut [u64; DEGREE],
 ) {
     use crate::hexl::bindings::eltwise_reduce_mod;
 
-    let row_len = projection_matrix.projection_ratio * projection_matrix.projection_height;
-    debug_assert_eq!(subwitness_i16.len(), row_len);
     debug_assert!(DEGREE % 16 == 0);
-
-    let _k = 0usize;
-    let mut pos_idx = Vec::new();
-    let mut neg_idx = Vec::new();
-    for i in 0..row_len {
-        let (is_positive, is_non_zero) = projection_matrix[(inner_row, i)];
-        if !is_non_zero {
-            continue;
-        }
-        if is_positive {
-            pos_idx.push(i);
-        } else {
-            neg_idx.push(i);
-        }
-    }
 
     unsafe {
         for j in 0..(DEGREE / 32) {
             let k = j * 32;
-            let mut acc = _mm512_setzero_si512();
 
-            for &i in &pos_idx {
-                let v = _mm512_loadu_si512(subwitness_i16[i].as_ptr().add(k) as *const __m512i);
-                acc = add_epi16_checked(acc, v);
+            let mut acc0 = _mm512_setzero_si512();
+            let mut acc1 = _mm512_setzero_si512();
+
+            for &i in pos {
+                let v = _mm512_load_si512(
+                    subwitness_i16[i as usize].0.as_ptr().add(k) as *const __m512i
+                );
+                acc0 = _mm512_add_epi16(acc0, v);
             }
 
-            for &i in &neg_idx {
-                let v = _mm512_loadu_si512(subwitness_i16[i].as_ptr().add(k) as *const __m512i);
-                acc = sub_epi16_checked(acc, v);
+            for &i in neg {
+                let v = _mm512_load_si512(
+                    subwitness_i16[i as usize].0.as_ptr().add(k) as *const __m512i
+                );
+                acc1 = _mm512_sub_epi16(acc1, v);
             }
 
+            let acc = _mm512_add_epi16(acc0, acc1);
             convert_i16_as_u64(out_u64.as_mut_ptr().add(k), acc);
         }
         eltwise_reduce_mod(
@@ -161,6 +151,43 @@ pub fn project_one_row_i16_to_u64<const DEGREE: usize>(
             out_u64.len() as u64,
             MOD_Q,
         );
+    }
+}
+
+#[cfg(not(all(target_arch = "x86_64", target_feature = "avx512f")))]
+pub fn project_one_row_i16_to_u64<const DEGREE: usize>(
+    subwitness_i16: &[Signed16RingElement],
+    pos: &[u16],
+    neg: &[u16],
+    out_u64: &mut [u64; DEGREE],
+) {
+    debug_assert!(DEGREE % 16 == 0);
+
+    let mut acc: [i32; DEGREE] = [0; DEGREE];
+
+    for &i in pos {
+        let row = &subwitness_i16[i as usize].0;
+        for k in 0..DEGREE {
+            acc[k] += row[k] as i32;
+        }
+    }
+
+    for &i in neg {
+        let row = &subwitness_i16[i as usize].0;
+        for k in 0..DEGREE {
+            acc[k] -= row[k] as i32;
+        }
+    }
+
+    let q = MOD_Q as i64;
+
+    for k in 0..DEGREE {
+        let x = acc[k] as i64;
+        let mut r = x % q;
+        if r < 0 {
+            r += q;
+        }
+        out_u64[k] = r as u64;
     }
 }
 
@@ -225,7 +252,7 @@ pub unsafe fn sub_epi16_checked(a: __m512i, b: __m512i) -> __m512i {
 fn convert_i16_as_u64(dst_u64: *mut u64, v16x32: __m512i) {
     unsafe {
         let mut tmp = [0i16; 32];
-        _mm512_storeu_si512(tmp.as_mut_ptr() as *mut __m512i, v16x32);
+        _mm512_store_si512(tmp.as_mut_ptr() as *mut __m512i, v16x32);
 
         let q_i64 = MOD_Q as i64;
         for lane in 0..32 {

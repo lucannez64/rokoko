@@ -1,73 +1,69 @@
+use crate::common::hash::HashWrapper;
+use crate::common::matrix::HorizontallyAlignedMatrix;
 use std::ops::Index;
 
-use crate::common::{
-    hash::HashWrapper,
-    matrix::{VerticallyAlignedMatrix, ZeroNew},
-};
-
-static PROJECTION_BASE_HEIGHT: usize = 128;
-
-// Static storage for return values to avoid returning references to temporaries
 static FALSE_FALSE: (bool, bool) = (false, false);
 static FALSE_TRUE: (bool, bool) = (false, true);
 static TRUE_FALSE: (bool, bool) = (true, false);
 static TRUE_TRUE: (bool, bool) = (true, true);
 
-#[derive(Clone)]
-pub struct ProjectionSquare {
-    // Row-wise aligned: each byte stores 8 columns of one row
-    pub data_sign: [u8; PROJECTION_BASE_HEIGHT * PROJECTION_BASE_HEIGHT / 8],
-    pub data_value: [u8; PROJECTION_BASE_HEIGHT * PROJECTION_BASE_HEIGHT / 8],
-}
 pub struct ProjectionMatrix {
     pub projection_height: usize,
     pub projection_width: usize,
     pub projection_ratio: usize,
-    pub projection_data: VerticallyAlignedMatrix<ProjectionSquare>,
+
+    pub width: usize,
+
+    pub pos_masks: HorizontallyAlignedMatrix<u8>,
+    pub non_zero_masks: HorizontallyAlignedMatrix<u8>,
 }
 
 impl ProjectionMatrix {
     pub fn new(projection_ratio: usize, projection_height: usize) -> Self {
+        let projection_width = projection_height * projection_ratio;
         debug_assert!(
-            projection_height % PROJECTION_BASE_HEIGHT == 0,
-            "projection_height must be multiple of PROJECTION_BASE_HEIGHT"
+            projection_width % 8 == 0,
+            "projection_width must be multiple of 8"
         );
-        ProjectionMatrix {
+
+        let width = projection_width / 8;
+
+        let pos_masks = HorizontallyAlignedMatrix {
+            data: vec![0u8; projection_height * width],
+            width: width,
+            height: projection_height,
+        };
+        let non_zero_masks = HorizontallyAlignedMatrix {
+            data: vec![0u8; projection_height * width],
+            width: width,
+            height: projection_height,
+        };
+
+        Self {
             projection_height,
-            projection_width: projection_height * projection_ratio,
+            projection_width,
             projection_ratio,
-            projection_data: VerticallyAlignedMatrix::new_zero(
-                projection_height / PROJECTION_BASE_HEIGHT,
-                projection_height * projection_ratio / PROJECTION_BASE_HEIGHT,
-                &ProjectionSquare {
-                    data_sign: [0u8; PROJECTION_BASE_HEIGHT * PROJECTION_BASE_HEIGHT / 8],
-                    data_value: [0u8; PROJECTION_BASE_HEIGHT * PROJECTION_BASE_HEIGHT / 8],
-                },
-            ),
+            width,
+            pos_masks,
+            non_zero_masks,
         }
     }
 
-    /// Get masks for 8 consecutive columns at a single row
-    /// Returns (k_pos, k_inc) where each bit represents one column
-    /// This directly reads the natural storage format (8 columns per byte)
-    #[inline]
+    #[inline(always)]
     pub fn get_row_masks_u8(&self, row: usize, col_base: usize) -> (u8, u8) {
+        debug_assert!(row < self.projection_height);
+        debug_assert!(col_base < self.projection_width);
         debug_assert!(col_base % 8 == 0, "col_base must be aligned to 8");
-        let square_row = row / PROJECTION_BASE_HEIGHT;
-        let square_col = col_base / PROJECTION_BASE_HEIGHT;
-        let inner_row = row % PROJECTION_BASE_HEIGHT;
-        let inner_col_base = col_base % PROJECTION_BASE_HEIGHT;
 
-        let square = &self.projection_data[(square_row, square_col)];
+        let chunk = col_base >> 3;
+        debug_assert!(chunk < self.width);
 
-        // Each byte stores 8 consecutive columns for one row
-        // byte_index = row * (bytes_per_row) + which_byte_in_row
-        let bytes_per_row = PROJECTION_BASE_HEIGHT / 8;
-        let byte_index = inner_row * bytes_per_row + inner_col_base / 8;
-        let k_pos = square.data_sign[byte_index];
-        let k_inc = square.data_value[byte_index];
+        (self.pos_masks[(row, chunk)], self.non_zero_masks[(row, chunk)])
+    }
 
-        (k_pos, k_inc)
+    pub fn sample(&mut self, hash_wrapper: &mut HashWrapper) {
+        hash_wrapper.fill_from_xof(b"projection-plan-sign", &mut self.pos_masks.data);
+        hash_wrapper.fill_from_xof(b"projection-plan-value", &mut self.non_zero_masks.data);
     }
 
     #[cfg(test)]
@@ -75,92 +71,82 @@ impl ProjectionMatrix {
         let projection_height = data.len();
         let projection_width = data[0].len();
         let projection_ratio = projection_width / projection_height;
-        let mut projection_data = VerticallyAlignedMatrix::new_zero(
-            projection_height / PROJECTION_BASE_HEIGHT,
-            projection_width / PROJECTION_BASE_HEIGHT,
-            &ProjectionSquare {
-                data_sign: [0u8; PROJECTION_BASE_HEIGHT * PROJECTION_BASE_HEIGHT / 8],
-                data_value: [0u8; PROJECTION_BASE_HEIGHT * PROJECTION_BASE_HEIGHT / 8],
-            },
-        );
-        for outer_col in 0..projection_data.width {
-            for row in 0..projection_data.height {
-                let mut square = ProjectionSquare {
-                    data_sign: [0u8; PROJECTION_BASE_HEIGHT * PROJECTION_BASE_HEIGHT / 8],
-                    data_value: [0u8; PROJECTION_BASE_HEIGHT * PROJECTION_BASE_HEIGHT / 8],
-                };
-                for inner_row in 0..PROJECTION_BASE_HEIGHT {
-                    for inner_col in 0..PROJECTION_BASE_HEIGHT {
-                        let value = data[row * PROJECTION_BASE_HEIGHT + inner_row]
-                            [outer_col * PROJECTION_BASE_HEIGHT + inner_col];
-                        let (is_positive, is_non_zero) = match value {
-                            0 => (false, false),
-                            1 => (true, true),
-                            -1 => (false, true),
-                            _ => panic!("Invalid value in projection matrix"),
-                        };
-                        // Row-wise storage: each row spans multiple bytes (PROJECTION_BASE_HEIGHT / 8 bytes per row)
-                        let bytes_per_row = PROJECTION_BASE_HEIGHT / 8;
-                        let byte_index = inner_row * bytes_per_row + inner_col / 8;
-                        let bit_offset = inner_col % 8;
-                        if is_positive {
-                            square.data_sign[byte_index] |= 1 << bit_offset;
-                        }
-                        if is_non_zero {
-                            square.data_value[byte_index] |= 1 << bit_offset;
-                        }
-                    }
-                }
-                projection_data[(row, outer_col)] = square;
-            }
-        }
-        ProjectionMatrix {
+
+        debug_assert!(projection_width % 8 == 0);
+        let width = projection_width / 8;
+
+        let mut pm = ProjectionMatrix {
             projection_height,
             projection_width,
             projection_ratio,
-            projection_data,
+            width,
+            pos_masks: HorizontallyAlignedMatrix {
+                data: vec![0u8; projection_height * width],
+                width: width,
+                height: projection_height,
+            },
+            non_zero_masks: HorizontallyAlignedMatrix {
+                data: vec![0u8; projection_height * width],
+                width: width,
+                height: projection_height,
+            },
+        };
+
+        for row in 0..projection_height {
+            for col in 0..projection_width {
+                let v = data[row][col];
+                let (is_positive, is_non_zero) = match v {
+                    0 => (false, false),
+                    1 => (true, true),
+                    -1 => (false, true),
+                    _ => panic!("Invalid value in projection matrix"),
+                };
+
+                let chunk = col >> 3;
+                let bit = (col & 7) as u8;
+
+                if is_positive {
+                    pm.pos_masks[(row, chunk)] |= 1u8 << bit;
+                }
+                if is_non_zero {
+                    pm.non_zero_masks[(row, chunk)] |= 1u8 << bit;
+                }
+            }
         }
+
+        pm
     }
 
-    pub fn sample(&mut self, hash_wrapper: &mut HashWrapper) {
-        for square in self.projection_data.data.iter_mut() {
-            hash_wrapper.fill_from_xof(b"projection-square-sign", &mut square.data_sign);
-            hash_wrapper.fill_from_xof(b"projection-square-value", &mut square.data_value);
-        }
+    #[inline(always)]
+    pub fn row_chunks(&self, row: usize) -> (&[u8], &[u8]) {
+        (self.pos_masks.row(row), self.non_zero_masks.row(row))
     }
 }
 
-impl Index<(usize, usize)> for ProjectionSquare {
+impl Index<(usize, usize)> for ProjectionMatrix {
     type Output = (bool, bool);
 
+    #[inline(always)]
     fn index(&self, index: (usize, usize)) -> &Self::Output {
         let (row, col) = index;
-        // Row-wise storage: each row spans multiple bytes (PROJECTION_BASE_HEIGHT / 8 bytes per row)
-        let bytes_per_row = PROJECTION_BASE_HEIGHT / 8;
-        let byte_index = row * bytes_per_row + col / 8;
-        let bit_offset = col % 8;
-        let is_positive = (self.data_sign[byte_index] >> bit_offset) & 1 == 1;
-        let is_non_zero = (self.data_value[byte_index] >> bit_offset) & 1 == 1;
+        debug_assert!(row < self.projection_height);
+        debug_assert!(col < self.projection_width);
+
+        let chunk = col >> 3;
+        let bit = (col & 7) as u8;
+
+        let k_pos = self.pos_masks[(row, chunk)];
+        let k_inc = self.non_zero_masks[(row, chunk)];
+
+        let is_positive = ((k_pos >> bit) & 1) == 1;
+        let is_non_zero = ((k_inc >> bit) & 1) == 1;
+
         match (is_positive, is_non_zero) {
             (false, false) => &FALSE_FALSE,
             (false, true) => &FALSE_TRUE,
             (true, false) => &TRUE_FALSE,
             (true, true) => &TRUE_TRUE,
         }
-    }
-}
-
-impl Index<(usize, usize)> for ProjectionMatrix {
-    // { -1, 0, 1 } is represented as (is_positive, is_non_zero), which automatically imposes a desired bias towards 0
-    type Output = (bool, bool);
-
-    fn index(&self, index: (usize, usize)) -> &Self::Output {
-        let (row, col) = index;
-        let square_row = row / PROJECTION_BASE_HEIGHT;
-        let square_col = col / PROJECTION_BASE_HEIGHT;
-        let inner_row = row % PROJECTION_BASE_HEIGHT;
-        let inner_col = col % PROJECTION_BASE_HEIGHT;
-        &self.projection_data[(square_row, square_col)][(inner_row, inner_col)]
     }
 }
 
