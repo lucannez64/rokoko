@@ -292,12 +292,12 @@ pub fn project_coefficients(
 
                     let total_cols = projection_matrix.projection_width;
                     debug_assert!(total_cols % 8 == 0);
-                    let chunks_per_row = projection_matrix.chunks_per_row;
+                    let width = projection_matrix.width;
                     let blocks_per_ring = DEGREE / 8;
 
 
                     unsafe {
-                        let row_base = inner_row * chunks_per_row;
+                        let row_base = inner_row * width;
                         let kpos_row = projection_matrix.k_pos_plan.as_ptr().add(row_base);
                         let kinc_row = projection_matrix.k_inc_plan.as_ptr().add(row_base);
 
@@ -306,7 +306,7 @@ pub fn project_coefficients(
 
                         let mut chunk_idx = 0usize;
 
-                        while chunk_idx + 1 < chunks_per_row {
+                        while chunk_idx + 1 < width {
                             let k_pos0 = *kpos_row.add(chunk_idx);
                             let k_inc0 = *kinc_row.add(chunk_idx);
 
@@ -342,7 +342,7 @@ pub fn project_coefficients(
                             chunk_idx += 2;
                         }
 
-                        if chunk_idx < chunks_per_row {
+                        if chunk_idx < width {
                             let k_pos = *kpos_row.add(chunk_idx);
                             let k_inc = *kinc_row.add(chunk_idx);
 

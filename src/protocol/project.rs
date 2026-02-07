@@ -43,8 +43,8 @@ pub fn project(
         witness_16.height / projection_matrix.projection_ratio,
         witness_16.width,
     );
-    debug_assert_eq!(projection_image.width, witness_16.width);
 
+    debug_assert_eq!(projection_image.width, witness_16.width);
     debug_assert_eq!(
         projection_image.height * projection_matrix.projection_ratio,
         witness_16.height
@@ -54,47 +54,28 @@ pub fn project(
         i.from_incomplete_ntt_to_even_odd_coefficients();
     }
 
-    struct PlanRow {
-        pos: Vec<u16>,
-        neg: Vec<u16>,
-    }
+    let row_len = projection_matrix.projection_ratio * projection_matrix.projection_height;
 
-    struct ProjectionPlan {
-        projection_ratio: usize,
-        rows: Vec<PlanRow>,
-    }
+    let mut pos_by_row: Vec<Vec<u16>> = (0..projection_matrix.projection_height)
+        .map(|_| Vec::<u16>::new())
+        .collect();
+    let mut neg_by_row: Vec<Vec<u16>> = (0..projection_matrix.projection_height)
+        .map(|_| Vec::<u16>::new())
+        .collect();
 
-    fn build_plan(pm: &ProjectionMatrix) -> ProjectionPlan {
-        let row_len = pm.projection_ratio * pm.projection_height;
-
-        let rows: Vec<PlanRow> = (0..pm.projection_height)
-            .map(|inner_row| {
-                let mut pos = Vec::<u16>::new();
-                let mut neg = Vec::<u16>::new();
-
-                for i in 0..row_len {
-                    let (is_positive, is_non_zero) = pm[(inner_row, i)];
-                    if !is_non_zero {
-                        continue;
-                    }
-                    if is_positive {
-                        pos.push(i as u16);
-                    } else {
-                        neg.push(i as u16);
-                    }
-                }
-
-                PlanRow { pos, neg }
-            })
-            .collect();
-
-        ProjectionPlan {
-            projection_ratio: pm.projection_ratio,
-            rows,
+    for inner_row in 0..projection_matrix.projection_height {
+        for i in 0..row_len {
+            let (is_positive, is_non_zero) = projection_matrix[(inner_row, i)];
+            if !is_non_zero {
+                continue;
+            }
+            if is_positive {
+                pos_by_row[inner_row].push(i as u16);
+            } else {
+                neg_by_row[inner_row].push(i as u16);
+            }
         }
     }
-
-    let plan = build_plan(projection_matrix);
 
     for col in 0..witness_16.width {
         for rows_chunk in 0..projection_image.height / projection_matrix.projection_height {
@@ -117,8 +98,8 @@ pub fn project(
             for inner_row in 0..projection_matrix.projection_height {
                 project_one_row_i16_to_u64::<DEGREE>(
                     subwitness_i16,
-                    &plan.rows[inner_row].pos,
-                    &plan.rows[inner_row].neg,
+                    &pos_by_row[inner_row],
+                    &neg_by_row[inner_row],
                     &mut projection_subimage[inner_row].v,
                 );
             }

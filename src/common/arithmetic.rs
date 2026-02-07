@@ -1,11 +1,9 @@
 use std::sync::LazyLock;
 
-#[cfg(all(target_arch = "x86_64", target_feature = "avx512f"))]
 use crate::protocol::project::Signed16RingElement;
 use crate::{
     common::{
         config::{DEGREE, HALF_DEGREE, MOD_Q},
-        projection_matrix::ProjectionMatrix,
         ring_arithmetic::{
             incomplete_ntt_multiplication, QuadraticExtension, Representation, RingElement,
         },
@@ -18,10 +16,8 @@ use crate::common::structured_row::{PreprocessedRow, StructuredRow};
 
 #[cfg(all(target_arch = "x86_64", target_feature = "avx512f"))]
 use std::arch::x86_64::{
-    __m128i, __m256i, __m512i, __mmask8, _mm256_add_epi16, _mm256_castsi128_si256,
-    _mm256_inserti128_si256, _mm256_load_si256, _mm256_setzero_si256, _mm256_store_si256,
-    _mm256_sub_epi16, _mm512_add_epi16, _mm512_cmpgt_epu64_mask, _mm512_cvtepi64_epi16,
-    _mm512_cvtsepi64_epi16, _mm512_load_si512, _mm512_mask_sub_epi64, _mm512_set1_epi64,
+    __m128i, __m512i, __mmask8, _mm512_add_epi16, _mm512_cmpgt_epu64_mask, _mm512_cvtepi64_epi16,
+    _mm512_load_si512, _mm512_mask_sub_epi64, _mm512_set1_epi64,
     _mm512_setzero_si512, _mm512_store_si512, _mm512_sub_epi16, _mm_store_si128,
 };
 
@@ -157,6 +153,45 @@ pub fn project_one_row_i16_to_u64<const DEGREE: usize>(
         );
     }
 }
+
+
+#[cfg(not(all(target_arch = "x86_64", target_feature = "avx512f")))]
+pub fn project_one_row_i16_to_u64<const DEGREE: usize>(
+    subwitness_i16: &[Signed16RingElement],
+    pos: &[u16],
+    neg: &[u16],
+    out_u64: &mut [u64; DEGREE],
+) {
+    debug_assert!(DEGREE % 16 == 0);
+
+    let mut acc: [i32; DEGREE] = [0; DEGREE];
+
+    for &i in pos {
+        let row = &subwitness_i16[i as usize].0;
+        for k in 0..DEGREE {
+            acc[k] += row[k] as i32;
+        }
+    }
+
+    for &i in neg {
+        let row = &subwitness_i16[i as usize].0;
+        for k in 0..DEGREE {
+            acc[k] -= row[k] as i32;
+        }
+    }
+
+    let q = MOD_Q as i64;
+
+    for k in 0..DEGREE {
+        let x = acc[k] as i64;
+        let mut r = x % q;
+        if r < 0 {
+            r += q;
+        }
+        out_u64[k] = r as u64;
+    }
+}
+
 
 /// Wrapper for _mm512_add_epi16 that checks for overflows in debug-decomp, otherwise just adds.
 #[cfg(all(target_arch = "x86_64", target_feature = "avx512f"))]

@@ -1,4 +1,5 @@
 use crate::common::hash::HashWrapper;
+use crate::common::matrix::HorizontallyAlignedMatrix;
 use std::ops::Index;
 
 static FALSE_FALSE: (bool, bool) = (false, false);
@@ -6,19 +7,15 @@ static FALSE_TRUE: (bool, bool) = (false, true);
 static TRUE_FALSE: (bool, bool) = (true, false);
 static TRUE_TRUE: (bool, bool) = (true, true);
 
-#[inline(always)]
-pub fn plan_idx(inner_row: usize, chunk_idx: usize, chunks_per_row: usize) -> usize {
-    inner_row * chunks_per_row + chunk_idx
-}
-
 pub struct ProjectionMatrix {
     pub projection_height: usize,
     pub projection_width: usize,
     pub projection_ratio: usize,
-    pub chunks_per_row: usize,
 
-    pub k_pos_plan: Vec<u8>,
-    pub k_inc_plan: Vec<u8>,
+    pub width: usize,
+
+    pub k_pos_plan: HorizontallyAlignedMatrix<u8>,
+    pub k_inc_plan: HorizontallyAlignedMatrix<u8>,
 }
 
 impl ProjectionMatrix {
@@ -28,49 +25,45 @@ impl ProjectionMatrix {
             projection_width % 8 == 0,
             "projection_width must be multiple of 8"
         );
-        let chunks_per_row = projection_width / 8;
 
-        let n = projection_height * chunks_per_row;
+        let width = projection_width / 8;
 
-        let mut k_pos_plan: Vec<u8> = Vec::with_capacity(n);
-        let mut k_inc_plan: Vec<u8> = Vec::with_capacity(n);
-        unsafe {
-            k_pos_plan.set_len(n);
-            k_inc_plan.set_len(n);
-        }
+        let k_pos_plan = HorizontallyAlignedMatrix {
+            data: vec![0u8; projection_height * width],
+            width: width,
+            height: projection_height,
+        };
+        let k_inc_plan = HorizontallyAlignedMatrix {
+            data: vec![0u8; projection_height * width],
+            width: width,
+            height: projection_height,
+        };
 
         Self {
             projection_height,
             projection_width,
             projection_ratio,
-            chunks_per_row,
+            width,
             k_pos_plan,
             k_inc_plan,
         }
     }
 
     #[inline(always)]
-    /// Get masks for 8 consecutive columns at a single row
-    /// Returns (k_pos, k_inc) where each bit represents one column
     pub fn get_row_masks_u8(&self, row: usize, col_base: usize) -> (u8, u8) {
         debug_assert!(row < self.projection_height);
         debug_assert!(col_base < self.projection_width);
         debug_assert!(col_base % 8 == 0, "col_base must be aligned to 8");
 
         let chunk = col_base >> 3;
-        let idx = plan_idx(row, chunk, self.chunks_per_row);
+        debug_assert!(chunk < self.width);
 
-        unsafe {
-            (
-                *self.k_pos_plan.get_unchecked(idx),
-                *self.k_inc_plan.get_unchecked(idx),
-            )
-        }
+        (self.k_pos_plan[(row, chunk)], self.k_inc_plan[(row, chunk)])
     }
 
     pub fn sample(&mut self, hash_wrapper: &mut HashWrapper) {
-        hash_wrapper.fill_from_xof(b"projection-plan-sign", &mut self.k_pos_plan);
-        hash_wrapper.fill_from_xof(b"projection-plan-value", &mut self.k_inc_plan);
+        hash_wrapper.fill_from_xof(b"projection-plan-sign", &mut self.k_pos_plan.data);
+        hash_wrapper.fill_from_xof(b"projection-plan-value", &mut self.k_inc_plan.data);
     }
 
     #[cfg(test)]
@@ -80,17 +73,23 @@ impl ProjectionMatrix {
         let projection_ratio = projection_width / projection_height;
 
         debug_assert!(projection_width % 8 == 0);
-        let chunks_per_row = projection_width / 8;
-
-        let n = projection_height * chunks_per_row;
+        let width = projection_width / 8;
 
         let mut pm = ProjectionMatrix {
             projection_height,
             projection_width,
             projection_ratio,
-            chunks_per_row,
-            k_pos_plan: vec![0u8; n],
-            k_inc_plan: vec![0u8; n],
+            width,
+            k_pos_plan: HorizontallyAlignedMatrix {
+                data: vec![0u8; projection_height * width],
+                width: width,
+                height: projection_height,
+            },
+            k_inc_plan: HorizontallyAlignedMatrix {
+                data: vec![0u8; projection_height * width],
+                width: width,
+                height: projection_height,
+            },
         };
 
         for row in 0..projection_height {
@@ -105,18 +104,22 @@ impl ProjectionMatrix {
 
                 let chunk = col >> 3;
                 let bit = (col & 7) as u8;
-                let idx = plan_idx(row, chunk, chunks_per_row);
 
                 if is_positive {
-                    pm.k_pos_plan[idx] |= 1u8 << bit;
+                    pm.k_pos_plan[(row, chunk)] |= 1u8 << bit;
                 }
                 if is_non_zero {
-                    pm.k_inc_plan[idx] |= 1u8 << bit;
+                    pm.k_inc_plan[(row, chunk)] |= 1u8 << bit;
                 }
             }
         }
 
         pm
+    }
+
+    #[inline(always)]
+    pub fn row_chunks(&self, row: usize) -> (&[u8], &[u8]) {
+        (self.k_pos_plan.row(row), self.k_inc_plan.row(row))
     }
 }
 
@@ -131,10 +134,9 @@ impl Index<(usize, usize)> for ProjectionMatrix {
 
         let chunk = col >> 3;
         let bit = (col & 7) as u8;
-        let idx = plan_idx(row, chunk, self.chunks_per_row);
 
-        let k_pos = unsafe { *self.k_pos_plan.get_unchecked(idx) };
-        let k_inc = unsafe { *self.k_inc_plan.get_unchecked(idx) };
+        let k_pos = self.k_pos_plan[(row, chunk)];
+        let k_inc = self.k_inc_plan[(row, chunk)];
 
         let is_positive = ((k_pos >> bit) & 1) == 1;
         let is_non_zero = ((k_inc >> bit) & 1) == 1;
