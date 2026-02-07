@@ -17,8 +17,8 @@ use crate::common::structured_row::{PreprocessedRow, StructuredRow};
 #[cfg(all(target_arch = "x86_64", target_feature = "avx512f"))]
 use std::arch::x86_64::{
     __m128i, __m512i, __mmask8, _mm512_add_epi16, _mm512_cmpgt_epu64_mask, _mm512_cvtepi64_epi16,
-    _mm512_load_si512, _mm512_mask_sub_epi64, _mm512_set1_epi64,
-    _mm512_setzero_si512, _mm512_store_si512, _mm512_sub_epi16, _mm_store_si128,
+    _mm512_load_si512, _mm512_mask_sub_epi64, _mm512_set1_epi64, _mm512_setzero_si512,
+    _mm512_store_si512, _mm512_sub_epi16, _mm_store_si128,
 };
 
 #[inline(always)]
@@ -154,7 +154,6 @@ pub fn project_one_row_i16_to_u64<const DEGREE: usize>(
     }
 }
 
-
 #[cfg(not(all(target_arch = "x86_64", target_feature = "avx512f")))]
 pub fn project_one_row_i16_to_u64<const DEGREE: usize>(
     subwitness_i16: &[Signed16RingElement],
@@ -191,7 +190,6 @@ pub fn project_one_row_i16_to_u64<const DEGREE: usize>(
         out_u64[k] = r as u64;
     }
 }
-
 
 /// Wrapper for _mm512_add_epi16 that checks for overflows in debug-decomp, otherwise just adds.
 #[cfg(all(target_arch = "x86_64", target_feature = "avx512f"))]

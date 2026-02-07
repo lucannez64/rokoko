@@ -60,13 +60,15 @@ pub fn verifier_round(
 
     match &round_proof.next {
         Some(next_round_proof) => {
-            let next_round_commitment = round_proof.next_round_commitment.as_ref().unwrap_or_else(
-                || {
-                    panic!(
+            let next_round_commitment =
+                round_proof
+                    .next_round_commitment
+                    .as_ref()
+                    .unwrap_or_else(|| {
+                        panic!(
                         "Next round commitment must be present when next round proof is present."
                     )
-                },
-            );
+                    });
 
             match next_round_proof.as_ref() {
                 RoundProof::Sumcheck(next_sumcheck_round_proof) => {

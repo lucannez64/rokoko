@@ -295,7 +295,6 @@ pub fn project_coefficients(
                     let width = projection_matrix.width;
                     let blocks_per_ring = DEGREE / 8;
 
-
                     unsafe {
                         let row_base = inner_row * width;
                         let kpos_row = projection_matrix.k_pos_plan.as_ptr().add(row_base);
@@ -310,14 +309,14 @@ pub fn project_coefficients(
                             let k_pos0 = *kpos_row.add(chunk_idx);
                             let k_inc0 = *kinc_row.add(chunk_idx);
 
-                            let add0: __mmask8 = (k_inc0 &  k_pos0) as __mmask8;
+                            let add0: __mmask8 = (k_inc0 & k_pos0) as __mmask8;
                             let sub0: __mmask8 = (k_inc0 & !k_pos0) as __mmask8;
 
                             let ring0 = chunk_idx / blocks_per_ring;
-                            let off0  = (chunk_idx - ring0 * blocks_per_ring) * 8;
+                            let off0 = (chunk_idx - ring0 * blocks_per_ring) * 8;
 
                             let coeff0 = _mm512_load_epi64(
-                                subwitness.get_unchecked(ring0).v.as_ptr().add(off0) as *const i64
+                                subwitness.get_unchecked(ring0).v.as_ptr().add(off0) as *const i64,
                             );
 
                             acc0 = _mm512_mask_add_epi64(acc0, add0, acc0, coeff0);
@@ -326,14 +325,14 @@ pub fn project_coefficients(
                             let k_pos1 = *kpos_row.add(chunk_idx + 1);
                             let k_inc1 = *kinc_row.add(chunk_idx + 1);
 
-                            let add1: __mmask8 = (k_inc1 &  k_pos1) as __mmask8;
+                            let add1: __mmask8 = (k_inc1 & k_pos1) as __mmask8;
                             let sub1: __mmask8 = (k_inc1 & !k_pos1) as __mmask8;
 
                             let ring1 = (chunk_idx + 1) / blocks_per_ring;
-                            let off1  = ((chunk_idx + 1) - ring1 * blocks_per_ring) * 8;
+                            let off1 = ((chunk_idx + 1) - ring1 * blocks_per_ring) * 8;
 
                             let coeff1 = _mm512_load_epi64(
-                                subwitness.get_unchecked(ring1).v.as_ptr().add(off1) as *const i64
+                                subwitness.get_unchecked(ring1).v.as_ptr().add(off1) as *const i64,
                             );
 
                             acc1 = _mm512_mask_add_epi64(acc1, add1, acc1, coeff1);
@@ -346,14 +345,14 @@ pub fn project_coefficients(
                             let k_pos = *kpos_row.add(chunk_idx);
                             let k_inc = *kinc_row.add(chunk_idx);
 
-                            let add: __mmask8 = (k_inc &  k_pos) as __mmask8;
+                            let add: __mmask8 = (k_inc & k_pos) as __mmask8;
                             let sub: __mmask8 = (k_inc & !k_pos) as __mmask8;
 
                             let ring = chunk_idx / blocks_per_ring;
-                            let off  = (chunk_idx - ring * blocks_per_ring) * 8;
+                            let off = (chunk_idx - ring * blocks_per_ring) * 8;
 
                             let coeff = _mm512_load_epi64(
-                                subwitness.get_unchecked(ring).v.as_ptr().add(off) as *const i64
+                                subwitness.get_unchecked(ring).v.as_ptr().add(off) as *const i64,
                             );
 
                             acc0 = _mm512_mask_add_epi64(acc0, add, acc0, coeff);
