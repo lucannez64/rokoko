@@ -905,15 +905,10 @@ pub fn init_sumcheck(crs: &crs::CRS, config: &SumcheckConfig) -> SumcheckContext
         all_outputs.push(type2.output.clone());
     }
 
-    // TODO no need for match / if should be better
-    match &type3sumcheck {
-        Some(ctx) => {
-            all_outputs.push(ctx.output.clone());
-        }
-        None => {}
-    }
-
-    if let Some(type3_1_contexts) = &type3_1_sumchecks {
+    // TODO use enum
+    if let Some(type3sumcheck) = &type3sumcheck {
+        all_outputs.push(type3sumcheck.output.clone());
+    } else if let Some(type3_1_contexts) = &type3_1_sumchecks {
         for type3_1_ctx in type3_1_contexts.sumchecks.iter() {
             all_outputs.push(type3_1_ctx.output.clone());
             all_outputs.push(type3_1_ctx.output_2.clone());

@@ -332,7 +332,7 @@ pub fn projection_flatter_1_times_matrix(
 
     let mut result_field = new_vec_zero_field_preallocated(inner_width);
     for i in 0..inner_width {
-        result_field[i].coeffs.fill(*HALF_WAY_MOD_Q); // TODO: optimize this to be preallocated
+        result_field[i].coeffs.fill(*HALF_WAY_MOD_Q);
     }
 
     for inner_row in 0..height {

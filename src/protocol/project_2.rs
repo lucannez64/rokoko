@@ -539,7 +539,6 @@ fn batch_projection_into(
             // Multiply by c_0 coefficient and accumulate
             for deg in 0..DEGREE {
                 unsafe {
-                    // TODO: vectorize
                     let temp = multiply_mod(chunk_result.v[deg], c_0_coeff, MOD_Q);
                     col_result.v[deg] = add_mod(col_result.v[deg], temp, MOD_Q);
                 }

@@ -60,7 +60,7 @@ impl<E: SumcheckElement> PreprocessedRow<E> {
         result.push(E::one());
 
         for layer in structured_row.tensor_layers.iter().rev() {
-            let mut new_entries: Vec<E> = Vec::with_capacity(result.len()); // TODO: preallocate better if E is a RingElement; How to do it?
+            let mut new_entries: Vec<E> = Vec::with_capacity(result.len());
             for r in &mut result {
                 let mut product = E::zero();
                 product *= (&*r, layer);
