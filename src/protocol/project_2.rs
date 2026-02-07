@@ -50,59 +50,70 @@ pub fn compute_j_batched(
         let degree_blocks = DEGREE / 8;
         for i in 0..inner_width_ring {
             let base_index = i * DEGREE;
-            let row_ptr = j_batched[i].v.as_mut_ptr();
+            let row_ptr = j_batched[i].v.as_mut_ptr() as *mut i64;
             // For each coefficient position in the ring element
             for k in 0..projection_matrix.projection_height {
-                let coeff = c_1_values[k];
-                let coeff_vec = unsafe { _mm512_set1_epi64(coeff as i64) };
+                let coeff_vec = unsafe { _mm512_set1_epi64(c_1_values[k] as i64) };
+                unsafe {
+                    // Raw pointers to the start of plan row k
+                    let row_base = k * projection_matrix.width;
+                    let kpos_row = projection_matrix.k_pos_plan.data.as_ptr().add(row_base);
+                    let kinc_row = projection_matrix.k_inc_plan.data.as_ptr().add(row_base);
 
-                // Process 8 coefficients at a time using AVX-512
-                let mut j_ = 0;
-                while j_ + 1 < degree_blocks {
-                    let col_index_base0 = base_index + j_ * 8;
-                    let col_index_base1 = col_index_base0 + 8;
+                    // Each plan byte covers 8 columns.
+                    let base_chunk = base_index >> 3;
 
-                    let (k_pos0, k_inc0) = projection_matrix.get_row_masks_u8(k, col_index_base0);
-                    let (k_pos1, k_inc1) = projection_matrix.get_row_masks_u8(k, col_index_base1);
+                    let mut j_ = 0usize;
 
-                    unsafe {
+                    while j_ + 1 < degree_blocks {
+                        let chunk0 = base_chunk + j_;
+                        let chunk1 = chunk0 + 1;
+
+                        // Load plan bytes directly (no get_row_masks_u8)
+                        let k_pos0 = *kpos_row.add(chunk0);
+                        let k_inc0 = *kinc_row.add(chunk0);
+                        let k_pos1 = *kpos_row.add(chunk1);
+                        let k_inc1 = *kinc_row.add(chunk1);
+
+                        let add0: __mmask8 = (k_inc0 & k_pos0) as __mmask8;
+                        let sub0: __mmask8 = (k_inc0 & !k_pos0) as __mmask8;
+                        let add1: __mmask8 = (k_inc1 & k_pos1) as __mmask8;
+                        let sub1: __mmask8 = (k_inc1 & !k_pos1) as __mmask8;
+
                         let base_ptr0 = row_ptr.add(j_ * 8);
                         let base_ptr1 = row_ptr.add((j_ + 1) * 8);
 
-                        let current0 = _mm512_load_epi64(base_ptr0 as *const i64);
-                        let current1 = _mm512_load_epi64(base_ptr1 as *const i64);
+                        let cur0 = _mm512_load_epi64(base_ptr0);
+                        let cur1 = _mm512_load_epi64(base_ptr1);
 
-                        let k_add0 = k_inc0 & k_pos0;
-                        let k_sub0 = k_inc0 & !k_pos0;
-                        let k_add1 = k_inc1 & k_pos1;
-                        let k_sub1 = k_inc1 & !k_pos1;
+                        let res0 = _mm512_mask_add_epi64(cur0, add0, cur0, coeff_vec);
+                        let res0 = _mm512_mask_sub_epi64(res0, sub0, res0, coeff_vec);
 
-                        let result0 = _mm512_mask_add_epi64(current0, k_add0, current0, coeff_vec);
-                        let result0 = _mm512_mask_sub_epi64(result0, k_sub0, result0, coeff_vec);
-                        let result1 = _mm512_mask_add_epi64(current1, k_add1, current1, coeff_vec);
-                        let result1 = _mm512_mask_sub_epi64(result1, k_sub1, result1, coeff_vec);
+                        let res1 = _mm512_mask_add_epi64(cur1, add1, cur1, coeff_vec);
+                        let res1 = _mm512_mask_sub_epi64(res1, sub1, res1, coeff_vec);
 
-                        _mm512_store_epi64(base_ptr0 as *mut i64, result0);
-                        _mm512_store_epi64(base_ptr1 as *mut i64, result1);
+                        _mm512_store_epi64(base_ptr0, res0);
+                        _mm512_store_epi64(base_ptr1, res1);
+
+                        j_ += 2;
                     }
-                    j_ += 2;
-                }
 
-                if j_ < degree_blocks {
-                    let col_index_base = base_index + j_ * 8;
-                    let (k_pos, k_inc) = projection_matrix.get_row_masks_u8(k, col_index_base);
+                    // Tail
+                    if j_ < degree_blocks {
+                        let chunk = base_chunk + j_;
+                        let k_pos = *kpos_row.add(chunk);
+                        let k_inc = *kinc_row.add(chunk);
 
-                    unsafe {
+                        let add: __mmask8 = (k_inc & k_pos) as __mmask8;
+                        let sub: __mmask8 = (k_inc & !k_pos) as __mmask8;
+
                         let base_ptr = row_ptr.add(j_ * 8);
-                        let current = _mm512_load_epi64(base_ptr as *const i64);
+                        let cur = _mm512_load_epi64(base_ptr);
 
-                        let k_add = k_inc & k_pos;
-                        let k_sub = k_inc & !k_pos;
+                        let res = _mm512_mask_add_epi64(cur, add, cur, coeff_vec);
+                        let res = _mm512_mask_sub_epi64(res, sub, res, coeff_vec);
 
-                        let result = _mm512_mask_add_epi64(current, k_add, current, coeff_vec);
-                        let result = _mm512_mask_sub_epi64(result, k_sub, result, coeff_vec);
-
-                        _mm512_store_epi64(base_ptr as *mut i64, result);
+                        _mm512_store_epi64(base_ptr, res);
                     }
                 }
             }
@@ -297,8 +308,8 @@ pub fn project_coefficients(
 
                     unsafe {
                         let row_base = inner_row * width;
-                        let kpos_row = projection_matrix.k_pos_plan.as_ptr().add(row_base);
-                        let kinc_row = projection_matrix.k_inc_plan.as_ptr().add(row_base);
+                        let kpos_row = projection_matrix.k_pos_plan.data.as_ptr().add(row_base);
+                        let kinc_row = projection_matrix.k_inc_plan.data.as_ptr().add(row_base);
 
                         let mut acc0 = _mm512_setzero_si512();
                         let mut acc1 = _mm512_setzero_si512();
