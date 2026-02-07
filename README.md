@@ -13,17 +13,7 @@ cargo bench --bench eltwise_bench --features rust-hexl
 This benchmarks three kernels across polynomial degrees 2^6 through 2^13:
 - `hexl_rust/eltwise_mult_mod` — single element-wise modular multiply
 - `bindings/eltwise_mult_mod` — C++ HEXL FFI element-wise modular multiply
-- `hexl_rust/fused_incomplete_ntt_mult` — fused incomplete-NTT multiplication (split_degree=2 schoolbook)
-
-### rdtsc microbenchmark
-
-For cycle-accurate measurements (useful for comparison with the C++ proof-friendly-CKKS benchmark):
-
-```bash
-cargo bench --bench rdtsc_bench --features rust-hexl
-```
-
-This uses the x86 `rdtsc` instruction to report both CPU cycle counts and wall-clock nanoseconds per iteration. It measures `eltwise_mult_mod` and `fused_incomplete_ntt_mult` across sizes 2^6 through 2^13 with 50k warmup iterations and 200k measurement iterations, reporting best and average cycles.
+- `hexl_rust/fused_incomplete_ntt_mult` — fused incomplete-NTT multiplication (split_degree=2 Karatsuba)
 
 ### Comparison with proof-friendly-CKKS (C++)
 
@@ -64,11 +54,11 @@ The C++ benchmark reports `N` as the full polynomial degree, while the Rust benc
 
 | N     | n=N/2 | C++ CKKS (ns) | Rust fused (ns) | Speedup |
 |-------|-------|---------------|-----------------|---------|
-| 128   | 64    | 134           | 93              | 1.44×   |
-| 256   | 128   | 260           | 190             | 1.37×   |
-| 512   | 256   | 548           | 378             | 1.45×   |
-| 1024  | 512   | 1019          | 755             | 1.35×   |
-| 2048  | 1024  | 2112          | 1508            | 1.40×   |
-| 4096  | 2048  | 3985          | 3035            | 1.31×   |
-| 8192  | 4096  | 9737          | 6071            | 1.60×   |
-| 16384 | 8192  | 18159         | 12038           | 1.51×   |
+| 128   | 64    | 134           | 95              | 1.41×   |
+| 256   | 128   | 260           | 180             | 1.44×   |
+| 512   | 256   | 548           | 373             | 1.47×   |
+| 1024  | 512   | 1019          | 747             | 1.36×   |
+| 2048  | 1024  | 2112          | 1481            | 1.43×   |
+| 4096  | 2048  | 3985          | 2921            | 1.36×   |
+| 8192  | 4096  | 9737          | 5972            | 1.63×   |
+| 16384 | 8192  | 18159         | 11970           | 1.52×   |

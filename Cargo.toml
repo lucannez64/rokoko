@@ -50,7 +50,3 @@ name = "eltwise_bench"
 harness = false
 required-features = ["rust-hexl"]
 
-[[bench]]
-name = "rdtsc_bench"
-harness = false
-required-features = ["rust-hexl"]
