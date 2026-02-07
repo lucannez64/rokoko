@@ -57,8 +57,8 @@ pub fn compute_j_batched(
                 unsafe {
                     // Raw pointers to the start of plan row k
                     let row_base = k * projection_matrix.width;
-                    let kpos_row = projection_matrix.k_pos_plan.data.as_ptr().add(row_base);
-                    let kinc_row = projection_matrix.k_inc_plan.data.as_ptr().add(row_base);
+                    let kpos_row = projection_matrix.pos_masks.data.as_ptr().add(row_base);
+                    let kinc_row = projection_matrix.non_zero_masks.data.as_ptr().add(row_base);
 
                     // Each plan byte covers 8 columns.
                     let base_chunk = base_index >> 3;
@@ -70,11 +70,13 @@ pub fn compute_j_batched(
                         let chunk1 = chunk0 + 1;
 
                         // Load plan bytes directly (no get_row_masks_u8)
+                        // raw, unchecked load of next bitmask of pos and inc (non-zero) indices
                         let k_pos0 = *kpos_row.add(chunk0);
                         let k_inc0 = *kinc_row.add(chunk0);
                         let k_pos1 = *kpos_row.add(chunk1);
                         let k_inc1 = *kinc_row.add(chunk1);
 
+                        // masks of positives and negavtives indices
                         let add0: __mmask8 = (k_inc0 & k_pos0) as __mmask8;
                         let sub0: __mmask8 = (k_inc0 & !k_pos0) as __mmask8;
                         let add1: __mmask8 = (k_inc1 & k_pos1) as __mmask8;
@@ -308,8 +310,8 @@ pub fn project_coefficients(
 
                     unsafe {
                         let row_base = inner_row * width;
-                        let kpos_row = projection_matrix.k_pos_plan.data.as_ptr().add(row_base);
-                        let kinc_row = projection_matrix.k_inc_plan.data.as_ptr().add(row_base);
+                        let kpos_row = projection_matrix.pos_masks.data.as_ptr().add(row_base);
+                        let kinc_row = projection_matrix.non_zero_masks.data.as_ptr().add(row_base);
 
                         let mut acc0 = _mm512_setzero_si512();
                         let mut acc1 = _mm512_setzero_si512();
@@ -317,9 +319,11 @@ pub fn project_coefficients(
                         let mut chunk_idx = 0usize;
 
                         while chunk_idx + 1 < width {
+                            // raw, unchecked load of next bitmask of pos and inc (non-zero) indices
                             let k_pos0 = *kpos_row.add(chunk_idx);
                             let k_inc0 = *kinc_row.add(chunk_idx);
 
+                            // masks of positives and negavtives indices
                             let add0: __mmask8 = (k_inc0 & k_pos0) as __mmask8;
                             let sub0: __mmask8 = (k_inc0 & !k_pos0) as __mmask8;
 

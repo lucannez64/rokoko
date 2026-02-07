@@ -14,8 +14,8 @@ pub struct ProjectionMatrix {
 
     pub width: usize,
 
-    pub k_pos_plan: HorizontallyAlignedMatrix<u8>,
-    pub k_inc_plan: HorizontallyAlignedMatrix<u8>,
+    pub pos_masks: HorizontallyAlignedMatrix<u8>,
+    pub non_zero_masks: HorizontallyAlignedMatrix<u8>,
 }
 
 impl ProjectionMatrix {
@@ -28,12 +28,12 @@ impl ProjectionMatrix {
 
         let width = projection_width / 8;
 
-        let k_pos_plan = HorizontallyAlignedMatrix {
+        let pos_masks = HorizontallyAlignedMatrix {
             data: vec![0u8; projection_height * width],
             width: width,
             height: projection_height,
         };
-        let k_inc_plan = HorizontallyAlignedMatrix {
+        let non_zero_masks = HorizontallyAlignedMatrix {
             data: vec![0u8; projection_height * width],
             width: width,
             height: projection_height,
@@ -44,8 +44,8 @@ impl ProjectionMatrix {
             projection_width,
             projection_ratio,
             width,
-            k_pos_plan,
-            k_inc_plan,
+            pos_masks,
+            non_zero_masks,
         }
     }
 
@@ -58,12 +58,12 @@ impl ProjectionMatrix {
         let chunk = col_base >> 3;
         debug_assert!(chunk < self.width);
 
-        (self.k_pos_plan[(row, chunk)], self.k_inc_plan[(row, chunk)])
+        (self.pos_masks[(row, chunk)], self.non_zero_masks[(row, chunk)])
     }
 
     pub fn sample(&mut self, hash_wrapper: &mut HashWrapper) {
-        hash_wrapper.fill_from_xof(b"projection-plan-sign", &mut self.k_pos_plan.data);
-        hash_wrapper.fill_from_xof(b"projection-plan-value", &mut self.k_inc_plan.data);
+        hash_wrapper.fill_from_xof(b"projection-plan-sign", &mut self.pos_masks.data);
+        hash_wrapper.fill_from_xof(b"projection-plan-value", &mut self.non_zero_masks.data);
     }
 
     #[cfg(test)]
@@ -80,12 +80,12 @@ impl ProjectionMatrix {
             projection_width,
             projection_ratio,
             width,
-            k_pos_plan: HorizontallyAlignedMatrix {
+            pos_masks: HorizontallyAlignedMatrix {
                 data: vec![0u8; projection_height * width],
                 width: width,
                 height: projection_height,
             },
-            k_inc_plan: HorizontallyAlignedMatrix {
+            non_zero_masks: HorizontallyAlignedMatrix {
                 data: vec![0u8; projection_height * width],
                 width: width,
                 height: projection_height,
@@ -106,10 +106,10 @@ impl ProjectionMatrix {
                 let bit = (col & 7) as u8;
 
                 if is_positive {
-                    pm.k_pos_plan[(row, chunk)] |= 1u8 << bit;
+                    pm.pos_masks[(row, chunk)] |= 1u8 << bit;
                 }
                 if is_non_zero {
-                    pm.k_inc_plan[(row, chunk)] |= 1u8 << bit;
+                    pm.non_zero_masks[(row, chunk)] |= 1u8 << bit;
                 }
             }
         }
@@ -119,7 +119,7 @@ impl ProjectionMatrix {
 
     #[inline(always)]
     pub fn row_chunks(&self, row: usize) -> (&[u8], &[u8]) {
-        (self.k_pos_plan.row(row), self.k_inc_plan.row(row))
+        (self.pos_masks.row(row), self.non_zero_masks.row(row))
     }
 }
 
@@ -135,8 +135,8 @@ impl Index<(usize, usize)> for ProjectionMatrix {
         let chunk = col >> 3;
         let bit = (col & 7) as u8;
 
-        let k_pos = self.k_pos_plan[(row, chunk)];
-        let k_inc = self.k_inc_plan[(row, chunk)];
+        let k_pos = self.pos_masks[(row, chunk)];
+        let k_inc = self.non_zero_masks[(row, chunk)];
 
         let is_positive = ((k_pos >> bit) & 1) == 1;
         let is_non_zero = ((k_inc >> bit) & 1) == 1;
