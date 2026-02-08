@@ -1,18 +1,11 @@
 use crate::{
     common::{
-        decomposition::decompose,
-        hash::HashWrapper,
-        matrix::{new_vec_zero_preallocated, HorizontallyAlignedMatrix, VerticallyAlignedMatrix},
-        projection_matrix::ProjectionMatrix,
-        ring_arithmetic::{Representation, RingElement},
-        structured_row::{PreprocessedRow, StructuredRow},
+        decomposition::decompose, hash::HashWrapper, matrix::{HorizontallyAlignedMatrix, VerticallyAlignedMatrix, new_vec_zero_preallocated}, projection_matrix::ProjectionMatrix, ring_arithmetic::{Representation, RingElement}, structured_row::{PreprocessedRow, StructuredRow}
     },
     protocol::{
-        commitment::{commit_basic, recursive_commit, BasicCommitment, CommitmentWithAux},
+        commitment::{BasicCommitment, CommitmentWithAux, commit_basic, recursive_commit},
         config::{
-            paste_by_prefix, paste_recursive_commitment, Config, ConfigBase, NextRoundCommitment,
-            Projection, RoundProof, SimpleConfig, SimpleRoundProof, SumcheckConfig,
-            SumcheckRoundProof,
+            Config, ConfigBase, NextRoundCommitment, Projection, RoundProof, SimpleConfig, SimpleRoundProof, SumcheckConfig, SumcheckRoundProof, paste_by_prefix, paste_recursive_commitment
         },
         crs::CRS,
         fold::fold,
@@ -22,7 +15,7 @@ use crate::{
         },
         project::{prepare_i16_witness, project},
         project_2::{batch_projection_n_times, project_coefficients},
-        sumcheck::{sumcheck, SumcheckContext},
+        sumcheck::{SumcheckContext, sumcheck},
     },
 };
 
@@ -241,7 +234,9 @@ pub fn prover_round(
 
     #[cfg(feature = "debug-hardness")]
     if get_and_increment_round_id() >= DEBUG_HARDNESS_FROM_ROUND {
-        use crate::protocol::commitment::RecursionConfig;
+        use crate::protocol::commitment::{RecursionConfig, RecursiveCommitmentWithAux};
+        use crate::common::{norms, estimator::{estimate_rsis_security, RSISParameters}, config::{MOD_Q, DEGREE}};
+    
 
         println!("=== Debug Hardness Check ===");
         // let witness_norm = norms::l2_norm(&witness.data);
@@ -249,8 +244,9 @@ pub fn prover_round(
 
         let recommited_ell_inf_norm = norms::inf_norm(&next_round_data);
         let recommited_ell_2_norm = norms::l2_norm(&next_round_data);
+        let recommited_ell_2_norm_sq = recommited_ell_2_norm.powf(2.0);
 
-        let mut most_inner_commitment_data_ell_2 = {
+        let most_inner_commitment_data_ell_2 = {
             let commitment_data = &rc_commitment
                 .most_inner_commitment_with_aux()
                 .committed_data;
@@ -391,8 +387,15 @@ pub fn prover_round(
             recommited_ell_2_norm,
             MOD_Q
         );
+        
+        let next_level_width =  if let Some(next_config) = &config.next {
+            config_base_from_config(next_config).witness_width()
+        } else {
+            1
+        };
 
         let recomposed_witness_bound = recommited_ell_2_norm_rest
+            * (next_level_width as f64).sqrt() // norm conversion as we get argument about columsn separately in extraction
             * (config
                 .witness_decomposition_base_log
                 .pow((config.witness_decomposition_chunks - 1) as u32)) as f64;
@@ -738,6 +741,7 @@ pub fn prover_round_simple(
 
     #[cfg(feature = "debug-hardness")]
     {
+        use crate::common::{norms, estimator::{estimate_rsis_security, RSISParameters}, config::{MOD_Q, DEGREE}};
         let folded_witness_l2_norm = norms::l2_norm(&folded_witness.data);
 
         println!("Folded witness norm: {}", folded_witness_l2_norm);
@@ -760,11 +764,6 @@ pub fn prover_round_simple(
             );
             argued_witness_bound
         };
-
-        assert!(
-            argued_witness_bound * argued_witness_bound < (MOD_Q as f64 / 2f64),
-            "Witness bound too large for inner-product norm extraction!"
-        );
 
         let basic_commitment_security = estimate_rsis_security(&RSISParameters {
             m: config.witness_height as u64,

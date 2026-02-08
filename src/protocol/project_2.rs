@@ -237,6 +237,7 @@ pub fn project_coefficients(
 
     #[cfg(feature = "debug-hardness")]
     {
+        use crate::common::norms::l2_norm_coeffs;
         println!("Projecting coefficients with projection matrix:");
         let norm = l2_norm_coeffs(&witness_coeff.data);
         println!("L2 norm of witness coefficients: {}", norm);
@@ -409,6 +410,7 @@ pub fn project_coefficients(
 
     #[cfg(feature = "debug-hardness")]
     {
+        use crate::common::norms::l2_norm_coeffs;
         let norm = l2_norm_coeffs(&image_ct.data);
         println!("L2 norm of projected witness coefficients: {}", norm);
     }
