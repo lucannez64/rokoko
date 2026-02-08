@@ -39,9 +39,10 @@ test_encoding_mp();
 test_arith();
 ```
 
-#### 3. Build and run
+#### Build and run
 
 ```bash
+make hexl
 make main
 LD_LIBRARY_PATH=./src/third-party/hexl/build/hexl/lib ./main
 ```
