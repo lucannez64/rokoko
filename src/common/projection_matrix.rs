@@ -153,73 +153,72 @@ impl Index<(usize, usize)> for ProjectionMatrix {
     }
 }
 
-// #[cfg(test)]
-// mod tests {
-//     use crate::common::ring_arithmetic::{Representation, RingElement};
+ #[cfg(test)]
+ mod tests {
+     use crate::common::ring_arithmetic::{Representation, RingElement};
 
-//     use super::*;
+     use super::*;
+     const PROJECTION_BASE_HEIGHT: usize = 128;
 
-//     #[test]
-//     fn test_stability_of_sampling() {
-//         let mut hash_wrapper = HashWrapper::new();
-//         let mut projection_matrix_1 = ProjectionMatrix::new(4, PROJECTION_BASE_HEIGHT * 4);
-//         println!(
-//             "Matrix 1: height={}, width={}, data.height={}, data.width={}",
-//             projection_matrix_1.projection_height,
-//             projection_matrix_1.projection_width,
-//             projection_matrix_1.projection_data.height,
-//             projection_matrix_1.projection_data.width
-//         );
-//         projection_matrix_1.sample(&mut hash_wrapper);
+     #[test]
+     fn test_stability_of_sampling() {
+         let mut hash_wrapper = HashWrapper::new();
+         let mut projection_matrix_1 = ProjectionMatrix::new(4, PROJECTION_BASE_HEIGHT * 4);
+         println!(
+             "Matrix 1: height={}, width={}",
+             projection_matrix_1.projection_height,
+             projection_matrix_1.projection_width,
+         );
+         projection_matrix_1.sample(&mut hash_wrapper);
 
-//         let mut hash_wrapper_2 = HashWrapper::new();
-//         let mut projection_matrix_2 = ProjectionMatrix::new(4, PROJECTION_BASE_HEIGHT * 4);
-//         projection_matrix_2.sample(&mut hash_wrapper_2);
+         let mut hash_wrapper_2 = HashWrapper::new();
+         let mut projection_matrix_2 = ProjectionMatrix::new(4, PROJECTION_BASE_HEIGHT * 4);
+         projection_matrix_2.sample(&mut hash_wrapper_2);
 
-//         for outer_col in 0..PROJECTION_BASE_HEIGHT * 16 {
-//             for row in 0..PROJECTION_BASE_HEIGHT * 4 {
-//                 debug_assert_eq!(
-//                     projection_matrix_1[(row, outer_col)],
-//                     projection_matrix_2[(row, outer_col)]
-//                 );
-//             }
-//         }
-//     }
+         for outer_col in 0..PROJECTION_BASE_HEIGHT * 16 {
+             for row in 0..PROJECTION_BASE_HEIGHT * 4 {
+                 debug_assert_eq!(
+                     projection_matrix_1[(row, outer_col)],
+                     projection_matrix_2[(row, outer_col)]
+                 );
+             }
+         }
+     }
 
-//     #[test]
-//     fn test_instability_with_different_transcript() {
-//         let mut hash_wrapper = HashWrapper::new();
-//         let mut projection_matrix_1 = ProjectionMatrix::new(4, PROJECTION_BASE_HEIGHT * 4);
-//         projection_matrix_1.sample(&mut hash_wrapper);
+     #[test]
+     fn test_instability_with_different_transcript() {
+         let mut hash_wrapper = HashWrapper::new();
+         let mut projection_matrix_1 = ProjectionMatrix::new(4, PROJECTION_BASE_HEIGHT * 4);
+         projection_matrix_1.sample(&mut hash_wrapper);
 
-//         let mut hash_wrapper_2 = HashWrapper::new();
-//         hash_wrapper_2
-//             .update_with_ring_element(&RingElement::constant(42, Representation::IncompleteNTT));
-//         let mut projection_matrix_2 = ProjectionMatrix::new(4, PROJECTION_BASE_HEIGHT * 4);
-//         projection_matrix_2.sample(&mut hash_wrapper_2);
+         let mut hash_wrapper_2 = HashWrapper::new();
+         hash_wrapper_2
+             .update_with_ring_element(&RingElement::constant(42, Representation::IncompleteNTT));
+         let mut projection_matrix_2 = ProjectionMatrix::new(4, PROJECTION_BASE_HEIGHT * 4);
+         projection_matrix_2.sample(&mut hash_wrapper_2);
 
-//         let mut differences_found = 0;
-//         for col in 0..PROJECTION_BASE_HEIGHT * 4 * 4 {
-//             for row in 0..PROJECTION_BASE_HEIGHT {
-//                 if projection_matrix_1[(row, col)] != projection_matrix_2[(row, col)] {
-//                     differences_found += 1;
-//                 }
-//             }
-//         }
-//         debug_assert!(differences_found > 0);
-//     }
+         let mut differences_found = 0;
+         for col in 0..PROJECTION_BASE_HEIGHT * 4 * 4 {
+             for row in 0..PROJECTION_BASE_HEIGHT {
+                 if projection_matrix_1[(row, col)] != projection_matrix_2[(row, col)] {
+                     differences_found += 1;
+                 }
+             }
+         }
+         debug_assert!(differences_found > 0);
+     }
 
-//     #[test]
-//     fn test_indexing() {
-//         let mut data = vec![vec![0i8; PROJECTION_BASE_HEIGHT * 4]; PROJECTION_BASE_HEIGHT];
-//         data[0][0] = 1;
-//         data[3][1] = -1;
-//         data[1][4] = 1;
-//         data[2][3] = 0;
-//         let projection_matrix = ProjectionMatrix::from_i8(data);
-//         debug_assert_eq!(projection_matrix[(0, 0)], (true, true));
-//         debug_assert_eq!(projection_matrix[(3, 1)], (false, true));
-//         debug_assert_eq!(projection_matrix[(1, 4)], (true, true));
-//         debug_assert_eq!(projection_matrix[(2, 3)], (false, false));
-//     }
-// }
+     #[test]
+     fn test_indexing() {
+         let mut data = vec![vec![0i8; PROJECTION_BASE_HEIGHT * 4]; PROJECTION_BASE_HEIGHT];
+         data[0][0] = 1;
+         data[3][1] = -1;
+         data[1][4] = 1;
+         data[2][3] = 0;
+         let projection_matrix = ProjectionMatrix::from_i8(data);
+         debug_assert_eq!(projection_matrix[(0, 0)], (true, true));
+         debug_assert_eq!(projection_matrix[(3, 1)], (false, true));
+         debug_assert_eq!(projection_matrix[(1, 4)], (true, true));
+         debug_assert_eq!(projection_matrix[(2, 3)], (false, false));
+     }
+ }
