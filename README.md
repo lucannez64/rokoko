@@ -59,7 +59,7 @@ cargo +nightly run --release
 ```
 
 ## Cached allocations
-For the best performance, it is advisable to run the protocol twice. During the first run, the protocol collects the allocation descriptions (and stores them as a file). On the next run, those allocations will be done in advance, which impact especially the commitment and verifier performance. 
+For the best performance, it is advisable to run the protocol twice. During the first run, the protocol collects the allocation descriptions (and stores them as a file, while printing a number of warnings about an unpopulated cache). On the next run, those allocations will be done in advance, which impact especially the commitment and verifier performance. 
 
 ## API
 
