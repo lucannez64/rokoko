@@ -176,7 +176,7 @@ cargo run --release --example demo
 ## Requirements
 
 - **Rust nightly** (uses `target_feature_inline_always`)
-- An x86-64 CPU (AVX-512 optional but recommended for peak performance)
+- AVX-512 optional but recommended for peak performance on x86-64; portable scalar fallbacks run on any platform
 
 ## License
 
