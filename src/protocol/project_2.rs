@@ -30,10 +30,17 @@ pub fn compute_j_batched(
 ) -> Vec<RingElement> {
     use crate::common::matrix::new_vec_zero_preallocated;
 
+    // The output has inner_width_ring = projection_ratio × (PROJECTION_HEIGHT / DEGREE)
+    // ring elements.  Each ring element j_batched[i] accumulates:
+    //   j_batched[i][d] = Σ_k  c_1[k] · J_embedded[k, i·DEGREE + d]
+    // where J_embedded is the dual-embedded projection matrix.
     let inner_width_ring =
         projection_matrix.projection_ratio * (projection_matrix.projection_height / DEGREE);
     let mut j_batched = new_vec_zero_preallocated(inner_width_ring);
 
+    // Initialise every coefficient to a large multiple of Q (a "halfway" value) so
+    // that intermediate subtractions never underflow in unsigned arithmetic.
+    // The final eltwise_reduce_mod at the bottom will fold this away.
     for el in j_batched.iter_mut() {
         el.set_from(&HALF_WAY_MOD_Q_RING_CF);
     }
@@ -42,60 +49,82 @@ pub fn compute_j_batched(
     {
         use std::arch::x86_64::*;
 
+        // Each ring element has DEGREE u64 coefficients; each __m512i holds 8 of them,
+        // so we need `degree_blocks` iterations to cover a full ring element.
         let degree_blocks = DEGREE / 8;
+
+        // Outer loop: iterate over the output ring elements.
         for i in 0..inner_width_ring {
+            // `base_index` is the flat column offset into the projection matrix
+            // that corresponds to the start of ring element `i`.
             let base_index = i * DEGREE;
             let row_ptr = j_batched[i].v.as_mut_ptr() as *mut i64;
-            // For each coefficient position in the ring element
+
+            // Inner loop: for every row `k` of the projection matrix, scatter
+            // c_1[k] (the batching weight for that row) into the ring element
+            // according to J[k, base_index .. base_index + DEGREE].
             for k in 0..projection_matrix.projection_height {
+                // Broadcast the k-th challenge weight into all 8 lanes of a zmm.
                 let coeff_vec = unsafe { _mm512_set1_epi64(c_1_values[k] as i64) };
                 unsafe {
-                    // Raw pointers to the start of plan row k
+                    // Raw pointers into the packed bitmask arrays for row k.
+                    // `pos_masks`:      bit=1 ⇒ entry is +1;  bit=0 ⇒ entry is −1 (when non-zero).
+                    // `non_zero_masks`: bit=1 ⇒ entry is ±1;  bit=0 ⇒ entry is 0.
                     let row_base = k * projection_matrix.width;
                     let kpos_row = projection_matrix.pos_masks.data.as_ptr().add(row_base);
                     let kinc_row = projection_matrix.non_zero_masks.data.as_ptr().add(row_base);
 
-                    // Each plan byte covers 8 columns.
+                    // Each bitmask byte covers 8 columns.  `base_chunk` is the byte
+                    // index of the first column for ring element `i`.
                     let base_chunk = base_index >> 3;
 
                     let mut j_ = 0usize;
 
+                    // --- 2× unrolled main loop ------------------------------------------
+                    // Processes two 8-column chunks (= 16 coefficients) per iteration,
+                    // giving the CPU two independent dependency chains to fill its pipeline.
                     while j_ + 1 < degree_blocks {
                         let chunk0 = base_chunk + j_;
                         let chunk1 = chunk0 + 1;
 
-                        // Load plan bytes directly (no get_row_masks_u8)
-                        // raw, unchecked load of next bitmask of pos and inc (non-zero) indices
+                        // Load one byte each from pos_masks and non_zero_masks.
+                        // Each byte's 8 bits correspond to 8 consecutive columns.
                         let k_pos0 = *kpos_row.add(chunk0);
                         let k_inc0 = *kinc_row.add(chunk0);
                         let k_pos1 = *kpos_row.add(chunk1);
                         let k_inc1 = *kinc_row.add(chunk1);
 
-                        // masks of positives and negavtives indices
+                        // add-mask: lanes where entry is +1  (non_zero AND positive).
+                        // sub-mask: lanes where entry is −1  (non_zero AND NOT positive).
                         let add0: __mmask8 = (k_inc0 & k_pos0) as __mmask8;
                         let sub0: __mmask8 = (k_inc0 & !k_pos0) as __mmask8;
                         let add1: __mmask8 = (k_inc1 & k_pos1) as __mmask8;
                         let sub1: __mmask8 = (k_inc1 & !k_pos1) as __mmask8;
 
+                        // Pointers to the two 8-wide slices inside the output ring element.
                         let base_ptr0 = row_ptr.add(j_ * 8);
                         let base_ptr1 = row_ptr.add((j_ + 1) * 8);
 
+                        // Load current accumulator values for these 16 coefficients.
                         let cur0 = _mm512_load_epi64(base_ptr0);
                         let cur1 = _mm512_load_epi64(base_ptr1);
 
+                        // Conditionally add c_1[k] where J[k,col]=+1, then
+                        // conditionally subtract c_1[k] where J[k,col]=−1.
                         let res0 = _mm512_mask_add_epi64(cur0, add0, cur0, coeff_vec);
                         let res0 = _mm512_mask_sub_epi64(res0, sub0, res0, coeff_vec);
 
                         let res1 = _mm512_mask_add_epi64(cur1, add1, cur1, coeff_vec);
                         let res1 = _mm512_mask_sub_epi64(res1, sub1, res1, coeff_vec);
 
+                        // Write the updated accumulators back.
                         _mm512_store_epi64(base_ptr0, res0);
                         _mm512_store_epi64(base_ptr1, res1);
 
                         j_ += 2;
                     }
 
-                    // Tail
+                    // --- Tail: handle the last chunk when degree_blocks is odd ----------
                     if j_ < degree_blocks {
                         let chunk = base_chunk + j_;
                         let k_pos = *kpos_row.add(chunk);
@@ -117,6 +146,9 @@ pub fn compute_j_batched(
         }
     }
 
+    // --- Scalar fallback (non-AVX-512 platforms) -----------------------------------
+    // Same logic, just indexes the projection matrix element-by-element through its
+    // Index<(row, col)> impl and manually 4× unrolls for moderate throughput.
     #[cfg(not(all(target_arch = "x86_64", target_feature = "avx512f")))]
     {
         println!("Using scalar code for compute_j_batched");
@@ -127,6 +159,7 @@ pub fn compute_j_batched(
                 let coeff = c_1_values[k];
                 let mut j = 0;
 
+                // 4× unrolled scalar loop over columns within this ring element.
                 while j + 3 < DEGREE {
                     let col_index0 = base_index + j;
                     let col_index1 = col_index0 + 1;
@@ -170,6 +203,7 @@ pub fn compute_j_batched(
                     j += 4;
                 }
 
+                // Scalar tail for remaining columns (DEGREE not divisible by 4).
                 while j < DEGREE {
                     let col_index = base_index + j;
                     let (is_positive, is_non_zero) = &projection_matrix[(k, col_index)];
@@ -186,36 +220,53 @@ pub fn compute_j_batched(
         }
     }
 
-    // Convert j_batched to NTT for efficient multiplication
+    // Post-processing: reduce mod Q, convert to incomplete-NTT representation,
+    // and conjugate so that j_batched is ready for inner-product multiplication
+    // against the witness (which is also in incomplete-NTT form).
     for bp in j_batched.iter_mut() {
         unsafe {
+            // Fold the HALF_WAY_MOD_Q bias back into [0, Q).
             eltwise_reduce_mod(bp.v.as_mut_ptr(), bp.v.as_mut_ptr(), DEGREE as u64, MOD_Q);
         }
+        // Coefficients → incomplete-NTT for ring-element multiplication.
         bp.to_representation(Representation::IncompleteNTT);
+        // Conjugation accounts for the dual embedding sign flip on non-constant terms.
         bp.conjugate_in_place();
     }
 
     j_batched
 }
 
-// Compute the coefficient-wise projection: V = (I_d ⊗ J) * coeff(W)
-//
-// This function projects the witness W through a structured projection matrix.
-//
-// Mathematical structure:
-// - W ∈ R_q^{m × r} is the witness matrix (input in NTT representation)
-// - J ∈ {-1,0,1}^{n_rp × m_rp} is the projection matrix (with n_rp = PROJECTION_HEIGHT)
-// - coeff(W) ∈ Z_q^{m·DEGREE × r} is the witness converted to coefficient representation
-// - V = (I_d ⊗ J) * coeff(W) ∈ Z_q^{d·n_rp × r} is the projected result
-//   where d = m / projection_ratio and I_d is a d×d identity matrix
-//
-// The tensor product (I_d ⊗ J) means we apply J independently to each of d blocks
-// of the coefficient-represented witness. Each block has m_rp·DEGREE coefficients.
-//
-// Output representation:
-// V is in Z_q (coefficient space), but we represent it as ring elements for efficiency:
-// V' = embed_coefficients(V) ∈ R_q^{d·n_rp / DEGREE × r}
-// This packs DEGREE consecutive coefficients of V into each ring element.
+/// Computes the coefficient-wise projection: `V = (I_d ⊗ J) · coeff(W)`.
+///
+/// This function projects the witness `W` through a structured projection matrix `J`.
+///
+/// # Mathematical structure
+///
+/// - `W ∈ R_q^{m × r}` is the witness matrix (input in NTT representation).
+/// - `J ∈ {-1,0,1}^{n_rp × m_rp}` is the projection matrix (with `n_rp = PROJECTION_HEIGHT`).
+/// - `coeff(W) ∈ Z_q^{m·DEGREE × r}` is the witness converted to coefficient representation.
+/// - `V = (I_d ⊗ J) · coeff(W) ∈ Z_q^{d·n_rp × r}` is the projected result,
+///   where `d = m / projection_ratio` and `I_d` is the `d×d` identity matrix.
+///
+/// The tensor product `(I_d ⊗ J)` means `J` is applied independently to each of
+/// `d` blocks of the coefficient-represented witness. Each block has
+/// `m_rp · DEGREE` coefficients.
+///
+/// # Output representation
+///
+/// `V` lives in `Z_q` (coefficient space) but is represented as ring elements for
+/// efficiency: `V' = embed_coefficients(V) ∈ R_q^{d·n_rp / DEGREE × r}`.
+/// This packs `DEGREE` consecutive coefficients of `V` into each ring element.
+///
+/// # AVX-512 acceleration
+///
+/// The inner-product loop (one output coefficient = one row of `J` dotted with a
+/// sub-witness) is vectorised: each `u8` bitmask from [`ProjectionMatrix`] covers
+/// 8 columns (= 8 witness `u64` coefficients = one `__m512i`).  The loop reads
+/// the `pos` and `non_zero` masks, forms masked-add / masked-sub operations on
+/// the accumulator, and 2× unrolls with a scalar tail.  The horizontal sum of
+/// the accumulator is added to the output coefficient.
 pub fn project_coefficients(
     witness: &VerticallyAlignedMatrix<RingElement>,
     projection_matrix: &ProjectionMatrix,
@@ -227,7 +278,8 @@ pub fn project_coefficients(
 
     for i in 0..witness_coeff.data.len() {
         witness_coeff.data[i].from_incomplete_ntt_to_even_odd_coefficients();
-        witness_coeff.data[i].from_even_odd_coefficients_to_coefficients(); // TODO: even-odd is enough
+        // this is possible to operate on even-odd representation directly, but coeeficent rep is better for locality.
+        witness_coeff.data[i].from_even_odd_coefficients_to_coefficients();
     }
 
     #[cfg(feature = "debug-hardness")]
@@ -309,20 +361,24 @@ pub fn project_coefficients(
                         let kpos_row = projection_matrix.pos_masks.data.as_ptr().add(row_base);
                         let kinc_row = projection_matrix.non_zero_masks.data.as_ptr().add(row_base);
 
+                        // Two independent accumulators for ILP (instruction-level parallelism).
+                        // Each holds a running sum of ±witness coefficients for this output coeff.
                         let mut acc0 = _mm512_setzero_si512();
                         let mut acc1 = _mm512_setzero_si512();
 
                         let mut chunk_idx = 0usize;
 
+                        // 2× unrolled: each chunk covers 8 u64 witness coefficients (one __m512i).
                         while chunk_idx + 1 < width {
-                            // raw, unchecked load of next bitmask of pos and inc (non-zero) indices
+                            // Load the bitmask byte: bit k is set iff column (chunk*8+k) is non-zero / positive.
                             let k_pos0 = *kpos_row.add(chunk_idx);
                             let k_inc0 = *kinc_row.add(chunk_idx);
 
-                            // masks of positives and negavtives indices
+                            // Split into positive-add and negative-subtract masks.
                             let add0: __mmask8 = (k_inc0 & k_pos0) as __mmask8;
                             let sub0: __mmask8 = (k_inc0 & !k_pos0) as __mmask8;
 
+                            // Map flat column index → (ring element index, offset within ring).
                             let ring0 = chunk_idx / blocks_per_ring;
                             let off0 = (chunk_idx - ring0 * blocks_per_ring) * 8;
 
@@ -352,6 +408,7 @@ pub fn project_coefficients(
                             chunk_idx += 2;
                         }
 
+                        // Scalar tail: handle the last chunk when width is odd.
                         if chunk_idx < width {
                             let k_pos = *kpos_row.add(chunk_idx);
                             let k_inc = *kinc_row.add(chunk_idx);
@@ -370,6 +427,8 @@ pub fn project_coefficients(
                             acc0 = _mm512_mask_sub_epi64(acc0, sub, acc0, coeff);
                         }
 
+                        // Merge the two accumulators and horizontal-sum all 8 lanes
+                        // into a single u64 that gets added to the output coefficient.
                         let acc = _mm512_add_epi64(acc0, acc1);
                         let sum = _mm512_reduce_add_epi64(acc) as u64;
                         *target = target.wrapping_add(sum);
@@ -412,27 +471,29 @@ pub fn project_coefficients(
     image_ct
 }
 
-// Compute batched projection: c'^t V where V = (I_d ⊗ embed_dual(J)) * (W)
-//
-// Instead of computing the full projection V and then batching, we perform the batching
-// during the projection computation using a tensor product decomposition.
-//
-// Mathematical structure:
-// - W ∈ R_q^{m × r} is the witness matrix
-// - J ∈ {-1,0,1}^{n_rp × m_rp} is the projection matrix (with n_rp = PROJECTION_HEIGHT)
-// - V = (I_d ⊗ embed_dual(J)) * W ∈ R^{d·n_rp × r} is the projected result in coefficient form
-// - c' ∈ Z^{d·n_rp·r} is the batching challenge, decomposed as c' = c'_0 ⊗ c'_1 where:
-//   * c'_0 ∈ Z^d (batches over coefficient blocks in the image)
-//   * c'_1 ∈ Z^{n_rp} (batches over PROJECTION_HEIGHT coefficients)
-//   * d = (witness.height / projection_ratio) * DEGREE / PROJECTION_HEIGHT
-//
-// Algorithm:
-// 1. J_batched = c'_1^T * J_embedded (batch projection matrix rows with dual embedding)
-// 2. result = c'_0^T ⊗ J_batched · W (tensor and vector-matrix product)
-//
-// Each c'_i is structured as a tensor product: c'_i = ⊗ (1 - l_j, l_j)
-// This allows us to sample only log(|c'_i|) random values (the layers l_j)
-// and compute any c'_i[k] on-the-fly using the binary representation of k.
+/// Computes batched projection: `c'^T V` where `V = (I_d ⊗ embed_dual(J)) · W`.
+///
+/// Instead of computing the full projection `V` and then batching, we perform the
+/// batching during the projection computation using a tensor product decomposition.
+///
+/// # Mathematical structure
+///
+/// - `W ∈ R_q^{m × r}` is the witness matrix.
+/// - `J ∈ {-1,0,1}^{n_rp × m_rp}` is the projection matrix (`n_rp = PROJECTION_HEIGHT`).
+/// - `V = (I_d ⊗ embed_dual(J)) · W ∈ R^{d·n_rp × r}` is the projected result.
+/// - `c'` is the batching challenge, decomposed as `c' = c'_0 ⊗ c'_1` where:
+///   * `c'_0 ∈ Z^d` batches over coefficient blocks in the image.
+///   * `c'_1 ∈ Z^{n_rp}` batches over `PROJECTION_HEIGHT` coefficients.
+///   * `d = (witness.height / projection_ratio) * DEGREE / PROJECTION_HEIGHT`.
+///
+/// # Algorithm
+///
+/// 1. `J_batched = c'_1^T · J_embedded` (batch projection matrix rows with dual embedding).
+/// 2. `result = c'_0^T ⊗ J_batched · W` (tensor and vector-matrix product).
+///
+/// Each `c'_i` is structured as a tensor product: `c'_i = ⊗ (1 - l_j, l_j)`.
+/// This allows sampling only `log(|c'_i|)` random values (the layers `l_j`)
+/// and computing any `c'_i[k]` on-the-fly from the binary representation of `k`.
 
 pub struct BatchedProjectionChallenges {
     pub c_0_values: Vec<u64>,

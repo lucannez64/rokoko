@@ -36,8 +36,16 @@ pub fn centered_i64_from_u64_mod_q_scalar(x: u64) -> i64 {
     }
 }
 
-// load 16x i64 registers, pack into 16x i16 register with _mm512_cvtepi64_epi16
-// directly loads the low 16 bit of i64 registers (signed truncating)
+/// Packs `i64` values into `i16` by signed truncation (keeping the low 16 bits).
+///
+/// On AVX-512, loads 16 × `i64` values (two `__m512i` registers of 8 lanes each),
+/// narrows them to 16 × `i16` via [`_mm512_cvtepi64_epi16`], and stores the two
+/// resulting `__m128i` vectors.  Falls back to scalar casts on other platforms.
+///
+/// # Panics
+///
+/// Panics if `dst.len() != src.len()` or `src.len()` is not a multiple of 16.
+/// In the scalar fallback, also panics (debug) if any value exceeds the `i16` range.
 #[inline(always)]
 pub fn pack_i64_to_i16_deg16(dst: &mut [i16], src: &[i64]) {
     debug_assert_eq!(dst.len(), src.len());
@@ -78,8 +86,16 @@ pub fn pack_i64_to_i16_deg16(dst: &mut [i16], src: &[i64]) {
     return;
 }
 
-// in_u64[i] ∈ [0, Q]
-// out_i64[i] ∈ [-Q/2, Q/2)
+/// Converts unsigned residues in `[0, Q)` to centred signed form in `(-Q/2, Q/2]`.
+///
+/// For each element `x`:
+/// - If `x > Q/2`, the result is `x − Q` (interpreted as a negative `i64`).
+/// - Otherwise the value is kept as-is.
+///
+/// On AVX-512, processes 8 lanes per iteration using
+/// [`_mm512_cmpgt_epu64_mask`] to identify the "negative" lanes and
+/// [`_mm512_mask_sub_epi64`] to subtract `Q` from them.
+/// Falls back to [`centered_i64_from_u64_mod_q_scalar`] on other platforms.
 #[inline(always)]
 pub fn centered_coeffs_u64_to_i64_inplace(out_i64: &mut [i64; DEGREE], in_u64: &[u64; DEGREE]) {
     debug_assert_eq!(out_i64.len(), in_u64.len());
@@ -115,6 +131,25 @@ pub fn centered_coeffs_u64_to_i64_inplace(out_i64: &mut [i64; DEGREE], in_u64: &
     }
 }
 
+/// Projects one row of the projection matrix against an `i16`-packed sub-witness,
+/// producing the result as `u64` residues modulo `Q`.
+///
+/// Given the pre-separated lists of positive (`pos`) and negative (`neg`) column
+/// indices for a single projection-matrix row, this function:
+///
+/// 1. Accumulates the positive witness rows via `_mm512_add_epi16`.
+/// 2. Accumulates the negated negative rows via `_mm512_sub_epi16`.
+/// 3. Combines both accumulators, unpacks 32 × `i16` lanes into `u64`
+///    (via [`convert_i16_as_u64`]), and reduces modulo `Q`.
+///
+/// Processes 32 `i16` lanes (one `__m512i`) per inner iteration.
+///
+/// # Arguments
+///
+/// * `subwitness_i16` – Slice of [`Signed16RingElement`]s (the packed witness rows).
+/// * `pos` – Column indices where the projection matrix entry is +1.
+/// * `neg` – Column indices where the projection matrix entry is −1.
+/// * `out_u64` – Output buffer of `DEGREE` `u64` values (reduced mod `Q`).
 #[cfg(all(target_arch = "x86_64", target_feature = "avx512f"))]
 pub fn project_one_row_i16_to_u64<const DEGREE: usize>(
     subwitness_i16: &[Signed16RingElement], // len = projection_ratio*H
@@ -159,6 +194,10 @@ pub fn project_one_row_i16_to_u64<const DEGREE: usize>(
     }
 }
 
+/// Scalar fallback for [`project_one_row_i16_to_u64`].
+///
+/// Uses `i32` accumulators (to avoid `i16` overflow) and final modular
+/// reduction to produce `u64` residues in `[0, Q)`.
 #[cfg(not(all(target_arch = "x86_64", target_feature = "avx512f")))]
 pub fn project_one_row_i16_to_u64<const DEGREE: usize>(
     subwitness_i16: &[Signed16RingElement],
@@ -252,6 +291,11 @@ pub unsafe fn sub_epi16_checked(a: __m512i, b: __m512i) -> __m512i {
     }
 }
 
+/// Unpacks the 32 × `i16` lanes of a `__m512i` into 32 consecutive `u64` values,
+/// mapping negative lanes to their canonical representative mod `Q` (by adding `Q`).
+///
+/// This is the final conversion step of [`project_one_row_i16_to_u64`]: it bridges
+/// the `i16` SIMD accumulator with the `u64` domain expected by [`eltwise_reduce_mod`].
 #[cfg(all(target_arch = "x86_64", target_feature = "avx512f"))]
 #[inline(always)]
 fn convert_i16_as_u64(dst_u64: *mut u64, v16x32: __m512i) {
