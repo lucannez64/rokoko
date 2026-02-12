@@ -200,7 +200,7 @@ This codebase has been benchmarked on a Precision 750, which features an Intel C
 
 Additionally, benchmarks of Greyhound (https://github.com/lattice-dogs/labrador) and SALSAA (https://github.com/lattice-arguments/salsaaa) have been recorded on the same machine for polynomial degrees 2^26 and 2^28.
 
-Due to memory requirements for polynomial degree 2^30 exceeding 64 GB, the respective benchmarks for Greyhound and SALSAA were run on a different machine (Dell PowerEdge XE8640 with Xeon Platinum 8468) and placed in the [experiments/sapphire_rapid](experiments/sapphire_rapid) folder.
+Due to memory requirements for polynomial degree 2^30 exceeding 64 GB, the respective benchmarks for Greyhound and SALSAA were run on a different machine (Dell PowerEdge XE8640 with Xeon Platinum 8468) and placed in the [experiments/sapphire_rapids](experiments/sapphire_rapids) folder.
 
 ## Features
 
