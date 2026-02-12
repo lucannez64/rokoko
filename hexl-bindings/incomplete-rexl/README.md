@@ -3,7 +3,7 @@
 A pure-Rust library for high-performance modular arithmetic and Number Theoretic
 Transforms (NTT), with AVX-512 acceleration.  Designed as a standalone
 replacement for Intel HEXL, with additional support for *incomplete NTT*
-multiplication. The library name
+multiplication. 
 
 > **Requires Rust nightly** (`#![feature(target_feature_inline_always)]`).
 
