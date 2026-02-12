@@ -10,7 +10,7 @@ Our protocol is run over power-of-two cyclotomic rings, and parameters are selec
 
 The sumcheck protocol efficiently enforces a collection of algebraic constraints over committed and folded witnesses. A general, highly modular interface for sumcheck protocols is provided, which supports different constraints and may be used for different relations.
 
-We implement vectorised random projections for full ring elements and coefficients, and specifically achieve a higher degree of vectorisation for the former by leveraging smaller registers and thus utilising a greater number of lanes.
+We implement two variants of commited random projections based on the Johnson-Lindestrauss lemma, a coarse (also referred as `Type0` in the codebase) variant applying a projection matrix to full ring elements, and a fine variant (`Type1`). projecting the coefficient of the witness ring elements. Both implementations are efficient and vectorised, specifically achieving a higher degree of vectorisation for the coarse projections by leveraging smaller registers and thus utilising a greater number of lanes.
 
 ## Build and Run Instructions
 
@@ -182,7 +182,7 @@ Witness decomposition-related settings:
 - `folded_witness_prefix: Prefix`
 - `composed_witness_length`
 
-Different kinds of projections can be selected through:
+The different variant of projections can be selected through:
 
 ```rust
 pub enum Projection {
@@ -192,7 +192,7 @@ pub enum Projection {
 }
 ```
 
-where `Type0` defines the random projection over the full ring elements, and `Type1` defines random projections over the ring coefficients.
+where, as mentioned above, `Type0` and `Type1` define the coarse and fine random projections respectively.
 
 ## Experiments
 
@@ -200,7 +200,7 @@ This codebase has been benchmarked on a Precision 750, which features an Intel C
 
 Additionally, benchmarks of Greyhound (https://github.com/lattice-dogs/labrador) and SALSAA (https://github.com/lattice-arguments/salsaaa) have been recorded on the same machine for polynomial degrees 2^26 and 2^28.
 
-Due to memory requirements for polynomial degree 2^30 exceeding 64 GB, the respective benchmarks for Greyhound and SALSAA were run on a different machine (Dell PowerEdge XE8640 with Xeon Platinum 8468) and placed in the `sapphire_rapids` folder.
+Due to memory requirements for polynomial degree 2^30 exceeding 64 GB, the respective benchmarks for Greyhound and SALSAA were run on a different machine (Dell PowerEdge XE8640 with Xeon Platinum 8468) and placed in the `experiments/sapphire_rapids` folder.
 
 ## Features
 
