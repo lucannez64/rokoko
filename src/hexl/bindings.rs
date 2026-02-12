@@ -1,7 +1,7 @@
 // ────────────────────────────────────────────────────────────────────
-// Pure-Rust HEXL implementation (feature = "rust-hexl", default)
+// Pure-Rust HEXL implementation (feature = "incomplete-rexl", default)
 // ────────────────────────────────────────────────────────────────────
-#[cfg(feature = "rust-hexl")]
+#[cfg(feature = "incomplete-rexl")]
 mod inner {
     use incomplete_rexl as hexl;
 
@@ -150,10 +150,10 @@ mod inner {
 }
 
 // ────────────────────────────────────────────────────────────────────
-// C++ Intel HEXL fallback (feature = "rust-hexl" disabled)
+// C++ Intel HEXL fallback (feature = "incomplete-rexl" disabled)
 // Requires: `make hexl && make wrapper` and LD_LIBRARY_PATH set.
 // ────────────────────────────────────────────────────────────────────
-#[cfg(not(feature = "rust-hexl"))]
+#[cfg(not(feature = "incomplete-rexl"))]
 mod inner {
     #[link(name = "hexl_wrapper")]
     extern "C" {

@@ -1,10 +1,10 @@
 fn main() {
-    // When the "rust-hexl" feature is enabled (default), everything is
+    // When the "incomplete-rexl" feature is enabled (default), everything is
     // pure Rust — no external linking required.
     //
-    // When "rust-hexl" is disabled, we fall back to the C++ Intel HEXL
+    // When "incomplete-rexl" is disabled, we fall back to the C++ Intel HEXL
     // shared library built via `make hexl && make wrapper`.
-    #[cfg(not(feature = "rust-hexl"))]
+    #[cfg(not(feature = "incomplete-rexl"))]
     {
         let manifest_dir = std::env::var("CARGO_MANIFEST_DIR").unwrap();
 

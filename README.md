@@ -30,7 +30,7 @@ If your platform does not support some of the instruction subsets (such as `avx5
 The protocol can be compiled and run directly with:
 
 ```
-cargo +nightly run --release --features rust-hexl
+cargo +nightly run --release --features incomplete-rexl
 ```
 
 
@@ -177,7 +177,7 @@ where, as mentioned above, `Type0` and `Type1` define the coarse and fine random
 
 ## Experiments
 
-This codebase has been benchmarked on a Precision 750, which features an Intel Core i7-11850H and 64 GB of memory. The benchmarks have been run using the pure-Rust back-end, specifically with the features `unsafe-sumcheck` and `rust-hexl` enabled. Logs have been placed under the [experiments/tiger_lake](experiments/tiger_lake) folder.
+This codebase has been benchmarked on a Precision 750, which features an Intel Core i7-11850H and 64 GB of memory. The benchmarks have been run using the pure-Rust back-end, specifically with the features `unsafe-sumcheck` and `incomplete-rexl` enabled. Logs have been placed under the [experiments/tiger_lake](experiments/tiger_lake) folder.
 
 Additionally, benchmarks of [Greyhound](https://github.com/lattice-dogs/labrador) and [SALSAA](https://github.com/lattice-arguments/salsaaa) have been recorded on the same machine for polynomial degrees 2^26 and 2^28.
 
@@ -185,7 +185,7 @@ Due to memory requirements for polynomial degree 2^30 exceeding 64 GB, the respe
 
 ## Features
 
-* `rust-hexl`: enables the pure-Rust ring arithmetic back-end
+* `incomplete-rexl`: enables the pure-Rust ring arithmetic back-end
 * `p-26`, `p-28`, `p-30`: parameters for polynomial degrees 2^26, 2^28, and 2^30 respectively
 * `unsafe-sumcheck`: enables zero-cost borrow checking by using `UnsafeCell` instead of `RefCell` in sumcheck subprotocols
 * `debug-hardness`: verifies the hardness of underlying SIS instances (requires [Lattice Estimator](https://github.com/malb/lattice-estimator) cloned as a submodule and [SageMath](https://www.sagemath.org/) installed)

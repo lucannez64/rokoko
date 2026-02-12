@@ -3,7 +3,7 @@
 Run the eltwise multiplication benchmarks (requires AVX-512):
 
 ```bash
-cargo bench --bench eltwise_bench --features rust-hexl
+cargo bench --bench eltwise_bench --features incomplete-rexl
 ```
 
 This benchmarks three kernels across polynomial degrees 2^6 through 2^13:
