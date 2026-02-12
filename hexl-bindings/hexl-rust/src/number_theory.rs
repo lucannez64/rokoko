@@ -183,21 +183,17 @@ pub fn multiply_mod_lazy<const BITSHIFT: usize>(
         modulus <= maximum_value(BITSHIFT as u64),
         "modulus exceeds bound"
     );
-    debug_assert!(
-        x <= maximum_value(BITSHIFT as u64),
-        "operand exceeds bound"
-    );
+    debug_assert!(x <= maximum_value(BITSHIFT as u64), "operand exceeds bound");
 
     let q = multiply_u64_hi::<BITSHIFT>(x, y_barrett_factor);
-    y_operand.wrapping_mul(x).wrapping_sub(q.wrapping_mul(modulus))
+    y_operand
+        .wrapping_mul(x)
+        .wrapping_sub(q.wrapping_mul(modulus))
 }
 
 pub fn multiply_mod_lazy_simple<const BITSHIFT: usize>(x: u64, y: u64, modulus: u64) -> u64 {
     debug_assert!(BITSHIFT == 64 || BITSHIFT == 52, "Unsupported BitShift");
-    debug_assert!(
-        x <= maximum_value(BITSHIFT as u64),
-        "operand exceeds bound"
-    );
+    debug_assert!(x <= maximum_value(BITSHIFT as u64), "operand exceeds bound");
     debug_assert!(y < modulus, "y must be < modulus");
     debug_assert!(
         modulus <= maximum_value(BITSHIFT as u64),
@@ -243,7 +239,10 @@ pub fn generate_primitive_root(degree: u64, modulus: u64) -> u64 {
             return root;
         }
     }
-    panic!("no primitive root found for degree {} modulus {}", degree, modulus);
+    panic!(
+        "no primitive root found for degree {} modulus {}",
+        degree, modulus
+    );
 }
 
 pub fn minimal_primitive_root(degree: u64, modulus: u64) -> u64 {
@@ -335,8 +334,7 @@ pub fn generate_primes(
         prime_upper_bound - (prime_upper_bound % (2 * ntt_size as i64)) + 1
     };
 
-    let prime_candidate_step =
-        (if prefer_small_primes { 1 } else { -1 }) * 2 * ntt_size as i64;
+    let prime_candidate_step = (if prefer_small_primes { 1 } else { -1 }) * 2 * ntt_size as i64;
 
     let continue_condition = |candidate: i64| {
         if prefer_small_primes {

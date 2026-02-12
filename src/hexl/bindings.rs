@@ -132,30 +132,20 @@ mod inner {
     }
 
     /// Fused incomplete NTT ring multiplication (Karatsuba + AVX512 float).
+    /// Shift factors are cached internally by hexl-rust.
     #[inline(always)]
     pub unsafe fn fused_incomplete_ntt_mult(
         result: *mut u64,
         operand1: *const u64,
         operand2: *const u64,
-        shift_factors: *const u64,
-        shift_factors_f64: *const f64,
+        _shift_factors: *const u64,
         n: usize,
         modulus: u64,
     ) {
         let result = std::slice::from_raw_parts_mut(result, 2 * n);
         let operand1 = std::slice::from_raw_parts(operand1, 2 * n);
         let operand2 = std::slice::from_raw_parts(operand2, 2 * n);
-        let shift_factors = std::slice::from_raw_parts(shift_factors, n);
-        let shift_factors_f64 = std::slice::from_raw_parts(shift_factors_f64, n);
-        hexl::fused_incomplete_ntt_mult(
-            result,
-            operand1,
-            operand2,
-            shift_factors,
-            shift_factors_f64,
-            n,
-            modulus,
-        );
+        hexl::fused_incomplete_ntt_mult(result, operand1, operand2, n, modulus);
     }
 }
 
@@ -228,7 +218,6 @@ mod inner {
         operand1: *const u64,
         operand2: *const u64,
         shift_factors: *const u64,
-        _shift_factors_f64: *const f64,
         n: usize,
         modulus: u64,
     ) {

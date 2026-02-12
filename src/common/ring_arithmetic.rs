@@ -493,21 +493,6 @@ pub static SHIFT_FACTORS: LazyLock<[u64; HALF_DEGREE]> = LazyLock::new(|| {
 
 pub static FIELD_SHIFT_FACTOR: LazyLock<u64> = LazyLock::new(|| SHIFT_FACTORS[0]);
 
-/// 64-byte aligned f64 array for AVX-512 aligned loads.
-#[repr(C, align(64))]
-pub struct AlignedF64<const N: usize>(pub [f64; N]);
-
-/// Shift factors precomputed as f64 for the fused AVX512 float kernel.
-/// Avoids a u64→f64 conversion on every ring multiplication call.
-/// Aligned to 64 bytes for cache-line-aligned `_mm512_load_pd`.
-pub static SHIFT_FACTORS_F64: LazyLock<AlignedF64<HALF_DEGREE>> = LazyLock::new(|| {
-    let mut factors_f64 = AlignedF64([0.0f64; HALF_DEGREE]);
-    for i in 0..HALF_DEGREE {
-        factors_f64.0[i] = SHIFT_FACTORS[i] as f64;
-    }
-    factors_f64
-});
-
 pub static INV_HALF_DEGREE: LazyLock<u64> =
     LazyLock::new(|| unsafe { power_mod(HALF_DEGREE as u64, MOD_Q - 2, MOD_Q) });
 
@@ -733,7 +718,6 @@ pub fn incomplete_ntt_multiplication_in_place(result: &mut RingElement, operand:
             result.v.as_ptr(),
             operand.v.as_ptr(),
             SHIFT_FACTORS.as_ptr(),
-            SHIFT_FACTORS_F64.0.as_ptr(),
             HALF_DEGREE,
             MOD_Q,
         );
@@ -780,7 +764,6 @@ pub fn incomplete_ntt_multiplication_inner(
                 op1_data.as_ptr(),
                 op2_data.as_ptr(),
                 SHIFT_FACTORS.as_ptr(),
-                SHIFT_FACTORS_F64.0.as_ptr(),
                 HALF_DEGREE,
                 MOD_Q,
             );
@@ -1555,7 +1538,6 @@ mod tests {
                     op1.v.as_ptr(),
                     op2.v.as_ptr(),
                     SHIFT_FACTORS.as_ptr(),
-                    SHIFT_FACTORS_F64.0.as_ptr(),
                     HALF_DEGREE,
                     MOD_Q,
                 );

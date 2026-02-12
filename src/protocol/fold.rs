@@ -23,7 +23,6 @@ pub fn fold(
     folded_witness
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;

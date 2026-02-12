@@ -55,25 +55,6 @@ fn fill_random(buf: &mut AlignedBuf<u64>) {
     }
 }
 
-/// Compute shift factors for half-degree `n` by NTT-forwarding [0, 1, 0, …].
-fn compute_shift_factors(n: usize) -> (AlignedBuf<u64>, AlignedBuf<f64>) {
-    let mut factors = AlignedBuf::<u64>::new(n);
-    if n > 1 {
-        factors.as_mut_slice()[1] = 1;
-    }
-    hexl_rust::ntt_forward_in_place(factors.as_mut_slice(), n, MODULUS);
-
-    let mut factors_f64 = AlignedBuf::<f64>::new(n);
-    for (dst, &src) in factors_f64
-        .as_mut_slice()
-        .iter_mut()
-        .zip(factors.as_slice())
-    {
-        *dst = src as f64;
-    }
-    (factors, factors_f64)
-}
-
 fn bench_eltwise_ops(c: &mut Criterion) {
     let mut group = c.benchmark_group("eltwise_mult_comparison");
 
@@ -129,7 +110,6 @@ fn bench_eltwise_ops(c: &mut Criterion) {
         let mut fused_result = AlignedBuf::<u64>::new(2 * n);
         fill_random(&mut fused_op1);
         fill_random(&mut fused_op2);
-        let (shift_factors, shift_factors_f64) = compute_shift_factors(n);
 
         // hexl-rust fused_incomplete_ntt_mult
         group.bench_with_input(
@@ -141,8 +121,6 @@ fn bench_eltwise_ops(c: &mut Criterion) {
                         black_box(fused_result.as_mut_slice()),
                         black_box(fused_op1.as_slice()),
                         black_box(fused_op2.as_slice()),
-                        black_box(shift_factors.as_slice()),
-                        black_box(shift_factors_f64.as_slice()),
                         black_box(n),
                         black_box(MODULUS),
                     );

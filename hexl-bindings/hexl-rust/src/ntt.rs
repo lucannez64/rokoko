@@ -1,10 +1,9 @@
+use crate::aligned_vec::{AlignedVecF64, AlignedVecU64};
 use crate::cpu_features::{HAS_AVX512DQ, HAS_AVX512IFMA};
 use crate::number_theory::{
-    add_uint_mod, inverse_mod, is_power_of_two, is_prime, log2, multiply_mod,
-    multiply_mod_lazy, reduce_mod, sub_uint_mod,
-    MultiplyFactor,
+    add_uint_mod, inverse_mod, is_power_of_two, is_prime, log2, multiply_mod, multiply_mod_lazy,
+    reduce_mod, sub_uint_mod, MultiplyFactor,
 };
-use crate::aligned_vec::AlignedVecU64;
 
 #[cfg(target_arch = "x86_64")]
 use std::arch::x86_64::*;
@@ -38,6 +37,10 @@ pub struct Ntt {
     precon52_inv_root_of_unity_powers: Vec<u64>,
     precon64_inv_root_of_unity_powers: Vec<u64>,
     inv_root_of_unity_powers: Vec<u64>,
+    /// Shift factors for incomplete-NTT multiplication: NTT of [0,1,0,…] at this degree.
+    shift_factors: Vec<u64>,
+    /// Same as `shift_factors` but pre-cast to f64 and 64-byte aligned for AVX-512.
+    shift_factors_f64: AlignedVecF64,
 }
 
 impl Ntt {
@@ -78,6 +81,8 @@ impl Ntt {
             precon52_inv_root_of_unity_powers: Vec::new(),
             precon64_inv_root_of_unity_powers: Vec::new(),
             inv_root_of_unity_powers: Vec::new(),
+            shift_factors: Vec::new(),
+            shift_factors_f64: AlignedVecF64::default(),
         };
         ntt.compute_root_of_unity_powers();
         ntt
@@ -127,6 +132,16 @@ impl Ntt {
         &self.precon64_inv_root_of_unity_powers
     }
 
+    /// Shift factors for incomplete-NTT multiplication (NTT of `[0, 1, 0, …]`).
+    pub fn shift_factors(&self) -> &[u64] {
+        &self.shift_factors
+    }
+
+    /// Shift factors as 64-byte-aligned f64 slice for the AVX-512 float kernel.
+    pub fn shift_factors_f64(&self) -> &[f64] {
+        self.shift_factors_f64.as_slice()
+    }
+
     pub fn compute_forward(
         &self,
         result: &mut [u64],
@@ -141,10 +156,7 @@ impl Ntt {
 
         #[cfg(target_arch = "x86_64")]
         unsafe {
-            if *HAS_AVX512IFMA
-                && self.modulus < Self::MAX_FWD_IFMA_MODULUS
-                && self.degree >= 16
-            {
+            if *HAS_AVX512IFMA && self.modulus < Self::MAX_FWD_IFMA_MODULUS && self.degree >= 16 {
                 forward_transform_to_bit_reverse_avx512::<{ Self::IFMA_SHIFT_BITS as i32 }>(
                     result.as_mut_ptr(),
                     operand.as_ptr(),
@@ -218,10 +230,7 @@ impl Ntt {
 
         #[cfg(target_arch = "x86_64")]
         unsafe {
-            if *HAS_AVX512IFMA
-                && self.modulus < Self::MAX_INV_IFMA_MODULUS
-                && self.degree >= 16
-            {
+            if *HAS_AVX512IFMA && self.modulus < Self::MAX_INV_IFMA_MODULUS && self.degree >= 16 {
                 inverse_transform_from_bit_reverse_avx512::<{ Self::IFMA_SHIFT_BITS as i32 }>(
                     result.as_mut_ptr(),
                     operand.as_ptr(),
@@ -339,8 +348,11 @@ impl Ntt {
 
         for i in 1..self.degree {
             let idx = crate::number_theory::reverse_bits(i, self.degree_bits);
-            root_of_unity_powers[idx as usize] =
-                multiply_mod(root_of_unity_powers[prev_idx as usize], self.root_of_unity, self.modulus);
+            root_of_unity_powers[idx as usize] = multiply_mod(
+                root_of_unity_powers[prev_idx as usize],
+                self.root_of_unity,
+                self.modulus,
+            );
             inv_root_of_unity_powers[idx as usize] =
                 inverse_mod(root_of_unity_powers[idx as usize], self.modulus);
             prev_idx = idx;
@@ -372,8 +384,7 @@ impl Ntt {
             (self.degree / 8) as usize..(self.degree / 4) as usize,
             w4_roots,
         );
-        self.avx512_root_of_unity_powers =
-            AlignedVecU64::from_vec(avx512_root_of_unity_powers);
+        self.avx512_root_of_unity_powers = AlignedVecU64::from_vec(avx512_root_of_unity_powers);
 
         let compute_barrett_vector = |values: &[u64], bit_shift: u64| -> Vec<u64> {
             let mut barrett_vector = Vec::with_capacity(values.len());
@@ -420,6 +431,19 @@ impl Ntt {
         }
         self.precon64_inv_root_of_unity_powers =
             compute_barrett_vector(&self.inv_root_of_unity_powers, 64);
+
+        // Compute shift factors for incomplete-NTT multiplication.
+        // shift_factors = NTT_forward([0, 1, 0, 0, …]) at degree n.
+        let mut sf = vec![0u64; n];
+        sf[1] = 1;
+        {
+            let operand = sf.clone();
+            self.compute_forward(&mut sf, &operand, 1, 1);
+        }
+        // Pre-cast to aligned f64 for the AVX-512 float path.
+        let sf_f64: Vec<f64> = sf.iter().map(|&v| v as f64).collect();
+        self.shift_factors_f64 = AlignedVecF64::from_vec(sf_f64);
+        self.shift_factors = sf;
     }
 }
 
@@ -588,14 +612,8 @@ fn forward_transform_to_bit_reverse_radix2(
                     for _ in 0..8 {
                         let x_op = result[x_r_idx];
                         let y_op = result[y_r_idx];
-                        let (x_new, y_new) = fwd_butterfly_radix2(
-                            x_op,
-                            y_op,
-                            w,
-                            w_precon,
-                            modulus,
-                            twice_modulus,
-                        );
+                        let (x_new, y_new) =
+                            fwd_butterfly_radix2(x_op, y_op, w, w_precon, modulus, twice_modulus);
                         result[x_r_idx] = x_new;
                         result[y_r_idx] = y_new;
                         x_r_idx += 1;
@@ -616,14 +634,8 @@ fn forward_transform_to_bit_reverse_radix2(
                     for _ in 0..4 {
                         let x_op = result[x_r_idx];
                         let y_op = result[y_r_idx];
-                        let (x_new, y_new) = fwd_butterfly_radix2(
-                            x_op,
-                            y_op,
-                            w,
-                            w_precon,
-                            modulus,
-                            twice_modulus,
-                        );
+                        let (x_new, y_new) =
+                            fwd_butterfly_radix2(x_op, y_op, w, w_precon, modulus, twice_modulus);
                         result[x_r_idx] = x_new;
                         result[y_r_idx] = y_new;
                         x_r_idx += 1;
@@ -644,14 +656,8 @@ fn forward_transform_to_bit_reverse_radix2(
                     for _ in 0..2 {
                         let x_op = result[x_r_idx];
                         let y_op = result[y_r_idx];
-                        let (x_new, y_new) = fwd_butterfly_radix2(
-                            x_op,
-                            y_op,
-                            w,
-                            w_precon,
-                            modulus,
-                            twice_modulus,
-                        );
+                        let (x_new, y_new) =
+                            fwd_butterfly_radix2(x_op, y_op, w, w_precon, modulus, twice_modulus);
                         result[x_r_idx] = x_new;
                         result[y_r_idx] = y_new;
                         x_r_idx += 1;
@@ -1837,7 +1843,8 @@ unsafe fn inverse_transform_from_bit_reverse_avx512<const BITSHIFT: i32>(
         let inv_n = mf_inv_n.operand();
         let inv_n_prime = mf_inv_n.barrett_factor();
 
-        let mf_inv_n_w = MultiplyFactor::new(multiply_mod(inv_n, w, modulus), BITSHIFT as u64, modulus);
+        let mf_inv_n_w =
+            MultiplyFactor::new(multiply_mod(inv_n, w, modulus), BITSHIFT as u64, modulus);
         let inv_n_w = mf_inv_n_w.operand();
         let inv_n_w_prime = mf_inv_n_w.barrett_factor();
 

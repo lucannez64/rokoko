@@ -9,8 +9,8 @@ use crate::util::multiply_u64_full;
 use crate::avx512_util::{
     mm512_hexl_barrett_reduce64, mm512_hexl_mulhi_approx_epi, mm512_hexl_mulhi_epi,
     mm512_hexl_mullo_add_lo_epi, mm512_hexl_mullo_epi, mm512_hexl_shrdi_epi64,
-    mm512_hexl_shrdi_epi64_runtime, mm512_hexl_small_add_mod_epi64,
-    mm512_hexl_small_mod_epu64, mm512_hexl_small_sub_mod_epi64,
+    mm512_hexl_shrdi_epi64_runtime, mm512_hexl_small_add_mod_epi64, mm512_hexl_small_mod_epu64,
+    mm512_hexl_small_sub_mod_epi64,
 };
 
 #[cfg(target_arch = "x86_64")]
@@ -80,12 +80,7 @@ pub fn eltwise_add_mod(result: &mut [u64], operand1: &[u64], operand2: &[u64], m
     eltwise_add_mod_native(result, operand1, operand2, modulus);
 }
 
-fn eltwise_add_mod_native(
-    result: &mut [u64],
-    operand1: &[u64],
-    operand2: &[u64],
-    modulus: u64,
-) {
+fn eltwise_add_mod_native(result: &mut [u64], operand1: &[u64], operand2: &[u64], modulus: u64) {
     for i in 0..result.len() {
         let sum = operand1[i] + operand2[i];
         result[i] = if sum >= modulus { sum - modulus } else { sum };
@@ -150,12 +145,7 @@ pub fn eltwise_sub_mod(result: &mut [u64], operand1: &[u64], operand2: &[u64], m
     eltwise_sub_mod_native(result, operand1, operand2, modulus);
 }
 
-fn eltwise_sub_mod_native(
-    result: &mut [u64],
-    operand1: &[u64],
-    operand2: &[u64],
-    modulus: u64,
-) {
+fn eltwise_sub_mod_native(result: &mut [u64], operand1: &[u64], operand2: &[u64], modulus: u64) {
     for i in 0..result.len() {
         if operand1[i] >= operand2[i] {
             result[i] = operand1[i] - operand2[i];
@@ -249,7 +239,13 @@ pub fn eltwise_reduce_mod(result: &mut [u64], operand: &[u64], modulus: u64) {
         }
     }
 
-    eltwise_reduce_mod_native(result, operand, modulus, input_mod_factor, output_mod_factor);
+    eltwise_reduce_mod_native(
+        result,
+        operand,
+        modulus,
+        input_mod_factor,
+        output_mod_factor,
+    );
 }
 
 fn eltwise_reduce_mod_native(
@@ -329,9 +325,12 @@ unsafe fn eltwise_reduce_mod_avx512<const BITSHIFT: i32>(
     let prod_right_shift = (ceil_log_mod as i64 + beta) as u64;
     let v_neg_mod = _mm512_set1_epi64(-(modulus as i64));
 
-    let mut barrett_factor =
-        MultiplyFactor::new(1u64 << (ceil_log_mod + alpha as u64 - BITSHIFT as u64), BITSHIFT as u64, modulus)
-            .barrett_factor();
+    let mut barrett_factor = MultiplyFactor::new(
+        1u64 << (ceil_log_mod + alpha as u64 - BITSHIFT as u64),
+        BITSHIFT as u64,
+        modulus,
+    )
+    .barrett_factor();
     let barrett_factor_52 = MultiplyFactor::new(1, 52, modulus).barrett_factor();
 
     if BITSHIFT == 64 {
@@ -430,12 +429,7 @@ unsafe fn eltwise_reduce_mod_avx512<const BITSHIFT: i32>(
     }
 }
 
-pub fn eltwise_mult_mod(
-    result: &mut [u64],
-    operand1: &[u64],
-    operand2: &[u64],
-    modulus: u64,
-) {
+pub fn eltwise_mult_mod(result: &mut [u64], operand1: &[u64], operand2: &[u64], modulus: u64) {
     let n = result.len();
     if n == 0 {
         return;
@@ -498,9 +492,8 @@ fn eltwise_mult_mod_native<const INPUT_MOD_FACTOR: u64>(
     let ceil_log_mod = log2(modulus) + 1;
     let prod_right_shift = (ceil_log_mod as i64 + beta) as u64;
 
-    let barr_lo =
-        MultiplyFactor::new(1u64 << (ceil_log_mod + alpha as u64 - 64), 64, modulus)
-            .barrett_factor();
+    let barr_lo = MultiplyFactor::new(1u64 << (ceil_log_mod + alpha as u64 - 64), 64, modulus)
+        .barrett_factor();
 
     let twice_modulus = 2 * modulus;
 
@@ -520,7 +513,10 @@ fn eltwise_mult_mod_native<const INPUT_MOD_FACTOR: u64>(
 #[cfg(target_arch = "x86_64")]
 #[target_feature(enable = "avx512f,avx512dq,avx512ifma")]
 #[inline(always)]
-unsafe fn eltwise_mult_mod_avx512_dq_int_loop_const<const PROD_RIGHT_SHIFT: i32, const INPUT_MOD_FACTOR: i32>(
+unsafe fn eltwise_mult_mod_avx512_dq_int_loop_const<
+    const PROD_RIGHT_SHIFT: i32,
+    const INPUT_MOD_FACTOR: i32,
+>(
     vp_result: *mut __m512i,
     vp_operand1: *const __m512i,
     vp_operand2: *const __m512i,
@@ -537,8 +533,18 @@ unsafe fn eltwise_mult_mod_avx512_dq_int_loop_const<const PROD_RIGHT_SHIFT: i32,
         let mut v_op1 = _mm512_loadu_si512(op1_ptr);
         let mut v_op2 = _mm512_loadu_si512(op2_ptr);
 
-        v_op1 = mm512_hexl_small_mod_epu64::<INPUT_MOD_FACTOR>(v_op1, v_modulus, Some(&v_twice_mod), None);
-        v_op2 = mm512_hexl_small_mod_epu64::<INPUT_MOD_FACTOR>(v_op2, v_modulus, Some(&v_twice_mod), None);
+        v_op1 = mm512_hexl_small_mod_epu64::<INPUT_MOD_FACTOR>(
+            v_op1,
+            v_modulus,
+            Some(&v_twice_mod),
+            None,
+        );
+        v_op2 = mm512_hexl_small_mod_epu64::<INPUT_MOD_FACTOR>(
+            v_op2,
+            v_modulus,
+            Some(&v_twice_mod),
+            None,
+        );
 
         let v_prod_hi = mm512_hexl_mulhi_epi::<64>(v_op1, v_op2);
         let v_prod_lo = mm512_hexl_mullo_epi::<64>(v_op1, v_op2);
@@ -576,8 +582,18 @@ unsafe fn eltwise_mult_mod_avx512_dq_int_loop_runtime<const INPUT_MOD_FACTOR: i3
         let mut v_op1 = _mm512_loadu_si512(op1_ptr);
         let mut v_op2 = _mm512_loadu_si512(op2_ptr);
 
-        v_op1 = mm512_hexl_small_mod_epu64::<INPUT_MOD_FACTOR>(v_op1, v_modulus, Some(&v_twice_mod), None);
-        v_op2 = mm512_hexl_small_mod_epu64::<INPUT_MOD_FACTOR>(v_op2, v_modulus, Some(&v_twice_mod), None);
+        v_op1 = mm512_hexl_small_mod_epu64::<INPUT_MOD_FACTOR>(
+            v_op1,
+            v_modulus,
+            Some(&v_twice_mod),
+            None,
+        );
+        v_op2 = mm512_hexl_small_mod_epu64::<INPUT_MOD_FACTOR>(
+            v_op2,
+            v_modulus,
+            Some(&v_twice_mod),
+            None,
+        );
 
         let v_prod_hi = mm512_hexl_mulhi_epi::<64>(v_op1, v_op2);
         let v_prod_lo = mm512_hexl_mullo_epi::<64>(v_op1, v_op2);
@@ -632,9 +648,8 @@ unsafe fn eltwise_mult_mod_avx512_dq_int<const INPUT_MOD_FACTOR: i32>(
     let ceil_log_mod = log2(modulus) + 1;
     let prod_right_shift = (ceil_log_mod as i64 + beta) as u64;
 
-    let barr_lo =
-        MultiplyFactor::new(1u64 << (ceil_log_mod + alpha as u64 - 64), 64, modulus)
-            .barrett_factor();
+    let barr_lo = MultiplyFactor::new(1u64 << (ceil_log_mod + alpha as u64 - 64), 64, modulus)
+        .barrett_factor();
 
     let v_barr_lo = _mm512_set1_epi64(barr_lo as i64);
     let v_modulus = _mm512_set1_epi64(modulus as i64);
@@ -644,8 +659,7 @@ unsafe fn eltwise_mult_mod_avx512_dq_int<const INPUT_MOD_FACTOR: i32>(
     let vp_operand2 = op2.as_ptr() as *const __m512i;
     let vp_result = res.as_mut_ptr() as *mut __m512i;
 
-    let reduce_mod =
-        2 * log2(INPUT_MOD_FACTOR as u64) + prod_right_shift + (-beta as u64) >= 63;
+    let reduce_mod = 2 * log2(INPUT_MOD_FACTOR as u64) + prod_right_shift + (-beta as u64) >= 63;
 
     if reduce_mod {
         match prod_right_shift {
@@ -851,7 +865,7 @@ unsafe fn eltwise_mult_mod_avx512_float_loop<const INPUT_MOD_FACTOR: i32>(
     // Process 2 vectors per iteration for better ILP
     let n_unroll = (n / 16) * 16;
     let mut i = 0;
-    
+
     while i < n_unroll {
         // Load 2 vectors from each operand
         let mut v_op1_a = _mm512_loadu_si512(op1_ptr);
@@ -860,10 +874,30 @@ unsafe fn eltwise_mult_mod_avx512_float_loop<const INPUT_MOD_FACTOR: i32>(
         let mut v_op2_b = _mm512_loadu_si512(op2_ptr.add(1));
 
         // Reduce both pairs (independent operations)
-        v_op1_a = mm512_hexl_small_mod_epu64::<INPUT_MOD_FACTOR>(v_op1_a, v_modulus, Some(&v_twice_mod), None);
-        v_op1_b = mm512_hexl_small_mod_epu64::<INPUT_MOD_FACTOR>(v_op1_b, v_modulus, Some(&v_twice_mod), None);
-        v_op2_a = mm512_hexl_small_mod_epu64::<INPUT_MOD_FACTOR>(v_op2_a, v_modulus, Some(&v_twice_mod), None);
-        v_op2_b = mm512_hexl_small_mod_epu64::<INPUT_MOD_FACTOR>(v_op2_b, v_modulus, Some(&v_twice_mod), None);
+        v_op1_a = mm512_hexl_small_mod_epu64::<INPUT_MOD_FACTOR>(
+            v_op1_a,
+            v_modulus,
+            Some(&v_twice_mod),
+            None,
+        );
+        v_op1_b = mm512_hexl_small_mod_epu64::<INPUT_MOD_FACTOR>(
+            v_op1_b,
+            v_modulus,
+            Some(&v_twice_mod),
+            None,
+        );
+        v_op2_a = mm512_hexl_small_mod_epu64::<INPUT_MOD_FACTOR>(
+            v_op2_a,
+            v_modulus,
+            Some(&v_twice_mod),
+            None,
+        );
+        v_op2_b = mm512_hexl_small_mod_epu64::<INPUT_MOD_FACTOR>(
+            v_op2_b,
+            v_modulus,
+            Some(&v_twice_mod),
+            None,
+        );
 
         // Convert to double (independent)
         let v_x_a = _mm512_cvt_roundepu64_pd(v_op1_a, ROUND_MODE);
@@ -874,24 +908,24 @@ unsafe fn eltwise_mult_mod_avx512_float_loop<const INPUT_MOD_FACTOR: i32>(
         // Multiply high parts (independent chains)
         let v_h_a = _mm512_mul_pd(v_x_a, v_y_a);
         let v_h_b = _mm512_mul_pd(v_x_b, v_y_b);
-        
+
         // Compute low parts (FMA ports)
         let v_l_a = _mm512_fmsub_pd(v_x_a, v_y_a, v_h_a);
         let v_l_b = _mm512_fmsub_pd(v_x_b, v_y_b, v_h_b);
-        
+
         // Barrett reduction prep
         let v_b_a = _mm512_mul_pd(v_h_a, v_u);
         let v_b_b = _mm512_mul_pd(v_h_b, v_u);
-        
+
         let v_c_a = _mm512_roundscale_pd(v_b_a, _MM_FROUND_TO_NEG_INF | _MM_FROUND_NO_EXC);
         let v_c_b = _mm512_roundscale_pd(v_b_b, _MM_FROUND_TO_NEG_INF | _MM_FROUND_NO_EXC);
-        
+
         let v_d_a = _mm512_fnmadd_pd(v_c_a, v_p, v_h_a);
         let v_d_b = _mm512_fnmadd_pd(v_c_b, v_p, v_h_b);
-        
+
         let mut v_g_a = _mm512_add_pd(v_d_a, v_l_a);
         let mut v_g_b = _mm512_add_pd(v_d_b, v_l_b);
-        
+
         // Conditional add
         let m_a = _mm512_cmp_pd_mask(v_g_a, _mm512_setzero_pd(), _CMP_LT_OQ);
         let m_b = _mm512_cmp_pd_mask(v_g_b, _mm512_setzero_pd(), _CMP_LT_OQ);
@@ -901,7 +935,7 @@ unsafe fn eltwise_mult_mod_avx512_float_loop<const INPUT_MOD_FACTOR: i32>(
         // Convert back and store
         let v_result_a = _mm512_cvt_roundpd_epu64(v_g_a, ROUND_MODE);
         let v_result_b = _mm512_cvt_roundpd_epu64(v_g_b, ROUND_MODE);
-        
+
         _mm512_storeu_si512(res_ptr, v_result_a);
         _mm512_storeu_si512(res_ptr.add(1), v_result_b);
 
@@ -909,6 +943,41 @@ unsafe fn eltwise_mult_mod_avx512_float_loop<const INPUT_MOD_FACTOR: i32>(
         op1_ptr = op1_ptr.add(2);
         op2_ptr = op2_ptr.add(2);
         i += 16;
+    }
+
+    // Handle remaining 8-element tail (when n is not a multiple of 16)
+    if i < n {
+        let v_op1 = _mm512_loadu_si512(op1_ptr);
+        let v_op2 = _mm512_loadu_si512(op2_ptr);
+
+        let v_op1 = mm512_hexl_small_mod_epu64::<INPUT_MOD_FACTOR>(
+            v_op1,
+            v_modulus,
+            Some(&v_twice_mod),
+            None,
+        );
+        let v_op2 = mm512_hexl_small_mod_epu64::<INPUT_MOD_FACTOR>(
+            v_op2,
+            v_modulus,
+            Some(&v_twice_mod),
+            None,
+        );
+
+        let v_x = _mm512_cvt_roundepu64_pd(v_op1, ROUND_MODE);
+        let v_y = _mm512_cvt_roundepu64_pd(v_op2, ROUND_MODE);
+
+        let v_h = _mm512_mul_pd(v_x, v_y);
+        let v_l = _mm512_fmsub_pd(v_x, v_y, v_h);
+        let v_b = _mm512_mul_pd(v_h, v_u);
+        let v_c = _mm512_roundscale_pd(v_b, _MM_FROUND_TO_NEG_INF | _MM_FROUND_NO_EXC);
+        let v_d = _mm512_fnmadd_pd(v_c, v_p, v_h);
+        let mut v_g = _mm512_add_pd(v_d, v_l);
+
+        let m = _mm512_cmp_pd_mask(v_g, _mm512_setzero_pd(), _CMP_LT_OQ);
+        v_g = _mm512_mask_add_pd(v_g, m, v_g, v_p);
+
+        let v_result = _mm512_cvt_roundpd_epu64(v_g, ROUND_MODE);
+        _mm512_storeu_si512(res_ptr, v_result);
     }
 }
 
@@ -954,7 +1023,8 @@ unsafe fn eltwise_mult_mod_avx512_float<const INPUT_MOD_FACTOR: i32>(
     let vp_operand2 = op2.as_ptr() as *const __m512i;
     let vp_result = res.as_mut_ptr() as *mut __m512i;
 
-    let no_input_reduce_mod = (INPUT_MOD_FACTOR as u64 * INPUT_MOD_FACTOR as u64 * modulus) < (1u64 << 50);
+    let no_input_reduce_mod =
+        (INPUT_MOD_FACTOR as u64 * INPUT_MOD_FACTOR as u64 * modulus) < (1u64 << 50);
     if no_input_reduce_mod {
         eltwise_mult_mod_avx512_float_loop::<1>(
             vp_result,
@@ -980,13 +1050,7 @@ unsafe fn eltwise_mult_mod_avx512_float<const INPUT_MOD_FACTOR: i32>(
     }
 }
 
-pub fn eltwise_fma_mod(
-    result: &mut [u64],
-    arg1: &[u64],
-    arg2: u64,
-    arg3: &[u64],
-    modulus: u64,
-) {
+pub fn eltwise_fma_mod(result: &mut [u64], arg1: &[u64], arg2: u64, arg3: &[u64], modulus: u64) {
     let input_mod_factor = 1u64;
     eltwise_fma_mod_internal(result, arg1, arg2, Some(arg3), modulus, input_mod_factor);
 }
@@ -999,7 +1063,12 @@ fn eltwise_fma_mod_internal(
     modulus: u64,
     input_mod_factor: u64,
 ) {
-    debug_assert!(input_mod_factor == 1 || input_mod_factor == 2 || input_mod_factor == 4 || input_mod_factor == 8);
+    debug_assert!(
+        input_mod_factor == 1
+            || input_mod_factor == 2
+            || input_mod_factor == 4
+            || input_mod_factor == 8
+    );
 
     #[cfg(target_arch = "x86_64")]
     {
@@ -1091,8 +1160,7 @@ fn eltwise_fma_mod_native<const INPUT_MOD_FACTOR: u64>(
 #[cfg(target_arch = "x86_64")]
 #[target_feature(enable = "avx512f,avx512dq,avx512ifma")]
 #[inline]
-unsafe fn eltwise_fma_mod_avx512<const BITSHIFT: i32, const INPUT_MOD_FACTOR: i32>
-(
+unsafe fn eltwise_fma_mod_avx512<const BITSHIFT: i32, const INPUT_MOD_FACTOR: i32>(
     result: &mut [u64],
     arg1: &[u64],
     arg2: u64,
@@ -1209,8 +1277,12 @@ unsafe fn eltwise_fma_mod_avx512<const BITSHIFT: i32, const INPUT_MOD_FACTOR: i3
 ///
 /// Uses the Karatsuba identity  b·c + a·d = (a+b)(c+d) − a·c − b·d  to reduce
 /// from 5 modular multiplications to 4, cutting FMA-port pressure by 20%.
+///
+/// This is the low-level inner routine that accepts explicit shift-factor slices.
+/// Prefer the higher-level `fused_incomplete_ntt_mult` in `lib.rs` which caches
+/// the shift factors automatically.
 #[inline]
-pub fn fused_incomplete_ntt_mult(
+pub fn fused_incomplete_ntt_mult_inner(
     result: &mut [u64],
     operand1: &[u64],
     operand2: &[u64],
@@ -1231,7 +1303,12 @@ pub fn fused_incomplete_ntt_mult(
         if *HAS_AVX512DQ && modulus < (1u64 << 50) {
             unsafe {
                 fused_incomplete_ntt_mult_avx512_float(
-                    result, operand1, operand2, shift_factors_f64, n, modulus,
+                    result,
+                    operand1,
+                    operand2,
+                    shift_factors_f64,
+                    n,
+                    modulus,
                 );
                 return;
             }
@@ -1340,21 +1417,21 @@ unsafe fn fused_incomplete_ntt_mult_avx512_float(
     let mut i = 0usize;
     while i < n {
         // Load 4 operand vectors as u64, 1 shift vector as precomputed f64.
-        // All pointers are 64-byte aligned (RingElement has repr(align(64)),
-        // shift_factors_f64 uses AlignedF64), and `n` is a multiple of 8,
-        // so every load/store lands on a cache-line boundary.
-        let v_a = _mm512_load_si512(op1_e.add(i) as *const __m512i);
-        let v_b = _mm512_load_si512(op1_o.add(i) as *const __m512i);
-        let v_c = _mm512_load_si512(op2_e.add(i) as *const __m512i);
-        let v_d = _mm512_load_si512(op2_o.add(i) as *const __m512i);
+        // Using unaligned loads for compatibility with arbitrary allocators;
+        // on modern x86 the penalty is zero when data happens to be aligned.
+        let v_a = _mm512_loadu_si512(op1_e.add(i) as *const __m512i);
+        let v_b = _mm512_loadu_si512(op1_o.add(i) as *const __m512i);
+        let v_c = _mm512_loadu_si512(op2_e.add(i) as *const __m512i);
+        let v_d = _mm512_loadu_si512(op2_o.add(i) as *const __m512i);
 
         // Convert operands to double (all values < 2^50, exactly representable)
         let f_a = _mm512_cvt_roundepu64_pd(v_a, ROUND_MODE);
         let f_b = _mm512_cvt_roundepu64_pd(v_b, ROUND_MODE);
         let f_c = _mm512_cvt_roundepu64_pd(v_c, ROUND_MODE);
         let f_d = _mm512_cvt_roundepu64_pd(v_d, ROUND_MODE);
-        // Shift factors already f64 — direct aligned load, no conversion needed
-        let f_s = _mm512_load_pd(shift_f.add(i));
+        // Shift factors already f64 — use unaligned load for portability.
+        // The internal AlignedVecF64 guarantees alignment, so no perf penalty.
+        let f_s = _mm512_loadu_pd(shift_f.add(i));
 
         // Karatsuba prep: (a+b) mod q, (c+d) mod q — cheap float adds
         let f_ab = fadd_mod!(f_a, f_b);
@@ -1378,8 +1455,8 @@ unsafe fn fused_incomplete_ntt_mult_avx512_float(
         // Convert back to integers and store
         let v_re = _mm512_cvt_roundpd_epu64(f_re, ROUND_MODE);
         let v_ro = _mm512_cvt_roundpd_epu64(f_ro, ROUND_MODE);
-        _mm512_store_si512(res_e.add(i) as *mut __m512i, v_re);
-        _mm512_store_si512(res_o.add(i) as *mut __m512i, v_ro);
+        _mm512_storeu_si512(res_e.add(i) as *mut __m512i, v_re);
+        _mm512_storeu_si512(res_o.add(i) as *mut __m512i, v_ro);
 
         i += 8;
     }
