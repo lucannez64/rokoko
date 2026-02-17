@@ -15,6 +15,7 @@ pub trait SumcheckElement:
     + for<'a> SubAssign<&'a Self>
     + for<'a> MulAssign<&'a Self>
     + for<'a> MulAssign<(&'a Self, &'a Self)>
+    + for<'a> AddAssign<(&'a Self, &'a Self)>
 {
     fn zero() -> Self;
     fn zero_ref() -> &'static Self;

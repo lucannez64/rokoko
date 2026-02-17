@@ -1123,6 +1123,13 @@ impl<'a> AddAssign<&'a QuadraticExtension> for QuadraticExtension {
     }
 }
 
+impl<'a> AddAssign<(&'a QuadraticExtension, &'a QuadraticExtension)> for QuadraticExtension {
+    fn add_assign(&mut self, other: (&'a QuadraticExtension, &'a QuadraticExtension)) {
+        let (op1, op2) = other;
+        self.coeffs[0] = unsafe { add_mod(op1.coeffs[0], op2.coeffs[0], MOD_Q) };
+        self.coeffs[1] = unsafe { add_mod(op1.coeffs[1], op2.coeffs[1], MOD_Q) };
+    }
+}
 impl<'a> SubAssign<&'a QuadraticExtension> for QuadraticExtension {
     fn sub_assign(&mut self, other: &'a QuadraticExtension) {
         unsafe {

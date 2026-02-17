@@ -75,16 +75,30 @@ pub fn mul_poly_into<E: SumcheckElement>(
     // result.set_zero();
 
     if poly_0.num_coefficients == 2 && poly_1.num_coefficients == 2 {
-        // Both are linear: (a0 + a1*x) * (b0 + b1*x) = a0*b0 + (a0*b1 + a1*b0)*x + a1*b1*x^2
+        // Both are linear. Use Karatsuba with 3 multiplications:
+        // z0 = a0*b0, z2 = a1*b1, z1 = (a0+a1)(b0+b1) - z0 - z2.
 
         let (first, rest) = result.coefficients.split_at_mut(1);
         let (second, third) = rest.split_at_mut(1);
 
-        first[0] *= (&poly_0.coefficients[0], &poly_1.coefficients[1]); // buffer
-        second[0] *= (&poly_0.coefficients[1], &poly_1.coefficients[0]);
-        second[0] += &first[0];
+        // first = a0 + a1
+        first[0].set_from(&poly_0.coefficients[0]);
+        first[0] += &poly_0.coefficients[1];
+
+        // third = b0 + b1
+        third[0].set_from(&poly_1.coefficients[0]);
+        third[0] += &poly_1.coefficients[1];
+
+        // second = (a0 + a1) * (b0 + b1)
+        second[0] *= (&first[0], &third[0]);
+
+        // first = a0 * b0, third = a1 * b1
         first[0] *= (&poly_0.coefficients[0], &poly_1.coefficients[0]);
         third[0] *= (&poly_0.coefficients[1], &poly_1.coefficients[1]);
+
+        // second = z1 = second - first - third
+        second[0] -= &first[0];
+        second[0] -= &third[0];
 
         result.num_coefficients = 3;
         return;
