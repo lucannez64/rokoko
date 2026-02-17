@@ -67,7 +67,7 @@ fn main() {
         }
     }
 
-    #[cfg(feature = "rust-hexl")]
+    #[cfg(feature = "incomplete-rexl")]
     {
         // Trigger CPU feature detection and print features if enabled
         incomplete_rexl::cpu_features::print_features();

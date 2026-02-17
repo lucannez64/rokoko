@@ -6,7 +6,7 @@ edition = "2021"
 [features]
 # Use the pure-Rust HEXL replacement (incomplete-rexl) with AVX-512 kernels.
 # When disabled, falls back to C++ Intel HEXL via FFI (requires libhexl_wrapper.so).
-rust-hexl = ["dep:incomplete-rexl"]
+incomplete-rexl = ["dep:incomplete-rexl"]
 # Enables zero-cost borrow checking by using UnsafeCell instead of RefCell
 # WARNING: Only safe if mutations never overlap with reads
 unsafe-sumcheck = []
@@ -48,5 +48,4 @@ harness = false
 [[bench]]
 name = "eltwise_bench"
 harness = false
-required-features = ["rust-hexl"]
-
+required-features = ["incomplete-rexl"]
