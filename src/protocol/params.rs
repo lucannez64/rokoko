@@ -71,7 +71,7 @@ pub static P: LazyLock<Config> = LazyLock::new(|| {
         ),
         projection_ratio: 1,              // no-op
         projection_height: 2usize.pow(8), // no-op,
-        basic_commitment_rank: cfg_p26(8, 9),
+        basic_commitment_rank: 8,
         nof_openings: 1,
         commitment_recursion: AuxRecursionConfig {
             decomposition_base_log: 7,
@@ -101,7 +101,7 @@ pub static P_1: LazyLock<AuxSumcheckConfig> = LazyLock::new(|| {
         witness_width: cfg_p26(2usize.pow(3), 2usize.pow(4)),
         projection_ratio: 2usize.pow(5),
         projection_height: 2usize.pow(8),
-        basic_commitment_rank: cfg_p30(8, 7),
+        basic_commitment_rank: cfg_p30(7, 6),
         nof_openings: 2,
         commitment_recursion: AuxRecursionConfig {
             decomposition_base_log: 7,
@@ -135,7 +135,7 @@ pub static P_2: LazyLock<AuxSumcheckConfig> = LazyLock::new(|| AuxSumcheckConfig
     witness_width: 2usize.pow(5),
     projection_ratio: cfg_p30(2usize.pow(8), 2usize.pow(5)),
     projection_height: 2usize.pow(8),
-    basic_commitment_rank: 7,
+    basic_commitment_rank: 6,
     nof_openings: 2,
     commitment_recursion: AuxRecursionConfig {
         decomposition_base_log: 7,
@@ -176,7 +176,7 @@ pub static P_3: LazyLock<AuxSumcheckConfig> = LazyLock::new(|| AuxSumcheckConfig
     witness_width: 2usize.pow(5),
     projection_ratio: 2usize.pow(6),
     projection_height: 2usize.pow(8),
-    basic_commitment_rank: 6,
+    basic_commitment_rank: 5,
     nof_openings: 2,
     commitment_recursion: AuxRecursionConfig {
         decomposition_base_log: 7,
@@ -217,7 +217,7 @@ pub static P_4: LazyLock<AuxSumcheckConfig> = LazyLock::new(|| AuxSumcheckConfig
     witness_width: 2usize.pow(3),
     projection_ratio: 2usize.pow(6),
     projection_height: 2usize.pow(8),
-    basic_commitment_rank: 6,
+    basic_commitment_rank: 5,
     nof_openings: 2,
     commitment_recursion: AuxRecursionConfig {
         decomposition_base_log: 7,
