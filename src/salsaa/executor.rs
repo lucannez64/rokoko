@@ -3,7 +3,7 @@ use rand::rand_core::le;
 
 use crate::{
     common::{
-        arithmetic::field_to_ring_element_into,
+        arithmetic::{ONE, field_to_ring_element_into},
         config,
         hash::HashWrapper,
         matrix::{VerticallyAlignedMatrix, new_vec_zero_preallocated},
@@ -13,7 +13,7 @@ use crate::{
         structured_row::{PreprocessedRow, StructuredRow}, sumcheck_element::SumcheckElement,
     },
     protocol::{
-        commitment::{self, BasicCommitment, Prefix, commit_basic}, config::paste_by_prefix, crs::CRS, open::evaluation_point_to_structured_row, project::{self, prepare_i16_witness, project}, sumcheck_utils::{
+        commitment::{self, BasicCommitment, Prefix, commit_basic}, config::paste_by_prefix, crs::CRS, open::{claim, evaluation_point_to_structured_row}, project::{self, prepare_i16_witness, project}, sumcheck_utils::{
             combiner::Combiner, common::{HighOrderSumcheckData, SumcheckBaseData}, diff::DiffSumcheck, elephant_cell::ElephantCell, linear::LinearSumcheck, polynomial::Polynomial, product::ProductSumcheck, ring_to_field_combiner::RingToFieldCombiner, selector_eq::SelectorEq, sum
         }, sumchecks::helpers::{projection_flatter_1_times_matrix, sumcheck_from_prefix}
     },
@@ -25,6 +25,8 @@ const RANK: usize = 8;
 
 pub struct SalsaaProof {
     projection_commitment: BasicCommitment,
+    sumcheck_transcript: Vec<Polynomial<QuadraticExtension>>,
+    claim: RingElement,
 }
 
 pub struct RoundConfig {
@@ -59,7 +61,7 @@ const CONFIG: RoundConfig = RoundConfig {
         length: NUM_COLUMNS_INITIAL.ilog2() as usize + 1, // if the witness is 2 colums, then length is 2, if the witness is 8 columns, then length is 4, etc.
     },
     next: None, // for now, we test only the first round, but we will need to fill this in for later rounds
-    inner_evaluation_claims: 0, // for VDF one will be enough
+    inner_evaluation_claims: 1, // for VDF one will be enough
 };
 
 // ==== Prover Sumcheck context initialization ====
@@ -79,6 +81,7 @@ pub struct ProverSumcheckContext {
 
 pub struct Type1ProverSumcheckContext {
     pub inner_evaluation_sumcheck: ElephantCell<LinearSumcheck<RingElement>>,
+    pub outer_evaluation_sumcheck: ElephantCell<LinearSumcheck<RingElement>>,
     pub output: ElephantCell<ProductSumcheck<RingElement>>,
 }
 
@@ -112,15 +115,31 @@ fn init_prover_type_1_sumcheck(
     main_witness_sumcheck: ElephantCell<dyn HighOrderSumcheckData<Element = RingElement>>,
 ) -> Type1ProverSumcheckContext {
     let single_col_height = config.witness_length / 2 / config.main_witness_columns;
-    let inner_evaluation_sumcheck = ElephantCell::new(LinearSumcheck::new(single_col_height));
+    let total_vars = config.witness_length.ilog2() as usize;
+    let inner_evaluation_sumcheck = ElephantCell::new(LinearSumcheck::new_with_prefixed_sufixed_data(
+        single_col_height,
+        total_vars - single_col_height.ilog2() as usize,
+        0,
+    ));
+
+    let outer_evaluation_sumcheck = ElephantCell::new(LinearSumcheck::new_with_prefixed_sufixed_data(
+        config.main_witness_columns,
+        total_vars - config.main_witness_columns.ilog2() as usize - single_col_height.ilog2() as usize,
+        single_col_height.ilog2() as usize,
+    ));
+    // let outer_evaluation_sumcheck = ElephantCell::new(LinearSumcheck::new(config.main / 2));
     // we view MLE[w](evaluation_points_inner) as a sumcheck
     let output = ElephantCell::new(ProductSumcheck::new(
-        inner_evaluation_sumcheck.clone(),
+        ElephantCell::new(ProductSumcheck::new(
+            inner_evaluation_sumcheck.clone(),
+            outer_evaluation_sumcheck.clone(),
+        )),
         main_witness_sumcheck.clone(),
     ));
 
     Type1ProverSumcheckContext {
         inner_evaluation_sumcheck,
+        outer_evaluation_sumcheck,
         output,
     }
 }
@@ -128,7 +147,7 @@ fn init_prover_type_1_sumcheck(
 fn init_prover_type_3_sumcheck(
     config: &RoundConfig,
     main_witness_sumcheck: ElephantCell<dyn HighOrderSumcheckData<Element = RingElement>>,
-    projection_selector_sumcheck: ElephantCell<SelectorEq<RingElement>>,
+    projection_sumcheck: ElephantCell<dyn HighOrderSumcheckData<Element = RingElement>>,
 ) -> Type3ProverSumcheckContext {
     let c2_len = config.main_witness_columns;
     let c1_len = PROJECTION_HEIGHT;
@@ -156,6 +175,7 @@ fn init_prover_type_3_sumcheck(
 
     // left
     let fltr_len = (config.projection_ratio * PROJECTION_HEIGHT).ilog2() as usize;
+
     let flattened_projection_matrix_sumcheck =
         ElephantCell::new(LinearSumcheck::new_with_prefixed_sufixed_data(
             config.projection_ratio * PROJECTION_HEIGHT,
@@ -210,7 +230,7 @@ fn init_prover_type_3_sumcheck(
             c0r_sumcheck.clone(),
             ElephantCell::new(ProductSumcheck::new(
                 c1r_sumcheck.clone(),
-                projection_selector_sumcheck.clone(),
+                projection_sumcheck.clone(),
             )),
         )),
     ));
@@ -247,6 +267,10 @@ pub fn init_prover_sumcheck(crs: &CRS, config: &RoundConfig) -> ProverSumcheckCo
             witness_sumcheck.clone(),
             main_witness_selector_sumcheck.clone(),
         ));
+    let projection_sumcheck: ElephantCell<ProductSumcheck<_>> = ElephantCell::new(ProductSumcheck::new(
+        witness_sumcheck.clone(),
+        projection_selector_sumcheck.clone(),
+    ));
 
     let type1sumcheck = (0..config.inner_evaluation_claims)
         .map(|_| init_prover_type_1_sumcheck(config, main_witness_sumcheck.clone()))
@@ -256,7 +280,7 @@ pub fn init_prover_sumcheck(crs: &CRS, config: &RoundConfig) -> ProverSumcheckCo
         Some(init_prover_type_3_sumcheck(
             config,
             main_witness_sumcheck.clone(),
-            projection_selector_sumcheck.clone(),
+            projection_sumcheck.clone(),
         ))
     } else {
         None
@@ -360,6 +384,7 @@ impl ProverSumcheckContext {
         &mut self,
         witness: &Vec<RingElement>,
         evaluation_points_inner: &Vec<StructuredRow>,
+        evaluation_points_outer: &Vec<StructuredRow>,
         projection_matrix: &ProjectionMatrix,
         projection_batching_challenges: &Option<BatchingChallenges>,
     ) {
@@ -372,8 +397,11 @@ impl ProverSumcheckContext {
                 projection_flatter_1_times_matrix(projection_matrix, &c1_expanded);
             let mut flattened_projection_ring =
                 new_vec_zero_preallocated(flattened_projection.len());
+
             for (i, el) in flattened_projection.iter().enumerate() {
                 field_to_ring_element_into(&mut flattened_projection_ring[i], el);
+                // TODO: I Spent 1h debugging this and it turned out that I forgot to convert the flattened projection matrix from homogenized field extensions to incomplete NTT, which is what the sumcheck expects. Rethink the interfaces here to avoid such issues in the future, maybe by having a clear type for the per rep.
+                flattened_projection_ring[i].from_homogenized_field_extensions_to_incomplete_ntt();
             }
             if let Some(type3) = &mut self.type3sumcheck {
                 type3
@@ -411,10 +439,16 @@ impl ProverSumcheckContext {
             println!("Loading data for type1 sumcheck {}", i);
             let evaluation_points_inner_expanded =
                 PreprocessedRow::from_structured_row(&evaluation_points_inner[i]);
+            let evaluation_points_outer_expanded =
+                PreprocessedRow::from_structured_row(&evaluation_points_outer[i]);
             type1
                 .inner_evaluation_sumcheck
                 .borrow_mut()
                 .load_from(&evaluation_points_inner_expanded.preprocessed_row);
+            type1
+                .outer_evaluation_sumcheck
+                .borrow_mut()
+                .load_from(&evaluation_points_outer_expanded.preprocessed_row);
         }
         println!("Finished loading data for type1 sumchecks");
     }
@@ -427,6 +461,7 @@ pub fn prover_round(
     config: &RoundConfig,
     sumcheck_context: &mut ProverSumcheckContext,
     evaluation_points_inner: &Vec<StructuredRow>,
+    evaluation_points_outer: &Vec<StructuredRow>,
     exact_binariness: bool, // whether the proof should be for exact binariness. If not l2 norm of the witness is given by the proof
     hash_wrapper: &mut HashWrapper,
 ) -> SalsaaProof {
@@ -459,6 +494,7 @@ pub fn prover_round(
     sumcheck_context.load_data(
         &new_witness,
         evaluation_points_inner,
+        evaluation_points_outer,
         &projection_matrix,
         &Some(batching_challenges),
     );
@@ -467,6 +503,7 @@ pub fn prover_round(
     let num_sumchecks = sumcheck_context.combiner.borrow().sumchecks_count();
     let mut combination = new_vec_zero_preallocated(num_sumchecks);
     hash_wrapper.sample_ring_element_vec_into(&mut combination);
+
     sumcheck_context
         .combiner
         .borrow_mut()
@@ -484,18 +521,12 @@ pub fn prover_round(
         .load_challenges_from(qe);
 
 
-    // let c = sumcheck_context.type3sumcheck.as_ref().borrow_mut().claim();
-    // println!("Combiner claim: {:?}", c);
 
-    sumcheck_context.type3sumcheck.as_ref().map(|type3| {
-        let claim = type3.output.borrow_mut().claim();
-        let lhs = type3.lhs.borrow_mut().claim();
-        let rhs = type3.rhs.borrow_mut().claim();
-
-        println!("Type3 claim: {:?}", claim);
-        println!("Type3 lhs claim: {:?}", lhs);
-        println!("Type3 rhs claim: {:?}", rhs);
-    });
+    let claim = sumcheck_context.type1sumcheck[0]
+        .output
+        .borrow()
+        .claim();
+    println!("Claim for the first type 1 sumcheck: {:?}", claim);
 
     println!("===== STARTING SUMCHECK =====");
 
@@ -563,6 +594,7 @@ pub fn binary_witness_sampler() -> VerticallyAlignedMatrix<RingElement> {
             2,
             Representation::IncompleteNTT,
         ),
+        // data: vec![RingElement::all(0, Representation::IncompleteNTT); WITNESS_DIM * WITNESS_WIDTH],
         used_cols: WITNESS_WIDTH,
     }
 }
@@ -589,6 +621,15 @@ pub fn execute() {
             .map(|_| RingElement::random_bounded(Representation::IncompleteNTT, 2))
             .collect::<Vec<RingElement>>(),
     )];
+
+    let evaluation_points_outer = vec![evaluation_point_to_structured_row(
+        &range(0, WITNESS_WIDTH.ilog2() as usize)
+            .map(|_| RingElement::random_bounded(Representation::IncompleteNTT, 2))
+            .collect::<Vec<RingElement>>(),
+    )];
+
+    let claim = claim(&witness, evaluation_points_inner.get(0).unwrap(), evaluation_points_outer.get(0).unwrap());
+    println!("Claim for the first type 1 sumcheck: {:?}", claim);
     println!("===== STARTING PROVER =====");
     let start = std::time::Instant::now();
     let proof = prover_round(
@@ -598,6 +639,7 @@ pub fn execute() {
         &CONFIG,
         &mut sumcheck_context,
         &evaluation_points_inner,
+        &evaluation_points_outer,
         CONFIG.exact_binariness,
         &mut HashWrapper::new(),
     );

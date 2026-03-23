@@ -43,7 +43,6 @@ pub fn decompose(input: &Vec<RingElement>, base_log: u64, radix: usize) -> Vec<R
 
     for (index, el) in input.iter().enumerate() {
         temp.set_from(el);
-        // TODO: mainly clone??
         temp.to_representation(Representation::EvenOddCoefficients);
         temp += &big_shift;
         for i in 0..radix {
