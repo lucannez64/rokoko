@@ -29,7 +29,7 @@ pub struct VerifierSumcheckContext {
     pub basic_commitment_combiner_evaluation:
         ElephantCell<BasicEvaluationLinearSumcheck<RingElement>>,
     pub commitment_key_rows_evaluation:
-        Vec<ElephantCell<StructuredRowEvaluationLinearSumcheck<RingElement>>>,
+        Vec<ElephantCell<BasicEvaluationLinearSumcheck<RingElement>>>,
     pub opening_combiner_evaluation: ElephantCell<BasicEvaluationLinearSumcheck<RingElement>>,
 
     // Type-specific contexts

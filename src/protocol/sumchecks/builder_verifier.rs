@@ -98,6 +98,26 @@ fn structured_row_ck_evaluation(
     eval
 }
 
+fn pseudo_structured_row_ck_evaluation(
+    crs: &CRS,
+    total_vars: usize,
+    wit_dim: usize,
+    i: usize,
+    suffix: usize,
+) -> ElephantCell<BasicEvaluationLinearSumcheck<RingElement>> {
+    let prefix_size = total_vars - wit_dim.ilog2() as usize - suffix;
+    let eval = ElephantCell::new(
+        BasicEvaluationLinearSumcheck::new_with_prefixed_sufixed_data(
+            wit_dim,
+            prefix_size,
+            suffix,
+        ),
+    );
+    let unstructured_row = crs.ck_for_wit_dim(wit_dim)[i].clone();
+    eval.borrow_mut().load_from(&unstructured_row.preprocessed_row);
+    eval
+}
+
 fn build_type4_verifier_context(
     crs: &CRS,
     total_vars: usize,
@@ -266,7 +286,7 @@ pub fn init_verifier(crs: &CRS, config: &SumcheckConfig) -> VerifierSumcheckCont
 
     let commitment_key_rows_evaluation = (0..config.basic_commitment_rank)
         .map(|i| {
-            structured_row_ck_evaluation(
+            pseudo_structured_row_ck_evaluation(
                 crs,
                 total_vars,
                 config.witness_height,
