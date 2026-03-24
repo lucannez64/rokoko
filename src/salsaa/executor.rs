@@ -3,7 +3,7 @@ use rand::rand_core::le;
 
 use crate::{
     common::{
-        arithmetic::{ONE, field_to_ring_element_into},
+        arithmetic::{ONE, ZERO, field_to_ring_element_into},
         config,
         hash::HashWrapper,
         matrix::{HorizontallyAlignedMatrix, VerticallyAlignedMatrix, new_vec_zero_preallocated},
@@ -26,7 +26,8 @@ const RANK: usize = 8;
 pub struct SalsaaProof {
     projection_commitment: BasicCommitment,
     sumcheck_transcript: Vec<Polynomial<QuadraticExtension>>,
-    claim: RingElement,
+    claims: HorizontallyAlignedMatrix<RingElement>,
+    next: Option<Box<SalsaaProof>>,
 }
 
 pub struct RoundConfig {
@@ -481,11 +482,11 @@ pub fn prover_round(
 
     let batching_challenges = BatchingChallenges::sample(&CONFIG, hash_wrapper);
 
-    let mut new_witness = new_vec_zero_preallocated(witness.data.len() * 2);
+    let mut extended_witness = new_vec_zero_preallocated(witness.data.len() * 2);
 
-    paste_by_prefix(&mut new_witness, &witness.data, &config.main_witness_prefix);
+    paste_by_prefix(&mut extended_witness, &witness.data, &config.main_witness_prefix);
     paste_by_prefix(
-        &mut new_witness,
+        &mut extended_witness,
         &projected_witness.data,
         &config.projection_prefix,
     );
@@ -494,7 +495,7 @@ pub fn prover_round(
     hash_wrapper.sample_ring_element_vec_into(&mut evaluation_points_outer);
 
     sumcheck_context.load_data(
-        &new_witness,
+        &extended_witness,
         evaluation_points_inner,
         &evaluation_points_outer,
         &projection_matrix,
@@ -524,11 +525,23 @@ pub fn prover_round(
 
 
 
+    // TEST ONLY
     let claim = sumcheck_context.type1sumcheck[0]
         .output
         .borrow()
         .claim();
-    println!("Claim for the first type 1 sumcheck: {:?}", claim);
+
+    let mut expected_claim = ZERO.clone();
+    for (c, r) in claims.row(0).iter().zip(evaluation_points_outer.iter()) {
+        
+        expected_claim += &(c * r);
+    }
+    assert_eq!(claim, expected_claim, "Claim from the sumcheck does not match the expected claim computed from the committed witness and the evaluation points");
+
+    let projection_claim = sumcheck_context.type3sumcheck.as_ref().unwrap().output.borrow().claim();
+    let expected_projection_claim = ZERO.clone();
+    assert_eq!(projection_claim, expected_projection_claim, "Projection claim from the sumcheck does not match the expected projection claim");
+    // END TEST ONLY
 
     println!("===== STARTING SUMCHECK =====");
 
@@ -577,14 +590,26 @@ pub fn prover_round(
 
     println!("Polynomial time: {:?} ms, Evaluation time: {:?} ms", time_poly, time_eval);
 
+    // TODO add conjugations
+    let outer_points_len = config.main_witness_columns.ilog2() as usize + 1; // extended witness is two times the original witness, so we need one more bit for the prefix
+    let evaluation_points_inner = evaluation_points.iter().skip(outer_points_len).cloned().collect::<Vec<_>>();
+    let preprocessed_evaluation_points_inner = PreprocessedRow::from_structured_row(&evaluation_point_to_structured_row(&evaluation_points_inner));
+
+    // TODO rename commit_basic_internal as we abuse it sometimes
+    // TODO speed up as we have many zeros
+    let claims = commit_basic_internal(&vec![preprocessed_evaluation_points_inner], &witness, 1);
+
+ 
 
 
     // let sumcheck_transcript = 
 
-    // SalsaaProof {
-    //     projection_commitment,
-    // };
-    panic!("Not implemented yet");
+    SalsaaProof {
+        projection_commitment,
+        sumcheck_transcript: polys,
+        claims,
+        next: None,
+    }
 }
 
 pub fn binary_witness_sampler() -> VerticallyAlignedMatrix<RingElement> {
@@ -625,6 +650,7 @@ pub fn execute() {
     )];
 
     let preprocessed_row_inner = PreprocessedRow::from_structured_row(evaluation_points_inner.get(0).unwrap());
+    // TODO rename commit_basic_internal as we abuse it sometimes
     let claims = commit_basic_internal(&vec![preprocessed_row_inner], &witness, 1);
 
     println!("===== STARTING PROVER =====");
