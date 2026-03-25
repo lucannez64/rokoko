@@ -79,7 +79,6 @@ pub fn claim(
     result
 }
 
-
 pub fn claim_over_inner(
     witness: &VerticallyAlignedMatrix<RingElement>,
     evaluation_point_inner: &StructuredRow,
@@ -88,7 +87,6 @@ pub fn claim_over_inner(
     let rhs = commit_basic_internal(&vec![preprocessed_row_inner], witness, 1);
     rhs.row(0).to_vec()
 }
-
 
 #[cfg(test)]
 mod tests {

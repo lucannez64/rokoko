@@ -142,6 +142,24 @@ impl RingElement {
         element
     }
 
+    pub fn random_bounded_unsigned(representation: Representation, bound: u64) -> Self {
+        let mut element = Self {
+            v: [0; DEGREE],
+            representation: Representation::Coefficients,
+        };
+
+        RNG.with(|cell| {
+            let mut rng = cell.borrow_mut();
+            for i in 0..DEGREE {
+                element.v[i] = rng.random_range(0..bound);
+            }
+        });
+
+        element.to_representation(representation);
+
+        element
+    }
+
     pub fn from_even_odd_coefficients_to_incomplete_ntt_representation(&mut self) {
         debug_assert!(
             self.representation == Representation::EvenOddCoefficients,
@@ -1204,7 +1222,7 @@ impl SizeableProof for QuadraticExtension {
 #[cfg(test)]
 mod tests {
     use crate::common::init_common;
-use rand::SeedableRng;
+    use rand::SeedableRng;
 
     use super::*;
 
