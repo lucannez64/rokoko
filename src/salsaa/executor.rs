@@ -1600,31 +1600,36 @@ pub fn verifier_round(
         round_idx += 1;
     }
 
-    // let sck_for_current_witness = crs.structured_ck_for_wit_dim(config.witness_length);
-
     // verify evaluation claims (TODO: change to recompute them from the proof data)
     let recomposed_claims = HorizontallyAlignedMatrix {
-        height: proof.claims.height,
-        width: proof.claims.width / 2,
-        data: compose_from_decomposed(&proof.claims.data, config.decomposition_base_log, 2),
+        height: 2,
+        width: 4,
+        data: compose_from_decomposed(&proof.new_claims.data, config.decomposition_base_log, 2),
     };
 
-    // let new_witness_height = config.witness_length / 2;
-    // let layer = evaluation_points_outer.last().unwrap().clone();
-    //         let outer_points_len = config.main_witness_columns.ilog2() as usize + 1;
-    let layer = &evaluation_points_ring[2];
+    // Replay Fiat-Shamir: sample folding challenges (same as prover does post-sumcheck)
+    let mut folding_challenges = new_vec_zero_preallocated(config.main_witness_columns);
+    hash_wrapper.sample_biased_ternary_ring_element_vec_into(&mut folding_challenges);
 
-    // assert_eq!(
-    //     recomposed_claims,
-    //     proof.claims.clone(),
-    //     "Recomposed claims from the proof do not match the original claims"
-    // );
-   
-   assert_eq!(
-        proof.claims[(0,0)],
+    let outer_points_len = config.main_witness_columns.ilog2() as usize + 1;
+    let layer = &evaluation_points_ring[outer_points_len];
+
+    // Compute the folded claim: sum_i folding_challenges[i] * claims[(0, i)]
+    let mut folded_claim = RingElement::zero(Representation::IncompleteNTT);
+    for i in 0..config.main_witness_columns {
+        let mut term = folding_challenges[i].clone();
+        term *= &proof.claims[(0, i)];
+        folded_claim += &term;
+    }
+
+    assert_eq!(
+        folded_claim,
         &(&(&*ONE - layer) * &recomposed_claims[(0, 0)]) + &(layer * &recomposed_claims[(0, 1)]),
         "Recomposed claim for the witness does not match the original claim"
     );
+
+    // TODO: check also conjugate claims
+    // check claims over the projection
 
     verifier_context.load_data(
         config,
