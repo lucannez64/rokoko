@@ -3,10 +3,10 @@ use rand::rand_core::le;
 
 use crate::{
     common::{
-        arithmetic::{field_to_ring_element_into, ONE, ZERO},
+        arithmetic::{ALL_ONE_COEFFS, ONE, ZERO, field_to_ring_element_into},
         config::{self, HALF_DEGREE},
         hash::HashWrapper,
-        matrix::{new_vec_zero_preallocated, HorizontallyAlignedMatrix, VerticallyAlignedMatrix},
+        matrix::{HorizontallyAlignedMatrix, VerticallyAlignedMatrix, new_vec_zero_preallocated},
         projection_matrix::ProjectionMatrix,
         ring_arithmetic::{QuadraticExtension, Representation, RingElement},
         sampling::sample_random_short_vector,
@@ -14,7 +14,7 @@ use crate::{
         sumcheck_element::SumcheckElement,
     },
     protocol::{
-        commitment::{self, commit_basic, commit_basic_internal, BasicCommitment, Prefix},
+        commitment::{self, BasicCommitment, Prefix, commit_basic, commit_basic_internal},
         config::paste_by_prefix,
         crs::CRS,
         open::{claim, evaluation_point_to_structured_row},
@@ -70,7 +70,7 @@ const PROJECTION_HEIGHT: usize = 256;
 // All configs shall be auto-derived, but we keep this struct for clarity for now
 const CONFIG: RoundConfig = RoundConfig {
     witness_length: WITNESS_DIM * WITNESS_WIDTH * 2, // we ``bloat up'' the witness times two to account to the projection
-    exact_binariness: false,
+    exact_binariness: true,
     l2: true,
     projection_ratio: 2, // for the first round is 2, later shall be 8 (I think)
     main_witness_columns: NUM_COLUMNS_INITIAL,
@@ -96,7 +96,8 @@ pub struct ProverSumcheckContext {
     pub type1sumcheck: Vec<Type1ProverSumcheckContext>, // for verifying inner evaluation points
     pub type3sumcheck: Option<Type3ProverSumcheckContext>, // for verifying the projection
     // pub type5sumcheck: Option<Type5ProverSumcheckContext>, // for verifying the l2 norm of the witness, only used when exact_binariness is false TODO
-    pub l2sumcheck: Option<L2ProverSumcheckContext>, // for verifying the l2 norm of the witness, only used when l2 is true TODO
+    pub l2sumcheck: Option<L2ProverSumcheckContext>, 
+    pub linfsumcheck: Option<LinfSumcheckContext>, 
     // pub type6sumcheck: Option<Type6ProvserSumcheckContext>, // for verifying ecact binariness, only used when exact_binariness is true TODO
     pub combiner: ElephantCell<Combiner<RingElement>>,
     pub field_combiner: ElephantCell<RingToFieldCombiner>,
@@ -104,6 +105,11 @@ pub struct ProverSumcheckContext {
 }
 
 pub struct L2ProverSumcheckContext {
+    pub output: ElephantCell<ProductSumcheck<RingElement>>,
+}
+
+pub struct LinfSumcheckContext {
+    pub all_one_constant_sumcheck: ElephantCell<LinearSumcheck<RingElement>>,
     pub output: ElephantCell<ProductSumcheck<RingElement>>,
 }
 
@@ -282,6 +288,44 @@ fn init_prover_type_3_sumcheck(
     }
 }
 
+
+
+pub fn init_linf_sumcheck(
+    witness_sumcheck: ElephantCell<dyn HighOrderSumcheckData<Element = RingElement>>,
+    main_witness_selector: ElephantCell<dyn HighOrderSumcheckData<Element = RingElement>>,
+    conjugated_witness_sumcheck: ElephantCell<dyn HighOrderSumcheckData<Element = RingElement>>,
+) -> LinfSumcheckContext {
+
+    let all_one_constant_sumcheck = ElephantCell::new(LinearSumcheck::new_with_prefixed_sufixed_data(
+        1,
+        witness_sumcheck.borrow().variable_count(),
+        0,
+    ));
+
+    all_one_constant_sumcheck.borrow_mut()
+        .load_from(&vec![ALL_ONE_COEFFS.clone()]);
+
+    let one_minus_wit_sumcheck = ElephantCell::new(DiffSumcheck::new(
+        all_one_constant_sumcheck.clone(),
+        witness_sumcheck.clone(),
+    ));
+
+    let one_minus_wit_selector_sumcheck = ElephantCell::new(ProductSumcheck::new(
+        main_witness_selector.clone(),
+        one_minus_wit_sumcheck.clone(),
+    ));
+    
+    let output = ElephantCell::new(ProductSumcheck::new(
+        conjugated_witness_sumcheck.clone(),
+        one_minus_wit_selector_sumcheck.clone(),
+    ));
+
+    LinfSumcheckContext {
+        all_one_constant_sumcheck,
+        output,
+    }
+}
+
 pub fn init_prover_sumcheck(crs: &CRS, config: &RoundConfig) -> ProverSumcheckContext {
     let witness_sumcheck = ElephantCell::new(LinearSumcheck::new(config.witness_length));
     let witness_conjugated_sumcheck =
@@ -349,6 +393,18 @@ pub fn init_prover_sumcheck(crs: &CRS, config: &RoundConfig) -> ProverSumcheckCo
         None
     };
 
+    let linfsumcheck = if config.exact_binariness {
+        Some(init_linf_sumcheck(
+            witness_sumcheck.clone(),
+            main_witness_selector_sumcheck.clone(),
+            witness_conjugated_sumcheck.clone(),
+        ))
+    } else {
+        None
+    };
+
+
+
     ProverSumcheckContext {
         witness_sumcheck,
         witness_conjugated_sumcheck,
@@ -359,6 +415,7 @@ pub fn init_prover_sumcheck(crs: &CRS, config: &RoundConfig) -> ProverSumcheckCo
         combiner,
         field_combiner,
         l2sumcheck,
+        linfsumcheck,
         next: config
             .next
             .as_ref()
@@ -436,6 +493,13 @@ impl ProverSumcheckContext {
 
         if let Some(next) = &mut self.next {
             next.partial_evaluate_all(r);
+        }
+
+        // it's dumb, but it doesn't do anything except reducing the degree
+        if let Some(linf) = &mut self.linfsumcheck {
+            linf.all_one_constant_sumcheck
+                .borrow_mut()
+                .partial_evaluate(r);
         }
     }
 
@@ -639,6 +703,18 @@ pub fn prover_round(
             "L2 claim from the projection sumcheck does not match the expected l2 claim computed from the witness"
         );
     }
+
+    if config.exact_binariness {
+        let linf_claim = sumcheck_context
+            .linfsumcheck
+            .as_ref()
+            .unwrap()
+            .output
+            .borrow()
+            .claim();
+        let ct = linf_claim.constant_term_from_incomplete_ntt();
+        assert_eq!(ct, 0, "Linf claim from the projection sumcheck is not zero, which means that the witness is not exactly binary as expected");
+    }
     // END TEST ONLY
 
     let mut num_vars = sumcheck_context.combiner.borrow().variable_count();
@@ -684,31 +760,24 @@ pub fn prover_round(
         time_poly, time_eval
     );
 
-    // TODO add conjugations
     let outer_points_len = config.main_witness_columns.ilog2() as usize + 1; // extended witness is two times the original witness, so we need one more bit for the prefix
     let evaluation_points_inner = evaluation_points
         .iter()
         .skip(outer_points_len)
         .cloned()
         .collect::<Vec<_>>();
-    let preprocessed_evaluation_points_inner = PreprocessedRow::from_structured_row(
+    let mut preprocessed_evaluation_points_inner = PreprocessedRow::from_structured_row(
         &evaluation_point_to_structured_row(&evaluation_points_inner),
     );
 
-    let mut claim_over_projection = new_vec_zero_preallocated(1);
 
     let mut temp = RingElement::zero(Representation::IncompleteNTT);
-    for (c, r) in projected_witness
-        .data
-        .iter()
-        .zip(preprocessed_evaluation_points_inner.preprocessed_row.iter())
-    {
-        temp *= (c, r);
-        claim_over_projection[0] += &temp;
-    }
 
     let mut claims =
-        HorizontallyAlignedMatrix::new_zero_preallocated(1, config.main_witness_columns);
+        HorizontallyAlignedMatrix::new_zero_preallocated(2, config.main_witness_columns);
+
+    let mut claim_over_projection = new_vec_zero_preallocated(2);
+    
 
     for i in 0..config.main_witness_columns {
         for (w, r) in witness
@@ -720,6 +789,58 @@ pub fn prover_round(
             claims[(0, i)] += &temp;
         }
     }
+
+    for (c, r) in projected_witness
+        .data
+        .iter()
+        .zip(preprocessed_evaluation_points_inner.preprocessed_row.iter())
+    {
+        temp *= (c, r);
+        claim_over_projection[0] += &temp;
+
+
+    }
+
+    // now let's conjugate eval point in place and repeat the logic to get the claims for the conjugated witness, which will be used in the l2 and linf sumchecks
+    for r in preprocessed_evaluation_points_inner.preprocessed_row.iter_mut() {
+        r.conjugate_in_place();
+    }
+
+    for i in 0..witness.width {
+        for (w, r) in witness
+            .col(i)
+            .iter()
+            .zip(preprocessed_evaluation_points_inner.preprocessed_row.iter())
+        {
+            temp *= (w, r);
+            claims[(1, i)] += &temp;
+        }
+    }
+
+    for (c, r) in projected_witness
+        .data
+        .iter()
+        .zip(preprocessed_evaluation_points_inner.preprocessed_row.iter())
+    {
+        temp *= (c, r);
+        claim_over_projection[1] += &temp;
+    }
+
+
+
+
+    
+    // for i in 0..config.main_witness_columns {
+    //     claims[(1, i)].conjugate_in_place(); // we had evals over conjugated witness, now we have conjugated evals over a regular witness
+    // }
+
+    // // we have conjugated claims for completeness (TODO: do we really need them?)
+    // for (c, r) in claim_over_projection.iter().zip(preprocessed_evaluation_points_inner.preprocessed_row.iter_mut()) {
+    //     r.conjugate_in_place();
+    //     temp *= (c, r);
+    //     claim_over_projection[1] += &temp;
+    // }
+
 
     SalsaaProof {
         projection_commitment,
