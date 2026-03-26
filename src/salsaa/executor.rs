@@ -37,7 +37,9 @@ pub struct SalsaaProof {
     ip_linf_claim: Option<RingElement>,
     claims: HorizontallyAlignedMatrix<RingElement>,
     claim_over_projection: Vec<RingElement>,
-    new_claims: HorizontallyAlignedMatrix<RingElement>,
+
+    // TODO: the field below should be slightly optimised as after folding, we can recover two columns of the new claims and decomposed comms
+    new_claims: HorizontallyAlignedMatrix<RingElement>, // TODO this should be also optional
     decomposed_split_commitment: BasicCommitment, // TODO: this should be optional as on the last round we just send the witness immediately post folding
     next: Option<Box<SalsaaProof>>,
 }
