@@ -781,7 +781,7 @@ pub fn prover_round(
 
      let vdf_challenge = if config.vdf {
         let mut challenge = RingElement::zero(Representation::IncompleteNTT);
-        hash_wrapper.sample_ring_element_into(&mut challenge);
+        hash_wrapper.sample_ring_element_ntt_slots_into(&mut challenge);
         Some(challenge)
     } else {
         None
