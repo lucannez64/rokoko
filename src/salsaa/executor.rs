@@ -31,7 +31,7 @@ use crate::{
             elephant_cell::ElephantCell,
             linear::{
                 BasicEvaluationLinearSumcheck, FakeEvaluationLinearSumcheck, LinearSumcheck,
-                StructuredRowEvaluationLinearSumcheck,
+                RingToFieldWrapperEvaluation, StructuredRowEvaluationLinearSumcheck,
             },
             polynomial::Polynomial,
             product::{ProductSumcheck, ProductSumcheckEvaluation},
@@ -1126,7 +1126,7 @@ pub struct Type3VerifierSumcheckContext {
     pub c0l_evaluation: ElephantCell<StructuredRowEvaluationLinearSumcheck<RingElement>>,
     // TODO: this can be over fields, then then mapped to rings?. Actually, all of those can be over fields (I guess?).
     pub flattened_projection_matrix_evaluation:
-        ElephantCell<BasicEvaluationLinearSumcheck<RingElement>>,
+        ElephantCell<BasicEvaluationLinearSumcheck<QuadraticExtension>>,
     pub c2r_evaluation: ElephantCell<StructuredRowEvaluationLinearSumcheck<RingElement>>,
     pub c0r_evaluation: ElephantCell<StructuredRowEvaluationLinearSumcheck<RingElement>>,
     pub c1r_evaluation: ElephantCell<StructuredRowEvaluationLinearSumcheck<RingElement>>,
@@ -1190,7 +1190,7 @@ fn init_verifier_type_3_sumcheck(
     let fltr_len = (config.projection_ratio * PROJECTION_HEIGHT).ilog2() as usize;
 
     let flattened_projection_matrix_evaluation = ElephantCell::new(
-        BasicEvaluationLinearSumcheck::new_with_prefixed_sufixed_data(
+        BasicEvaluationLinearSumcheck::<QuadraticExtension>::new_with_prefixed_sufixed_data(
             config.projection_ratio * PROJECTION_HEIGHT,
             total_vars - fltr_len,
             0,
@@ -1242,7 +1242,9 @@ fn init_verifier_type_3_sumcheck(
         ElephantCell::new(ProductSumcheckEvaluation::new(
             c0l_evaluation.clone(),
             ElephantCell::new(ProductSumcheckEvaluation::new(
-                flattened_projection_matrix_evaluation.clone(),
+                ElephantCell::new(RingToFieldWrapperEvaluation::new(
+                    flattened_projection_matrix_evaluation.clone(),
+                )),
                 main_witness_evaluation.clone(),
             )),
         )),
@@ -1553,17 +1555,11 @@ impl VerifierSumcheckContext {
 
             let flattened_projection =
                 projection_flatter_1_times_matrix(projection_matrix, &c1_expanded);
-            let mut flattened_projection_ring =
-                new_vec_zero_preallocated(flattened_projection.len());
-            for (i, el) in flattened_projection.iter().enumerate() {
-                field_to_ring_element_into(&mut flattened_projection_ring[i], el);
-                flattened_projection_ring[i].from_homogenized_field_extensions_to_incomplete_ntt();
-            }
-
+            
             type3_eval
                 .flattened_projection_matrix_evaluation
                 .borrow_mut()
-                .load_from(&flattened_projection_ring);
+                .load_from(&flattened_projection);
             type3_eval
                 .c0l_evaluation
                 .borrow_mut()
