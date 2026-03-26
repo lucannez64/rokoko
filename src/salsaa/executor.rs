@@ -1746,6 +1746,17 @@ pub fn execute() {
     // TODO rename commit_basic_internal as we abuse it sometimes
     let claims = commit_basic_internal(&vec![preprocessed_row_inner], &witness, 1);
 
+    // let double_evaluation_points_inner = vec![
+    //     evaluation_points_inner.get(0).unwrap().clone(),
+    //     evaluation_points_inner.get(0).unwrap().clone(),
+    // ];
+
+    // let double_claims = HorizontallyAlignedMatrix {
+    //     height: 2,
+    //     width: claims.width,
+    //     data: [&claims.data[..], &claims.data[..]].concat(),
+    // };
+
     println!("===== STARTING PROVER =====");
     let start = std::time::Instant::now();
     let proof = prover_round(
