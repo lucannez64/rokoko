@@ -105,6 +105,8 @@ fn build_round_config(witness_length: usize, is_first_round: bool) -> RoundConfi
         None
     };
 
+    let inner_evaluation_claims = if is_first_round { 0 } else { 2 };
+
     RoundConfig {
         witness_length,
         exact_binariness: is_first_round,
@@ -120,7 +122,7 @@ fn build_round_config(witness_length: usize, is_first_round: bool) -> RoundConfi
             prefix: main_witness_columns,
             length: main_witness_columns.ilog2() as usize + 1,
         },
-        inner_evaluation_claims: 1,
+        inner_evaluation_claims,
         decomposition_base_log: 8,
         next,
     }
@@ -2331,6 +2333,7 @@ pub fn execute_vdf(y_0: &RingElement, dim: usize, vdf_crs: &vdf_crs) -> VDFOutpu
     let mut y_int = RingElement::zero(Representation::IncompleteNTT);
     let mut temp = RingElement::zero(Representation::IncompleteNTT);
 
+    println!("Executing VDF with {} steps", total_steps);
     for step in 0..total_steps {
         let col = step / steps_per_col;
         let row_in_col = step % steps_per_col;
@@ -2391,16 +2394,12 @@ pub fn execute() {
     let commit_duration = start.elapsed().as_nanos();
     println!("TOTAL Commit time: {:?} ns", commit_duration);
 
-    // TODO: we don't need those clais for vdf, erase
-    let evaluation_points_inner = vec![evaluation_point_to_structured_row(
-        &range(0, WITNESS_DIM.ilog2() as usize)
-            .map(|_| RingElement::random_bounded(Representation::IncompleteNTT, 2))
-            .collect::<Vec<RingElement>>(),
-    )];
+    let no_claims = HorizontallyAlignedMatrix {
+        height: 0,
+        width: 2,
+        data: vec![],
+    };
 
-    let preprocessed_row_inner =
-        PreprocessedRow::from_structured_row(evaluation_points_inner.get(0).unwrap());
-    let claims = commit_basic_internal(&vec![preprocessed_row_inner], &vdf_output.trace_witness, 1);
 
     println!("===== STARTING PROVER =====");
     let start = std::time::Instant::now();
@@ -2409,8 +2408,8 @@ pub fn execute() {
         &vdf_output.trace_witness,
         &CONFIG,
         &mut sumcheck_context,
-        &evaluation_points_inner,
-        &claims,
+        &vec![], // no evaluation points for first round
+        &no_claims,
         &mut HashWrapper::new(),
         Some((&y_0, &vdf_output.y_t, &vdf_crs)),
     );
@@ -2426,8 +2425,8 @@ pub fn execute() {
         &mut verifier_context,
         &commitment,
         &proof,
-        &evaluation_points_inner,
-        &claims,
+        &vec![], // no evaluation points for first round
+        &no_claims, // no claims for first round
         &mut HashWrapper::new(),
         Some(&vdf_crs),
         Some((&y_0, &vdf_output.y_t)),
