@@ -1555,7 +1555,7 @@ impl VerifierSumcheckContext {
 
             let flattened_projection =
                 projection_flatter_1_times_matrix(projection_matrix, &c1_expanded);
-            
+
             type3_eval
                 .flattened_projection_matrix_evaluation
                 .borrow_mut()
@@ -1847,7 +1847,6 @@ pub fn verifier_round(
     }
 }
 
-
 const VDF_MATRIX_WIDTH: usize = 64;
 const VDF_MATRIX_HEIGHT: usize = 1;
 pub struct vdf_crs {
@@ -1862,7 +1861,7 @@ pub fn vdf_init() -> vdf_crs {
             .map(|_| RingElement::random(Representation::IncompleteNTT))
             .collect(),
     };
-    vdf_crs { A }    
+    vdf_crs { A }
 }
 
 /// Decomposes a RingElement into 64 bit-plane RingElements, writing into `target`.
@@ -1870,7 +1869,10 @@ pub fn vdf_init() -> vdf_crs {
 /// The input is assumed to be in IncompleteNTT; we convert to EvenOddCoefficients
 /// to access raw coefficients, decompose, then convert each result back.
 pub fn decompose_binary_into(element: &RingElement, target: &mut [RingElement]) {
-    assert!(target.len() >= 64, "target slice must have at least 64 elements");
+    assert!(
+        target.len() >= 64,
+        "target slice must have at least 64 elements"
+    );
 
     let mut tmp = element.clone();
     tmp.from_incomplete_ntt_to_even_odd_coefficients();
@@ -1915,31 +1917,27 @@ pub fn decompose_binary_into(element: &RingElement, target: &mut [RingElement]) 
     }
 }
 
-
-
 pub struct VDFOutput {
     y_int: RingElement,
     y_t: RingElement,
     trace_witness: VerticallyAlignedMatrix<RingElement>,
 }
-pub fn execute_vdf(
-    y_0: &RingElement,
-) -> VDFOutput {
-    let vdf_crs = vdf_init();
+pub fn execute_vdf(y_0: &RingElement, dim: usize, vdf_crs: &vdf_crs) -> VDFOutput {
+    let vdf_crs_ref = vdf_crs;
 
     // g = (1, 2, 4, .., 2^63)
     // we want to obtain the following form
     //
     // |-----------------|      | ------- |
-    // | g               |      |  -y_0   |     
-    // | a g             |      |    0    | 
-    // |   a g           |      |    0    | 
-    // |     a g         |      |    0    | 
-    // |       a g       |  w = |    0    | 
-    // |         a g     |      |    0    | 
-    // |           a g   |      |    0    | 
-    // |             a g |      |    0    | 
-    // |               a |      |   y_t   | 
+    // | g               |      |  -y_0   |
+    // | a g             |      |    0    |
+    // |   a g           |      |    0    |
+    // |     a g         |      |    0    |
+    // |       a g       |  w = |    0    |
+    // |         a g     |      |    0    |
+    // |           a g   |      |    0    |
+    // |             a g |      |    0    |
+    // |               a |      |   y_t   |
     // |-----------------|      | ------- |
     // t = 8
     // and in VDF we compute it like
@@ -1955,6 +1953,7 @@ pub fn execute_vdf(
     // w_7 = g^{-1} (- a w_6) and we call y_7 = a w_6
     // y_8 = a w_7
 
+    // TODO add tests if after example VDF execution indeed this holds
     // |---------|    |---------|     |--------------|
     // | g       |    | w_0 w_4 |     | -y_0   -y_4  |
     // | a g     |    | w_1 w_5 |     |   0     0    |
@@ -1965,19 +1964,19 @@ pub fn execute_vdf(
 
     // we call y_int = y_4
     // then we can split the wintess witness into two cols
-    // 
+    //
     // This intuition naturally generalises to any t = 2^k,
     // i.e. t = WITNESS_DIM/64*2 (2 columns, 64 for decomposition)
-    // 
-    
+    //
+
     let mut trace_witness = VerticallyAlignedMatrix {
-        height: WITNESS_DIM,
+        height: dim,
         width: 2,
-        data: new_vec_zero_preallocated(WITNESS_DIM * 2),
+        data: new_vec_zero_preallocated(dim * 2),
         used_cols: 2,
     };
 
-    let steps_per_col = WITNESS_DIM / VDF_MATRIX_WIDTH;
+    let steps_per_col = dim / VDF_MATRIX_WIDTH;
     let total_steps = steps_per_col * 2;
 
     let mut neg_y = y_0.negate();
@@ -1991,13 +1990,16 @@ pub fn execute_vdf(
 
         // w_step = g^{-1}(-y_step) = decompose_binary(-y_step)
         // Write directly into the trace_witness column-major slice
-        let data_offset = col * WITNESS_DIM + base_row;
-        decompose_binary_into(&neg_y, &mut trace_witness.data[data_offset..data_offset + VDF_MATRIX_WIDTH]);
+        let data_offset = col * dim + base_row;
+        decompose_binary_into(
+            &neg_y,
+            &mut trace_witness.data[data_offset..data_offset + VDF_MATRIX_WIDTH],
+        );
 
         // y_{step+1} = <a, w_step> = sum_j a_j * bits[j]
         let mut y_next = RingElement::zero(Representation::IncompleteNTT);
         for j in 0..VDF_MATRIX_WIDTH {
-            temp *= (&vdf_crs.A[(0, j)], &trace_witness.data[data_offset + j]);
+            temp *= (&vdf_crs_ref.A[(0, j)], &trace_witness.data[data_offset + j]);
             y_next += &temp;
         }
 
@@ -2026,7 +2028,7 @@ pub fn execute() {
     println!("CRS generated. Starting execution...");
     let vdf_start = std::time::Instant::now();
     let y_0 = RingElement::random(Representation::IncompleteNTT); // TODO: from hash
-    let vdf_output = execute_vdf(&y_0);
+    let vdf_output = execute_vdf(&y_0, WITNESS_DIM, &vdf_crs);
     let vdf_duration = vdf_start.elapsed().as_millis();
     println!("VDF executed in {:?} ms", vdf_duration);
 
@@ -2142,7 +2144,9 @@ mod tests {
                 assert!(
                     bit_copy.v[j] == 0 || bit_copy.v[j] == 1,
                     "Bit plane {} coeff {} is {}, expected 0 or 1",
-                    b, j, bit_copy.v[j]
+                    b,
+                    j,
+                    bit_copy.v[j]
                 );
             }
         }
@@ -2167,6 +2171,91 @@ mod tests {
                     b, j
                 );
             }
+        }
+    }
+
+    /// Verify the matrix equation from execute_vdf:
+    ///
+    /// | g       |    | w_0 w_K |     | -y_0   -y_int |
+    /// | a g     |    | w_1 ... |     |   0      0    |
+    /// |   a g   |  * | ...     |  =  |   0      0    |
+    /// |     a g |    | ...     |     |   0      0    |
+    /// |       a |    |---------|     |  y_int  y_t   |
+    ///
+    /// where K = steps_per_col and g recomposes binary (sum_j 2^j * bit_j).
+    #[test]
+    fn test_vdf_matrix_equation() {
+        let test_dim: usize = 1 << 12; // 4096, giving 2^6 = 64 steps per column
+        let y_0 = RingElement::random(Representation::IncompleteNTT);
+        let vdf_crs = vdf_init();
+        let vdf_output = execute_vdf(&y_0, test_dim, &vdf_crs);
+
+        let steps_per_col = test_dim / VDF_MATRIX_WIDTH;
+        let w = &vdf_output.trace_witness;
+
+        // Helper: compute g * w_block = recompose binary = sum_j 2^j * w[(base+j, col)]
+        // We work in EvenOdd to do the weighted sum, then convert back.
+        let recompose = |base_row: usize, col: usize| -> RingElement {
+            let mut result = RingElement::zero(Representation::IncompleteNTT);
+            result.from_incomplete_ntt_to_even_odd_coefficients();
+            for j in 0..VDF_MATRIX_WIDTH {
+                let mut bit_copy = w[(base_row + j, col)].clone();
+                bit_copy.from_incomplete_ntt_to_even_odd_coefficients();
+                let shift = 1u64 << j;
+                for k in 0..DEGREE {
+                    result.v[k] = (result.v[k] + bit_copy.v[k] * shift) % MOD_Q;
+                }
+            }
+            result.from_even_odd_coefficients_to_incomplete_ntt_representation();
+            result
+        };
+
+        // Helper: compute a * w_block = <A[0], w_block> = sum_j A[(0,j)] * w[(base+j, col)]
+        let inner_product_a = |base_row: usize, col: usize| -> RingElement {
+            let mut result = RingElement::zero(Representation::IncompleteNTT);
+            let mut temp = RingElement::zero(Representation::IncompleteNTT);
+            for j in 0..VDF_MATRIX_WIDTH {
+                temp *= (&vdf_crs.A[(0, j)], &w[(base_row + j, col)]);
+                result += &temp;
+            }
+            result
+        };
+
+        let zero = RingElement::zero(Representation::IncompleteNTT);
+
+        // Check both columns
+        let y_starts = [&y_0, &vdf_output.y_int];
+        let y_ends = [&vdf_output.y_int, &vdf_output.y_t];
+
+        for col in 0..2 {
+            // First row: g * w_0 = -y_start
+            let gw0 = recompose(0, col);
+            assert_eq!(
+                gw0,
+                y_starts[col].negate(),
+                "Column {}: g * w_0 != -y_start",
+                col
+            );
+
+            // Middle rows: a * w_i + g * w_{i+1} = 0
+            for i in 0..steps_per_col - 1 {
+                let aw_i = inner_product_a(i * VDF_MATRIX_WIDTH, col);
+                let gw_next = recompose((i + 1) * VDF_MATRIX_WIDTH, col);
+                let sum = &aw_i + &gw_next;
+                assert_eq!(
+                    sum,
+                    zero,
+                    "Column {}, row {}: a*w_{} + g*w_{} != 0",
+                    col,
+                    i + 1,
+                    i,
+                    i + 1
+                );
+            }
+
+            // Last row: a * w_{last} = y_end
+            let aw_last = inner_product_a((steps_per_col - 1) * VDF_MATRIX_WIDTH, col);
+            assert_eq!(aw_last, *y_ends[col], "Column {}: a * w_last != y_end", col);
         }
     }
 }
