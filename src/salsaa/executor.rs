@@ -49,22 +49,41 @@ const WITNESS_DIM: usize = 2usize.pow(16);
 const WITNESS_WIDTH: usize = 2usize;
 const RANK: usize = 8;
 
-pub struct SalsaaProof {
+pub struct SalsaaProofCommon {
     projection_commitment: BasicCommitment,
     sumcheck_transcript: Vec<Polynomial<QuadraticExtension>>,
     ip_l2_claim: Option<RingElement>,
     ip_linf_claim: Option<RingElement>,
     claims: HorizontallyAlignedMatrix<RingElement>,
     claim_over_projection: Vec<RingElement>,
+}
 
-    // TODO: the field below should be slightly optimised as after folding, we can recover two columns of the new claims and decomposed comms
-    new_claims: HorizontallyAlignedMatrix<RingElement>, // TODO this should be also optional
-    decomposed_split_commitment: BasicCommitment, // TODO: this should be optional as on the last round we just send the witness immediately post folding
-    next: Option<Box<SalsaaProof>>,
+pub enum SalsaaProof {
+    Intermediate {
+        common: SalsaaProofCommon,
+        new_claims: HorizontallyAlignedMatrix<RingElement>,
+        decomposed_split_commitment: BasicCommitment,
+        next: Box<SalsaaProof>,
+    },
+    Last {
+        common: SalsaaProofCommon,
+        folded_witness: Vec<RingElement>,
+        projected_witness: Vec<RingElement>,
+    },
+}
+
+impl std::ops::Deref for SalsaaProof {
+    type Target = SalsaaProofCommon;
+    fn deref(&self) -> &SalsaaProofCommon {
+        match self {
+            SalsaaProof::Intermediate { common, .. } => common,
+            SalsaaProof::Last { common, .. } => common,
+        }
+    }
 }
 
 #[derive(Clone)]
-pub struct RoundConfig {
+pub struct RoundConfigCommon {
     pub witness_length: usize,
     pub exact_binariness: bool, // whether the proof should be for exact binariness
     pub vdf: bool, // for the first round
@@ -74,8 +93,34 @@ pub struct RoundConfig {
     pub projection_prefix: Prefix,
     pub main_witness_prefix: Prefix,    // shall be always 0
     pub inner_evaluation_claims: usize, // how many inner evaluation claims we want to make, this determines the number of type1 sumchecks we need
-    pub decomposition_base_log: u64, // base log for decomposition, if 0 then no decomposition is done and the proof is for the folded witness
-    pub next: Option<Box<RoundConfig>>,
+}
+
+#[derive(Clone)]
+pub enum RoundConfig {
+    Intermediate {
+        common: RoundConfigCommon,
+        decomposition_base_log: u64,
+        next: Box<RoundConfig>,
+    },
+    Last {
+        common: RoundConfigCommon,
+    },
+}
+
+impl std::ops::Deref for RoundConfig {
+    type Target = RoundConfigCommon;
+    fn deref(&self) -> &RoundConfigCommon {
+        match self {
+            RoundConfig::Intermediate { common, .. } => common,
+            RoundConfig::Last { common, .. } => common,
+        }
+    }
+}
+
+impl RoundConfig {
+    pub fn is_last(&self) -> bool {
+        matches!(self, RoundConfig::Last { .. })
+    }
 }
 
 const NUM_COLUMNS_INITIAL: usize = 2;
@@ -98,16 +143,9 @@ fn build_round_config(witness_length: usize, is_first_round: bool) -> RoundConfi
     let next_projection_ratio = 8usize;
     let can_recurse = next_single_col_height >= PROJECTION_HEIGHT * next_projection_ratio;
 
-    let next = if can_recurse {
-        let next_witness_length = next_single_col_height * next_main_witness_columns * 2;
-        Some(Box::new(build_round_config(next_witness_length, false)))
-    } else {
-        None
-    };
-
     let inner_evaluation_claims = if is_first_round { 0 } else { 2 };
 
-    RoundConfig {
+    let common = RoundConfigCommon {
         witness_length,
         exact_binariness: is_first_round,
         l2: !is_first_round,
@@ -123,8 +161,17 @@ fn build_round_config(witness_length: usize, is_first_round: bool) -> RoundConfi
             length: main_witness_columns.ilog2() as usize + 1,
         },
         inner_evaluation_claims,
-        decomposition_base_log: 8,
-        next,
+    };
+
+    if can_recurse {
+        let next_witness_length = next_single_col_height * next_main_witness_columns * 2;
+        RoundConfig::Intermediate {
+            common,
+            decomposition_base_log: 8,
+            next: Box::new(build_round_config(next_witness_length, false)),
+        }
+    } else {
+        RoundConfig::Last { common }
     }
 }
 
@@ -571,10 +618,10 @@ pub fn init_prover_sumcheck(crs: &CRS, config: &RoundConfig) -> ProverSumcheckCo
         l2sumcheck,
         linfsumcheck,
         vdfsumcheck,
-        next: config
-            .next
-            .as_ref()
-            .map(|next_config| Box::new(init_prover_sumcheck(crs, next_config))),
+        next: match config {
+            RoundConfig::Intermediate { next, .. } => Some(Box::new(init_prover_sumcheck(crs, next))),
+            RoundConfig::Last { .. } => None,
+        },
     }
 }
 
@@ -1070,178 +1117,173 @@ pub fn prover_round(
     let mut folding_challenges = new_vec_zero_preallocated(config.main_witness_columns);
     hash_wrapper.sample_biased_ternary_ring_element_vec_into(&mut folding_challenges);
 
-    let mut folded_witness = fold(&witness, &folding_challenges);
+    let folded_witness = fold(&witness, &folding_challenges);
 
-    if DEBUG {
-        let commitment_to_folded_witness = commit_basic(crs, &folded_witness, RANK);
-        let split_ref = VerticallyAlignedMatrix {
-            height: folded_witness.height / 2,
-            width: 2,
-            data: folded_witness.data.clone(),
-            used_cols: 2,
-        };
-        let commitment_to_split_witness = commit_basic(crs, &split_ref, RANK);
-        let old_ck = crs.structured_ck_for_wit_dim(split_ref.height * 2);
-        let composed = &(&(&*ONE - &old_ck[0].tensor_layers[0]) * &commitment_to_split_witness[(0, 0)])
-            + &(&old_ck[0].tensor_layers[0] * &commitment_to_split_witness[(0, 1)]);
-        assert_eq!(composed, commitment_to_folded_witness[(0, 0)], "Composed commitment from the split witness does not match the commitment to the folded witness");
-    }
-    let split_witness = VerticallyAlignedMatrix {
-        height: folded_witness.height / 2,
-        width: 2,
-        data: folded_witness.data,
-        used_cols: 2,
-    };
-
-    let mut decomposed_split_witness = VerticallyAlignedMatrix {
-        height: split_witness.height,
-        width: 8,
-        data: new_vec_zero_preallocated(split_witness.height * 8),
-        used_cols: 8,
-    };
-
-    decompose_chunks_into(
-        &mut decomposed_split_witness.data[..split_witness.height * 2],
-        &split_witness.data[..split_witness.height],
-        config.decomposition_base_log,
-        2,
-    );
-
-    decompose_chunks_into(
-        &mut decomposed_split_witness.data[split_witness.height * 2..split_witness.height * 4],
-        &split_witness.data[split_witness.height..],
-        config.decomposition_base_log,
-        2,
-    );
-
-    decompose_chunks_into(
-        &mut decomposed_split_witness.data[split_witness.height * 4..split_witness.height * 6],
-        &projected_witness.data[..split_witness.height],
-        config.decomposition_base_log,
-        2,
-    );
-
-    decompose_chunks_into(
-        &mut decomposed_split_witness.data[split_witness.height * 6..],
-        &projected_witness.data[split_witness.height..],
-        config.decomposition_base_log,
-        2,
-    );
-
-    let decomposed_split_commitment = commit_basic(crs, &decomposed_split_witness, RANK);
-
-    if DEBUG {
-        let commitment_to_split_witness = commit_basic(crs, &split_witness, RANK);
-        let old_ck = crs.structured_ck_for_wit_dim(split_witness.height * 2);
-
-        let composed = compose_from_decomposed(
-            &vec![
-                decomposed_split_commitment[(0, 0)].clone(),
-                decomposed_split_commitment[(0, 1)].clone(),
-                decomposed_split_commitment[(0, 2)].clone(),
-                decomposed_split_commitment[(0, 3)].clone(),
-            ],
-            config.decomposition_base_log,
-            2,
-        );
-
-        assert_eq!(composed[0], commitment_to_split_witness[(0, 0)], "Composed commitment from the decomposed split witness does not match the commitment to the split witness");
-
-        assert_eq!(composed[1], commitment_to_split_witness[(0, 1)], "Composed commitment from the decomposed split projected witness does not match the commitment to the projected witness");
-
-        let composed_projection = compose_from_decomposed(
-            &vec![
-                decomposed_split_commitment[(0, 4)].clone(),
-                decomposed_split_commitment[(0, 5)].clone(),
-                decomposed_split_commitment[(0, 6)].clone(),
-                decomposed_split_commitment[(0, 7)].clone(),
-            ],
-            config.decomposition_base_log,
-            2,
-        );
-
-        let unsplit_projection = &(&(&*ONE - &old_ck[0].tensor_layers[0]) * &composed_projection[0])
-            + &(&old_ck[0].tensor_layers[0] * &composed_projection[1]);
-
-        assert_eq!(unsplit_projection, projection_commitment[(0, 0)], "Composed commitment from the decomposed split projected witness does not match the commitment to the projected witness");
-    }
-
-    let new_evaluation_points_inner = evaluation_points
-        .iter()
-        .skip(outer_points_len + 1)
-        .cloned()
-        .collect::<Vec<_>>();
-
-    // let new_evaluation_points_inner = evaluation_points
-    //     .iter()
-    //     .skip(evaluation_points.len() - decomposed_split_commitment.height.ilog2() as usize)
-    //     .cloned()
-    //     .collect::<Vec<_>>();
-
-    let new_evaluation_points_inner_expanded = PreprocessedRow::from_structured_row(
-        &evaluation_point_to_structured_row(&new_evaluation_points_inner),
-    );
-
-    let new_evaluation_points_inner_conjugated = new_evaluation_points_inner
-        .iter()
-        .map(RingElement::conjugate)
-        .collect::<Vec<_>>();
-
-    let new_evaluation_points_inner_conjugated_expanded = PreprocessedRow::from_structured_row(
-        &evaluation_point_to_structured_row(&new_evaluation_points_inner_conjugated),
-    );
-
-    let new_claims = commit_basic_internal(
-        &vec![
-            new_evaluation_points_inner_expanded,
-            new_evaluation_points_inner_conjugated_expanded,
-        ],
-        &decomposed_split_witness,
-        2,
-    );
-
-    let next_level_proof = if let Some(next_config) = &config.next {
-        let next_level_eval_points = vec![
-            evaluation_point_to_structured_row(&new_evaluation_points_inner),
-            evaluation_point_to_structured_row(&new_evaluation_points_inner_conjugated),
-        ];
-        Some(Box::new(prover_round(
-            crs,
-            &decomposed_split_witness,
-            next_config,
-            sumcheck_context.next.as_mut().unwrap(),
-            &next_level_eval_points,
-            &new_claims,
-            // &evaluation_points_outer, // TODO: do we need to pass the outer evaluation points to the next level? maybe not, since the next level will have its own ones?
-            hash_wrapper,
-            None, // VDF only in first round
-        )))
-    } else {
-        None
-    };
-
-    SalsaaProof {
+    let common = SalsaaProofCommon {
         projection_commitment,
         ip_l2_claim,
         ip_linf_claim,
         sumcheck_transcript: polys,
         claims,
         claim_over_projection,
-        new_claims,
-        decomposed_split_commitment,
-        next: next_level_proof,
+    };
+
+    match config {
+        RoundConfig::Intermediate { decomposition_base_log, next, .. } => {
+            if DEBUG {
+                let commitment_to_folded_witness = commit_basic(crs, &folded_witness, RANK);
+                let split_ref = VerticallyAlignedMatrix {
+                    height: folded_witness.height / 2,
+                    width: 2,
+                    data: folded_witness.data.clone(),
+                    used_cols: 2,
+                };
+                let commitment_to_split_witness = commit_basic(crs, &split_ref, RANK);
+                let old_ck = crs.structured_ck_for_wit_dim(split_ref.height * 2);
+                let composed = &(&(&*ONE - &old_ck[0].tensor_layers[0]) * &commitment_to_split_witness[(0, 0)])
+                    + &(&old_ck[0].tensor_layers[0] * &commitment_to_split_witness[(0, 1)]);
+                assert_eq!(composed, commitment_to_folded_witness[(0, 0)], "Composed commitment from the split witness does not match the commitment to the folded witness");
+            }
+            let split_witness = VerticallyAlignedMatrix {
+                height: folded_witness.height / 2,
+                width: 2,
+                data: folded_witness.data,
+                used_cols: 2,
+            };
+
+            let mut decomposed_split_witness = VerticallyAlignedMatrix {
+                height: split_witness.height,
+                width: 8,
+                data: new_vec_zero_preallocated(split_witness.height * 8),
+                used_cols: 8,
+            };
+
+            decompose_chunks_into(
+                &mut decomposed_split_witness.data[..split_witness.height * 2],
+                &split_witness.data[..split_witness.height],
+                *decomposition_base_log,
+                2,
+            );
+
+            decompose_chunks_into(
+                &mut decomposed_split_witness.data[split_witness.height * 2..split_witness.height * 4],
+                &split_witness.data[split_witness.height..],
+                *decomposition_base_log,
+                2,
+            );
+
+            decompose_chunks_into(
+                &mut decomposed_split_witness.data[split_witness.height * 4..split_witness.height * 6],
+                &projected_witness.data[..split_witness.height],
+                *decomposition_base_log,
+                2,
+            );
+
+            decompose_chunks_into(
+                &mut decomposed_split_witness.data[split_witness.height * 6..],
+                &projected_witness.data[split_witness.height..],
+                *decomposition_base_log,
+                2,
+            );
+
+            let decomposed_split_commitment = commit_basic(crs, &decomposed_split_witness, RANK);
+
+            if DEBUG {
+                let commitment_to_split_witness = commit_basic(crs, &split_witness, RANK);
+                let old_ck = crs.structured_ck_for_wit_dim(split_witness.height * 2);
+
+                let composed = compose_from_decomposed(
+                    &vec![
+                        decomposed_split_commitment[(0, 0)].clone(),
+                        decomposed_split_commitment[(0, 1)].clone(),
+                        decomposed_split_commitment[(0, 2)].clone(),
+                        decomposed_split_commitment[(0, 3)].clone(),
+                    ],
+                    *decomposition_base_log,
+                    2,
+                );
+
+                assert_eq!(composed[0], commitment_to_split_witness[(0, 0)], "Composed commitment from the decomposed split witness does not match the commitment to the split witness");
+
+                assert_eq!(composed[1], commitment_to_split_witness[(0, 1)], "Composed commitment from the decomposed split projected witness does not match the commitment to the projected witness");
+
+                let composed_projection = compose_from_decomposed(
+                    &vec![
+                        decomposed_split_commitment[(0, 4)].clone(),
+                        decomposed_split_commitment[(0, 5)].clone(),
+                        decomposed_split_commitment[(0, 6)].clone(),
+                        decomposed_split_commitment[(0, 7)].clone(),
+                    ],
+                    *decomposition_base_log,
+                    2,
+                );
+
+                let unsplit_projection = &(&(&*ONE - &old_ck[0].tensor_layers[0]) * &composed_projection[0])
+                    + &(&old_ck[0].tensor_layers[0] * &composed_projection[1]);
+
+                assert_eq!(unsplit_projection, common.projection_commitment[(0, 0)], "Composed commitment from the decomposed split projected witness does not match the commitment to the projected witness");
+            }
+
+            let new_evaluation_points_inner = evaluation_points
+                .iter()
+                .skip(outer_points_len + 1)
+                .cloned()
+                .collect::<Vec<_>>();
+
+            let new_evaluation_points_inner_expanded = PreprocessedRow::from_structured_row(
+                &evaluation_point_to_structured_row(&new_evaluation_points_inner),
+            );
+
+            let new_evaluation_points_inner_conjugated = new_evaluation_points_inner
+                .iter()
+                .map(RingElement::conjugate)
+                .collect::<Vec<_>>();
+
+            let new_evaluation_points_inner_conjugated_expanded = PreprocessedRow::from_structured_row(
+                &evaluation_point_to_structured_row(&new_evaluation_points_inner_conjugated),
+            );
+
+            let new_claims = commit_basic_internal(
+                &vec![
+                    new_evaluation_points_inner_expanded,
+                    new_evaluation_points_inner_conjugated_expanded,
+                ],
+                &decomposed_split_witness,
+                2,
+            );
+
+            let next_level_eval_points = vec![
+                evaluation_point_to_structured_row(&new_evaluation_points_inner),
+                evaluation_point_to_structured_row(&new_evaluation_points_inner_conjugated),
+            ];
+            let next_level_proof = prover_round(
+                crs,
+                &decomposed_split_witness,
+                next,
+                sumcheck_context.next.as_mut().unwrap(),
+                &next_level_eval_points,
+                &new_claims,
+                hash_wrapper,
+                None, // VDF only in first round
+            );
+
+            SalsaaProof::Intermediate {
+                common,
+                new_claims,
+                decomposed_split_commitment,
+                next: Box::new(next_level_proof),
+            }
+        }
+
+        RoundConfig::Last { .. } => {
+            // Last round: send the folded witness and projected witness directly, no decomposition
+            SalsaaProof::Last {
+                common,
+                folded_witness: folded_witness.data,
+                projected_witness: projected_witness.data,
+            }
+        }
     }
-
-    // let claim_over_projection_matrix = commit_basic_internal(&vec![preprocessed_evaluation_points_inner], &projected_witness, 1);
-    // let claim_over_projection = claim_over_projection_matrix.row(0).to_vec();
-
-    // SalsaaProof {
-    //     projection_commitment,
-    //     sumcheck_transcript: polys,
-    //     claims,
-    //     claim_over_projection,
-    //     next: None,
-    // }
 }
 
 fn sample_random_binary_vector(len: usize) -> Vec<RingElement> {
@@ -1648,10 +1690,10 @@ pub fn init_verifier_sumcheck(config: &RoundConfig) -> VerifierSumcheckContext {
         vdfevaluation,
         combiner_evaluation,
         field_combiner_evaluation,
-        next: config
-            .next
-            .as_ref()
-            .map(|next_config| Box::new(init_verifier_sumcheck(next_config))),
+        next: match config {
+            RoundConfig::Intermediate { next, .. } => Some(Box::new(init_verifier_sumcheck(next))),
+            RoundConfig::Last { .. } => None,
+        },
     }
 }
 
@@ -2013,11 +2055,6 @@ pub fn verifier_round(
     }
 
     // verify evaluation claims (TODO: change to recompute them from the proof data)
-    let recomposed_claims = HorizontallyAlignedMatrix {
-        height: 2,
-        width: 4,
-        data: compose_from_decomposed(&proof.new_claims.data, config.decomposition_base_log, 2),
-    };
 
     // Replay Fiat-Shamir: sample folding challenges (same as prover does post-sumcheck)
     let mut folding_challenges = new_vec_zero_preallocated(config.main_witness_columns);
@@ -2025,6 +2062,7 @@ pub fn verifier_round(
 
     let outer_points_len = config.main_witness_columns.ilog2() as usize + 1;
     let layer = &evaluation_points_ring[outer_points_len];
+    let conj_layer = layer.conjugate();
 
     // Compute the folded claim: sum_i folding_challenges[i] * claims[(0, i)]
     let mut folded_claim = RingElement::zero(Representation::IncompleteNTT);
@@ -2034,14 +2072,6 @@ pub fn verifier_round(
         folded_claim += &term;
     }
 
-    assert_eq!(
-        folded_claim,
-        &(&(&*ONE - layer) * &recomposed_claims[(0, 0)]) + &(layer * &recomposed_claims[(0, 1)]),
-        "Recomposed claim for the witness does not match the original claim"
-    );
-
-    // Check conjugate claims
-    let conj_layer = layer.conjugate();
     let mut folded_conj_claim = RingElement::zero(Representation::IncompleteNTT);
     for i in 0..config.main_witness_columns {
         let mut term = folding_challenges[i].clone();
@@ -2049,130 +2079,282 @@ pub fn verifier_round(
         folded_conj_claim += &term;
     }
 
-    assert_eq!(
-        folded_conj_claim,
-        &(&(&*ONE - &conj_layer) * &recomposed_claims[(1, 0)])
-            + &(&conj_layer * &recomposed_claims[(1, 1)]),
-        "Recomposed conjugate claim for the witness does not match the original claim"
-    );
+    match (config, proof) {
+        (RoundConfig::Intermediate { decomposition_base_log, next, .. }, SalsaaProof::Intermediate { new_claims, decomposed_split_commitment, next: next_proof, .. }) => {
+            let recomposed_claims = HorizontallyAlignedMatrix {
+                height: 2,
+                width: 4,
+                data: compose_from_decomposed(&new_claims.data, *decomposition_base_log, 2),
+            };
 
-    // Check claims over the projection
-    assert_eq!(
-        proof.claim_over_projection[0],
-        &(&(&*ONE - layer) * &recomposed_claims[(0, 2)]) + &(layer * &recomposed_claims[(0, 3)]),
-        "Recomposed claim for the projection does not match the original claim"
-    );
+            assert_eq!(
+                folded_claim,
+                &(&(&*ONE - layer) * &recomposed_claims[(0, 0)]) + &(layer * &recomposed_claims[(0, 1)]),
+                "Recomposed claim for the witness does not match the original claim"
+            );
 
-    assert_eq!(
-        proof.claim_over_projection[1],
-        &(&(&*ONE - &conj_layer) * &recomposed_claims[(1, 2)])
-            + &(&conj_layer * &recomposed_claims[(1, 3)]),
-        "Recomposed conjugate claim for the projection does not match the original claim"
-    );
+            assert_eq!(
+                folded_conj_claim,
+                &(&(&*ONE - &conj_layer) * &recomposed_claims[(1, 0)])
+                    + &(&conj_layer * &recomposed_claims[(1, 1)]),
+                "Recomposed conjugate claim for the witness does not match the original claim"
+            );
 
-    let recomposed_commitments = HorizontallyAlignedMatrix {
-        height: RANK,
-        width: 4,
-        data: compose_from_decomposed(
-            &proof.decomposed_split_commitment.data,
-            config.decomposition_base_log,
-            2,
-        ),
-    };
+            // Check claims over the projection
+            assert_eq!(
+                proof.claim_over_projection[0],
+                &(&(&*ONE - layer) * &recomposed_claims[(0, 2)]) + &(layer * &recomposed_claims[(0, 3)]),
+                "Recomposed claim for the projection does not match the original claim"
+            );
 
-    let mut temp = RingElement::zero(Representation::IncompleteNTT);
-    for r in 0..RANK {
-        let layer = crs
-            .structured_ck_for_wit_dim(config.witness_length / 2 / config.main_witness_columns)[r]
-            .tensor_layers
-            .get(0)
-            .unwrap();
+            assert_eq!(
+                proof.claim_over_projection[1],
+                &(&(&*ONE - &conj_layer) * &recomposed_claims[(1, 2)])
+                    + &(&conj_layer * &recomposed_claims[(1, 3)]),
+                "Recomposed conjugate claim for the projection does not match the original claim"
+            );
 
-        let mut folded_commitment_r = RingElement::zero(Representation::IncompleteNTT);
-        for i in 0..config.main_witness_columns {
-            temp *= (&folding_challenges[i], &commitment[(r, i)]);
-            folded_commitment_r += &temp;
+            let recomposed_commitments = HorizontallyAlignedMatrix {
+                height: RANK,
+                width: 4,
+                data: compose_from_decomposed(
+                    &decomposed_split_commitment.data,
+                    *decomposition_base_log,
+                    2,
+                ),
+            };
+
+            let mut temp = RingElement::zero(Representation::IncompleteNTT);
+            for r in 0..RANK {
+                let layer = crs
+                    .structured_ck_for_wit_dim(config.witness_length / 2 / config.main_witness_columns)[r]
+                    .tensor_layers
+                    .get(0)
+                    .unwrap();
+
+                let mut folded_commitment_r = RingElement::zero(Representation::IncompleteNTT);
+                for i in 0..config.main_witness_columns {
+                    temp *= (&folding_challenges[i], &commitment[(r, i)]);
+                    folded_commitment_r += &temp;
+                }
+
+                assert_eq!(
+                    folded_commitment_r,
+                    &(&(&*ONE - layer) * &recomposed_commitments[(r, 0)])
+                        + &(layer * &recomposed_commitments[(r, 1)]),
+                    "Recomposed commitment for the witness does not match the folded commitment"
+                );
+
+                assert_eq!(
+                    proof.projection_commitment[(r, 0)],
+                    &(&(&*ONE - layer) * &recomposed_commitments[(r, 2)])
+                        + &(layer * &recomposed_commitments[(r, 3)]),
+                    "Recomposed commitment for the projection does not match"
+                );
+            }
+
+            verifier_context.load_data(
+                config,
+                proof,
+                &evaluation_points_ring,
+                evaluation_points_inner,
+                &evaluation_points_outer,
+                &batching_challenges,
+                &projection_matrix,
+                &combination,
+                qe,
+                vdf_challenge.as_ref(),
+                vdf_crs_param,
+            );
+
+            let verifier_eval = verifier_context
+                .field_combiner_evaluation
+                .borrow_mut()
+                .evaluate_at_ring_point(&evaluation_points_ring)
+                .clone();
+
+            assert_eq!(
+                verifier_eval, batched_claim_over_field,
+                "Verifier final check failed: tree evaluation does not match sumcheck claim"
+            );
+
+            // Recurse into the next round
+            let new_evaluation_points_inner = evaluation_points_ring
+                .iter()
+                .skip(outer_points_len + 1)
+                .cloned()
+                .collect::<Vec<_>>();
+
+            let new_evaluation_points_inner_conjugated = new_evaluation_points_inner
+                .iter()
+                .map(RingElement::conjugate)
+                .collect::<Vec<_>>();
+
+            let next_level_eval_points = vec![
+                evaluation_point_to_structured_row(&new_evaluation_points_inner),
+                evaluation_point_to_structured_row(&new_evaluation_points_inner_conjugated),
+            ];
+
+            verifier_round(
+                next,
+                crs,
+                verifier_context.next.as_mut().unwrap(),
+                decomposed_split_commitment,
+                next_proof,
+                &next_level_eval_points,
+                new_claims,
+                hash_wrapper,
+                None, // VDF only in first round
+                None, // no VDF outputs in recursive rounds
+            );
         }
 
-        assert_eq!(
-            folded_commitment_r,
-            &(&(&*ONE - layer) * &recomposed_commitments[(r, 0)])
-                + &(layer * &recomposed_commitments[(r, 1)]),
-            "Recomposed commitment for the witness does not match the folded commitment"
-        );
+        (RoundConfig::Last { .. }, SalsaaProof::Last { folded_witness, projected_witness, .. }) => {
+            // Last round: verify claims directly from the witness data
 
-        assert_eq!(
-            proof.projection_commitment[(r, 0)],
-            &(&(&*ONE - layer) * &recomposed_commitments[(r, 2)])
-                + &(layer * &recomposed_commitments[(r, 3)]),
-            "Recomposed commitment for the projection does not match"
-        );
-    }
+            // Reconstruct the folded witness as a VerticallyAlignedMatrix (1 column)
+            let folded_witness_matrix = VerticallyAlignedMatrix {
+                height: folded_witness.len(),
+                width: 1,
+                data: folded_witness.clone(),
+                used_cols: 1,
+            };
 
-    verifier_context.load_data(
-        config,
-        proof,
-        &evaluation_points_ring,
-        evaluation_points_inner,
-        &evaluation_points_outer,
-        &batching_challenges,
-        &projection_matrix,
-        &combination,
-        qe,
-        vdf_challenge.as_ref(),
-        vdf_crs_param,
-    );
+            // Reconstruct projected witness (1 column, same height as folded)
+            let projected_witness_matrix = VerticallyAlignedMatrix {
+                height: projected_witness.len(),
+                width: 1,
+                data: projected_witness.clone(),
+                used_cols: 1,
+            };
 
-    // let eval_l2 = verifier_context.l2evaluation.as_ref().unwrap().output.eva
+            // Use the current round's sumcheck evaluation points, including the "layer" variable
+            // (no +1 skip since there's no split at the last round).
+            // The prover computes claims using evaluation_points[outer_points_len..] from THIS round's sumcheck.
+            let current_inner_points: Vec<_> = evaluation_points_ring
+                .iter()
+                .skip(outer_points_len)
+                .cloned()
+                .collect();
 
-    // Final evaluation check: the tree evaluated at the random points must match
-    // the last round's batched_claim_over_field
-    let verifier_eval = verifier_context
-        .field_combiner_evaluation
-        .borrow_mut()
-        .evaluate_at_ring_point(&evaluation_points_ring)
-        .clone();
+            let eval_points_inner_expanded = PreprocessedRow::from_structured_row(
+                &evaluation_point_to_structured_row(&current_inner_points),
+            );
 
-    assert_eq!(
-        verifier_eval, batched_claim_over_field,
-        "Verifier final check failed: tree evaluation does not match sumcheck claim"
-    );
+            let current_inner_points_conjugated: Vec<_> = current_inner_points
+                .iter()
+                .map(RingElement::conjugate)
+                .collect();
 
-    // Recurse into the next round if config.next is present
-    if let Some(next_config) = &config.next {
-        let next_proof = proof
-            .next
-            .as_ref()
-            .expect("Config has next level but proof does not");
+            let eval_points_inner_conj_expanded = PreprocessedRow::from_structured_row(
+                &evaluation_point_to_structured_row(&current_inner_points_conjugated),
+            );
 
-        let new_evaluation_points_inner = evaluation_points_ring
-            .iter()
-            .skip(outer_points_len + 1)
-            .cloned()
-            .collect::<Vec<_>>();
+            // Compute expected claim over folded witness: <eval_points, folded_witness>
+            let mut temp = RingElement::zero(Representation::IncompleteNTT);
+            let mut expected_folded_claim = RingElement::zero(Representation::IncompleteNTT);
+            for (w, r) in folded_witness.iter().zip(eval_points_inner_expanded.preprocessed_row.iter()) {
+                temp *= (w, r);
+                expected_folded_claim += &temp;
+            }
 
-        let new_evaluation_points_inner_conjugated = new_evaluation_points_inner
-            .iter()
-            .map(RingElement::conjugate)
-            .collect::<Vec<_>>();
+            assert_eq!(
+                folded_claim, expected_folded_claim,
+                "Last round: folded claim does not match evaluation of the folded witness"
+            );
 
-        let next_level_eval_points = vec![
-            evaluation_point_to_structured_row(&new_evaluation_points_inner),
-            evaluation_point_to_structured_row(&new_evaluation_points_inner_conjugated),
-        ];
+            // Compute expected conjugate claim over folded witness
+            let mut expected_folded_conj_claim = RingElement::zero(Representation::IncompleteNTT);
+            for (w, r) in folded_witness.iter().zip(eval_points_inner_conj_expanded.preprocessed_row.iter()) {
+                temp *= (w, r);
+                expected_folded_conj_claim += &temp;
+            }
 
-        verifier_round(
-            next_config,
-            crs,
-            verifier_context.next.as_mut().unwrap(),
-            &proof.decomposed_split_commitment,
-            next_proof,
-            &next_level_eval_points,
-            &proof.new_claims,
-            hash_wrapper,
-            None, // VDF only in first round
-            None, // no VDF outputs in recursive rounds
-        );
+            assert_eq!(
+                folded_conj_claim, expected_folded_conj_claim,
+                "Last round: folded conjugate claim does not match evaluation of the folded witness"
+            );
+
+            // Compute expected claim over projected witness
+            let mut expected_projection_claim = RingElement::zero(Representation::IncompleteNTT);
+            for (w, r) in projected_witness.iter().zip(eval_points_inner_expanded.preprocessed_row.iter()) {
+                temp *= (w, r);
+                expected_projection_claim += &temp;
+            }
+
+            assert_eq!(
+                proof.claim_over_projection[0], expected_projection_claim,
+                "Last round: projection claim does not match evaluation of the projected witness"
+            );
+
+            // Compute expected conjugate claim over projected witness
+            let mut expected_projection_conj_claim = RingElement::zero(Representation::IncompleteNTT);
+            for (w, r) in projected_witness.iter().zip(eval_points_inner_conj_expanded.preprocessed_row.iter()) {
+                temp *= (w, r);
+                expected_projection_conj_claim += &temp;
+            }
+
+            assert_eq!(
+                proof.claim_over_projection[1], expected_projection_conj_claim,
+                "Last round: conjugate projection claim does not match evaluation of the projected witness"
+            );
+
+            let comm_time = std::time::Instant::now();
+
+            // Verify commitment: commit(folded_witness) should match folded commitments
+            let folded_witness_commitment = commit_basic(crs, &folded_witness_matrix, RANK);
+            let projected_witness_commitment = commit_basic(crs, &projected_witness_matrix, RANK);
+
+            let elapsed = comm_time.elapsed();
+            println!("Verifier commitment recomputation took {} µs", elapsed.as_micros());
+
+            for r in 0..RANK {
+                let mut folded_commitment_r = RingElement::zero(Representation::IncompleteNTT);
+                for i in 0..config.main_witness_columns {
+                    temp *= (&folding_challenges[i], &commitment[(r, i)]);
+                    folded_commitment_r += &temp;
+                }
+
+                assert_eq!(
+                    folded_commitment_r, folded_witness_commitment[(r, 0)],
+                    "Last round: folded witness commitment does not match"
+                );
+
+                assert_eq!(
+                    proof.projection_commitment[(r, 0)], projected_witness_commitment[(r, 0)],
+                    "Last round: projected witness commitment does not match"
+                );
+            }
+
+            verifier_context.load_data(
+                config,
+                proof,
+                &evaluation_points_ring,
+                evaluation_points_inner,
+                &evaluation_points_outer,
+                &batching_challenges,
+                &projection_matrix,
+                &combination,
+                qe,
+                vdf_challenge.as_ref(),
+                vdf_crs_param,
+            );
+
+            let verifier_eval = verifier_context
+                .field_combiner_evaluation
+                .borrow_mut()
+                .evaluate_at_ring_point(&evaluation_points_ring)
+                .clone();
+
+            assert_eq!(
+                verifier_eval, batched_claim_over_field,
+                "Verifier final check failed: tree evaluation does not match sumcheck claim"
+            );
+
+            // No recursion at the last round
+        }
+
+        _ => panic!("Config and proof variant mismatch"),
     }
 }
 
