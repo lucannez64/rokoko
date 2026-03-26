@@ -38,7 +38,6 @@ pub struct SalsaaProof {
     claims: HorizontallyAlignedMatrix<RingElement>,
     claim_over_projection: Vec<RingElement>,
     new_claims: HorizontallyAlignedMatrix<RingElement>,
-    commitment_to_folded_witness: BasicCommitment, // TODO: this is unnecessary, remove later
     decomposed_split_commitment: BasicCommitment, // TODO: this should be optional as on the last round we just send the witness immediately post folding
     next: Option<Box<SalsaaProof>>,
 }
@@ -856,9 +855,9 @@ pub fn prover_round(
 
     let mut folded_witness = fold(&witness, &folding_challenges);
 
-    // TODO: remove me later as we can recmpose it
+    // TEST ONLY
     let commitment_to_folded_witness = commit_basic(crs, &folded_witness, RANK);
-
+    // END TEST ONLY
     let split_witness = VerticallyAlignedMatrix {
         height: folded_witness.height / 2,
         width: 2,
@@ -866,8 +865,8 @@ pub fn prover_round(
         used_cols: 2,
     };
 
-    // TEST ONLU
 
+    // TEST ONLY
     let commitment_to_split_witness = commit_basic(crs, &split_witness, RANK);
 
     let old_ck = crs.structured_ck_for_wit_dim(split_witness.height * 2);
@@ -952,7 +951,6 @@ pub fn prover_round(
         claims, // NOT needed
         claim_over_projection, // not needed
         new_claims,
-        commitment_to_folded_witness, // TODO: we can remove this as we can recompute it from the split witness, but for now let's keep it for simplicity
         decomposed_split_commitment,
         next: None,
     }
@@ -1509,6 +1507,7 @@ pub fn verifier_round(
     config: &RoundConfig,
     crs: &CRS,
     verifier_context: &mut VerifierSumcheckContext,
+    commitment: &BasicCommitment,
     proof: &SalsaaProof,
     evaluation_points_inner: &[StructuredRow],
     claims: &HorizontallyAlignedMatrix<RingElement>,
@@ -1656,6 +1655,41 @@ pub fn verifier_round(
         "Recomposed conjugate claim for the projection does not match the original claim"
     );
 
+
+
+    let recomposed_commitments = HorizontallyAlignedMatrix {
+        height: RANK,
+        width: 4,
+        data: compose_from_decomposed(&proof.decomposed_split_commitment.data, config.decomposition_base_log, 2),
+    };
+
+    let mut temp = RingElement::zero(Representation::IncompleteNTT);
+    for r in 0..RANK {
+        let layer = crs.structured_ck_for_wit_dim(config.witness_length / 2 / config.main_witness_columns)[r]
+            .tensor_layers
+            .get(0)
+            .unwrap();
+
+        let mut folded_commitment_r = RingElement::zero(Representation::IncompleteNTT);
+        for i in 0..config.main_witness_columns {
+            temp *= (&folding_challenges[i], &commitment[(r, i)]);
+            folded_commitment_r += &temp;
+        }
+
+        assert_eq!(
+            folded_commitment_r,
+            &(&(&*ONE - layer) * &recomposed_commitments[(r, 0)]) + &(layer * &recomposed_commitments[(r, 1)]),
+            "Recomposed commitment for the witness does not match the folded commitment"
+        );
+
+        assert_eq!(
+            proof.projection_commitment[(r, 0)],
+            &(&(&*ONE - layer) * &recomposed_commitments[(r, 2)]) + &(layer * &recomposed_commitments[(r, 3)]),
+            "Recomposed commitment for the projection does not match"
+        );
+    }
+
+
     verifier_context.load_data(
         config,
         proof,
@@ -1735,6 +1769,7 @@ pub fn execute() {
         &CONFIG,
         &crs,
         &mut verifier_context,
+        &commitment,
         &proof,
         &evaluation_points_inner,
         &claims,
