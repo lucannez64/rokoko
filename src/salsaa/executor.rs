@@ -82,45 +82,52 @@ const NUM_COLUMNS_INITIAL: usize = 2;
 
 const PROJECTION_HEIGHT: usize = 256;
 
-// All configs shall be auto-derived, but we keep this struct for clarity for now
-static CONFIG_R1: LazyLock<RoundConfig> = LazyLock::new(|| RoundConfig {
-    witness_length: (WITNESS_DIM / 2) * 8 * 2, // 8 columns to be expanded to 16 to account for the projection
-    exact_binariness: false,
-    l2: true,
-    vdf: false,
-    projection_ratio: 8,
-    main_witness_columns: 8,
-    main_witness_prefix: Prefix {
-        prefix: 0b0,
-        length: 1,
-    },
-    projection_prefix: Prefix {
-        prefix: 0b1000,
-        length: 4,
-    },
-    next: None,
-    inner_evaluation_claims: 1,
-    decomposition_base_log: 12,
-});
+/// Recursively builds the round config chain.
+/// - First round: uses NUM_COLUMNS_INITIAL columns, projection_ratio=2, VDF+exact_binariness enabled.
+/// - Subsequent rounds: 8 columns, projection_ratio=8, L2 enabled.
+/// - Recursion stops when the *next* round's single_col_height would be < PROJECTION_HEIGHT * projection_ratio
+///   (i.e., the next round couldn't support projection).
+fn build_round_config(witness_length: usize, is_first_round: bool) -> RoundConfig {
+    let main_witness_columns = if is_first_round { NUM_COLUMNS_INITIAL } else { 8 };
+    let projection_ratio = if is_first_round { 2 } else { 8 };
 
-static CONFIG: LazyLock<RoundConfig> = LazyLock::new(|| RoundConfig {
-    witness_length: WITNESS_DIM * WITNESS_WIDTH * 2, // we ``bloat up'' the witness times two to account to the projection
-    exact_binariness: true,
-    l2: false,
-    vdf: true, // for the first round
-    projection_ratio: 2, // for the first round is 2, later shall be 8 (I think)
-    main_witness_columns: NUM_COLUMNS_INITIAL,
-    main_witness_prefix: Prefix {
-        prefix: 0b0,
-        length: 1, // main witness takes half, always
-    }, // in the first round we start with the origicnal witness that is out in NUM_COLUMNS_INITIAL columns and the projection will be the third column. In leter rounds, it will be different.
-    projection_prefix: Prefix {
-        prefix: 0b10,
-        length: NUM_COLUMNS_INITIAL.ilog2() as usize + 1, // if the witness is 2 colums, then length is 2, if the witness is 8 columns, then length is 4, etc.
-    },
-    inner_evaluation_claims: 1, // for VDF one will be enough
-    decomposition_base_log: 12, // for now, we test only the first round, but we will need to fill this in for later rounds
-    next: Some(Box::new(CONFIG_R1.clone())),
+    let single_col_height = witness_length / 2 / main_witness_columns;
+    // After fold+split+decompose, next round's column height = single_col_height / 2
+    let next_single_col_height = single_col_height / 2;
+    let next_main_witness_columns = 8usize;
+    let next_projection_ratio = 8usize;
+    let can_recurse = next_single_col_height >= PROJECTION_HEIGHT * next_projection_ratio;
+
+    let next = if can_recurse {
+        let next_witness_length = next_single_col_height * next_main_witness_columns * 2;
+        Some(Box::new(build_round_config(next_witness_length, false)))
+    } else {
+        None
+    };
+
+    RoundConfig {
+        witness_length,
+        exact_binariness: is_first_round,
+        l2: !is_first_round,
+        vdf: is_first_round,
+        projection_ratio,
+        main_witness_columns,
+        main_witness_prefix: Prefix {
+            prefix: 0b0,
+            length: 1,
+        },
+        projection_prefix: Prefix {
+            prefix: main_witness_columns,
+            length: main_witness_columns.ilog2() as usize + 1,
+        },
+        inner_evaluation_claims: 1,
+        decomposition_base_log: 8,
+        next,
+    }
+}
+
+static CONFIG: LazyLock<RoundConfig> = LazyLock::new(|| {
+    build_round_config(WITNESS_DIM * WITNESS_WIDTH * 2, true)
 });
 
 // ==== Prover Sumcheck context initialization ====
