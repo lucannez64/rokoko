@@ -78,26 +78,6 @@ fn load_combiner_evaluation_data(
     combiner_evaluation
 }
 
-fn structured_row_ck_evaluation(
-    crs: &CRS,
-    total_vars: usize,
-    wit_dim: usize,
-    i: usize,
-    suffix: usize,
-) -> ElephantCell<StructuredRowEvaluationLinearSumcheck<RingElement>> {
-    let prefix_size = total_vars - wit_dim.ilog2() as usize - suffix;
-    let eval = ElephantCell::new(
-        StructuredRowEvaluationLinearSumcheck::new_with_prefixed_sufixed_data(
-            wit_dim,
-            prefix_size,
-            suffix,
-        ),
-    );
-    let structured_row = crs.structured_ck_for_wit_dim(wit_dim)[i].clone();
-    eval.borrow_mut().load_from(structured_row);
-    eval
-}
-
 fn pseudo_structured_row_ck_evaluation(
     crs: &CRS,
     total_vars: usize,
@@ -152,7 +132,7 @@ fn build_type4_verifier_context(
 
         let data_len = 1 << (total_vars - current.prefix.length);
         let ck_evals = (0..current.rank)
-            .map(|i| structured_row_ck_evaluation(crs, total_vars, data_len, i, 0))
+            .map(|i| pseudo_structured_row_ck_evaluation(crs, total_vars, data_len, i, 0))
             .collect::<Vec<_>>();
 
         let data_selected_eval = ElephantCell::new(ProductSumcheckEvaluation::new(
@@ -222,7 +202,7 @@ fn build_type4_verifier_context(
     let selector_eval = selector_evaluation_from_prefix(&current.prefix, total_vars);
     let data_len = 1 << (total_vars - current.prefix.length);
     let ck_evals = (0..current.rank)
-        .map(|i| structured_row_ck_evaluation(crs, total_vars, data_len, i, 0))
+        .map(|i| pseudo_structured_row_ck_evaluation(crs, total_vars, data_len, i, 0))
         .collect::<Vec<_>>();
 
     let outputs = ck_evals

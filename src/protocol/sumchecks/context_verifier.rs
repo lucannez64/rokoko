@@ -125,13 +125,13 @@ pub struct Type4LayerVerifierContext {
     pub selector_evaluation: ElephantCell<SelectorEqEvaluation>,
     pub child_selector_evaluations: Vec<ElephantCell<SelectorEqEvaluation>>,
     pub combiner_evaluation: ElephantCell<BasicEvaluationLinearSumcheck<RingElement>>,
-    pub ck_evaluations: Vec<ElephantCell<StructuredRowEvaluationLinearSumcheck<RingElement>>>,
+    pub ck_evaluations: Vec<ElephantCell<BasicEvaluationLinearSumcheck<RingElement>>>,
     pub outputs: Vec<ElephantCell<DiffSumcheckEvaluation>>,
 }
 
 pub struct Type4OutputLayerVerifierContext {
     pub selector_evaluation: ElephantCell<SelectorEqEvaluation>,
-    pub ck_evaluations: Vec<ElephantCell<StructuredRowEvaluationLinearSumcheck<RingElement>>>,
+    pub ck_evaluations: Vec<ElephantCell<BasicEvaluationLinearSumcheck<RingElement>>>,
     pub outputs: Vec<ElephantCell<ProductSumcheckEvaluation>>,
 }
 
