@@ -87,14 +87,11 @@ fn pseudo_structured_row_ck_evaluation(
 ) -> ElephantCell<BasicEvaluationLinearSumcheck<RingElement>> {
     let prefix_size = total_vars - wit_dim.ilog2() as usize - suffix;
     let eval = ElephantCell::new(
-        BasicEvaluationLinearSumcheck::new_with_prefixed_sufixed_data(
-            wit_dim,
-            prefix_size,
-            suffix,
-        ),
+        BasicEvaluationLinearSumcheck::new_with_prefixed_sufixed_data(wit_dim, prefix_size, suffix),
     );
     let unstructured_row = crs.ck_for_wit_dim(wit_dim)[i].clone();
-    eval.borrow_mut().load_from(&unstructured_row.preprocessed_row);
+    eval.borrow_mut()
+        .load_from(&unstructured_row.preprocessed_row);
     eval
 }
 
@@ -887,39 +884,51 @@ pub fn init_verifier(crs: &CRS, config: &SumcheckConfig) -> VerifierSumcheckCont
     };
 
     let mut all_outputs: Vec<ElephantCell<EvalData>> = vec![];
-    for type0 in &type0evaluations {
+    let mut all_output_names: Vec<String> = vec![];
+    for (i, type0) in type0evaluations.iter().enumerate() {
         all_outputs.push(type0.output.clone());
+        all_output_names.push(format!("Type0_{}", i));
     }
-    for type1 in &type1evaluations {
+    for (i, type1) in type1evaluations.iter().enumerate() {
         all_outputs.push(type1.output.clone());
+        all_output_names.push(format!("Type1_{}", i));
     }
-    for type2 in &type2evaluations {
+    for (i, type2) in type2evaluations.iter().enumerate() {
         all_outputs.push(type2.output.clone());
+        all_output_names.push(format!("Type2_{}", i));
     }
     if let Some(type3evaluation) = &type3evaluation {
         all_outputs.push(type3evaluation.output.clone());
+        all_output_names.push("Type3".to_string());
     }
     if let Some(type3_1_evaluations) = &type3_1_evaluations {
-        for type3_1 in &type3_1_evaluations.sumchecks {
+        for (i, type3_1) in type3_1_evaluations.sumchecks.iter().enumerate() {
             all_outputs.push(type3_1.output.clone());
+            all_output_names.push(format!("Type3_1_{}", i));
             all_outputs.push(type3_1.output_2.clone());
+            all_output_names.push(format!("Type3_1_{}_2", i));
         }
     }
 
-    for type4 in &type4evaluations {
-        for layer in &type4.layers {
-            for output in &layer.outputs {
+    for (i, type4) in type4evaluations.iter().enumerate() {
+        for (j, layer) in type4.layers.iter().enumerate() {
+            for (k, output) in layer.outputs.iter().enumerate() {
                 all_outputs.push(output.clone());
+                all_output_names.push(format!("Type4_{}_{}_{}", i, j, k));
             }
         }
-        for output in &type4.output_layer.outputs {
+        for (j, output) in type4.output_layer.outputs.iter().enumerate() {
             all_outputs.push(output.clone());
+            all_output_names.push(format!("Type4_{}_output_{}", i, j));
         }
     }
     all_outputs.push(type5evaluation.output.clone());
+    all_output_names.push("Type5".to_string());
     all_outputs.push(type5evaluation.output_2.clone());
+    all_output_names.push("Type5_output_2".to_string());
 
-    let combiner_evaluation = ElephantCell::new(CombinerEvaluation::new(all_outputs));
+    let combiner_evaluation =
+        ElephantCell::new(CombinerEvaluation::new(all_outputs, Some(all_output_names)));
     let field_combiner_evaluation = ElephantCell::new(RingToFieldCombinerEvaluation::new(
         combiner_evaluation.clone(),
     ));

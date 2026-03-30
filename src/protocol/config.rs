@@ -45,6 +45,7 @@ pub static SOMEWHAT_REAL_CONFIG: LazyLock<Config> = LazyLock::new(|| {
         projection_ratio: 2usize.pow(6),  // 2^6
         projection_height: 2usize.pow(8), // 2^8
         basic_commitment_rank: 4,
+        basic_commitment_diag_blocks: 1,
         nof_openings: 1,
         commitment_recursion: AuxRecursionConfig {
             decomposition_base_log: 15, // 2^5 (witness_width) * 2^2 (rank) * 2^2 (decomp) = 2^9
@@ -80,6 +81,7 @@ pub static SOMEWHAT_REAL_CONFIG: LazyLock<Config> = LazyLock::new(|| {
             projection_ratio: 2usize.pow(7),
             projection_height: 2usize.pow(8),
             basic_commitment_rank: 2,
+            basic_commitment_diag_blocks: 1,
             nof_openings: 2,
             commitment_recursion: AuxRecursionConfig {
                 decomposition_base_log: 15, // 2^5 (witness_width) * 2^2 (rank) * 2^2 (decomp) = 2^9
@@ -130,6 +132,7 @@ pub static TOY_CONFIG: LazyLock<Config> = LazyLock::new(|| {
         projection_ratio: 32,
         projection_height: 8, // small for testing
         basic_commitment_rank: 2,
+        basic_commitment_diag_blocks: 1,
         nof_openings: 1,
 
         commitment_recursion: AuxRecursionConfig {
@@ -170,6 +173,7 @@ pub static TOY_CONFIG_II: LazyLock<Config> = LazyLock::new(|| {
         projection_ratio: 32,
         projection_height: 256,
         basic_commitment_rank: 2,
+        basic_commitment_diag_blocks: 1,
         nof_openings: 1,
 
         commitment_recursion: AuxRecursionConfig {
@@ -252,6 +256,7 @@ pub struct SumcheckConfig {
     pub folded_witness_prefix: Prefix,
 
     pub basic_commitment_rank: usize,
+    pub basic_commitment_diag_blocks: usize,
     pub composed_witness_length: usize,
 
     pub next: Option<Box<Config>>, // for multiple rounds
@@ -286,6 +291,7 @@ pub struct SimpleConfig {
     pub projection_height: usize, // likely 256 unless for testing
     pub projection_nof_batches: usize,
     pub basic_commitment_rank: usize,
+    // maybe we don't need diag config here??
     // pub next: Option<Box<SimpleConfig>>, // for multiple rounds
 }
 

@@ -71,7 +71,8 @@ pub static P: LazyLock<Config> = LazyLock::new(|| {
         ),
         projection_ratio: 1,              // no-op
         projection_height: 2usize.pow(8), // no-op,
-        basic_commitment_rank: 8,
+        basic_commitment_rank: 16,
+        basic_commitment_diag_blocks: 2,
         nof_openings: 1,
         commitment_recursion: AuxRecursionConfig {
             decomposition_base_log: 7,
@@ -102,6 +103,7 @@ pub static P_1: LazyLock<AuxSumcheckConfig> = LazyLock::new(|| {
         projection_ratio: 2usize.pow(5),
         projection_height: 2usize.pow(8),
         basic_commitment_rank: cfg_p30(7, 6),
+        basic_commitment_diag_blocks: 1,
         nof_openings: 2,
         commitment_recursion: AuxRecursionConfig {
             decomposition_base_log: 7,
@@ -136,6 +138,7 @@ pub static P_2: LazyLock<AuxSumcheckConfig> = LazyLock::new(|| AuxSumcheckConfig
     projection_ratio: cfg_p30(2usize.pow(8), 2usize.pow(5)),
     projection_height: 2usize.pow(8),
     basic_commitment_rank: 6,
+    basic_commitment_diag_blocks: 1,
     nof_openings: 2,
     commitment_recursion: AuxRecursionConfig {
         decomposition_base_log: 7,
@@ -177,6 +180,7 @@ pub static P_3: LazyLock<AuxSumcheckConfig> = LazyLock::new(|| AuxSumcheckConfig
     projection_ratio: 2usize.pow(6),
     projection_height: 2usize.pow(8),
     basic_commitment_rank: 5,
+    basic_commitment_diag_blocks: 1,
     nof_openings: 2,
     commitment_recursion: AuxRecursionConfig {
         decomposition_base_log: 7,
@@ -218,6 +222,7 @@ pub static P_4: LazyLock<AuxSumcheckConfig> = LazyLock::new(|| AuxSumcheckConfig
     projection_ratio: 2usize.pow(6),
     projection_height: 2usize.pow(8),
     basic_commitment_rank: 5,
+    basic_commitment_diag_blocks: 1,
     nof_openings: 2,
     commitment_recursion: AuxRecursionConfig {
         decomposition_base_log: 7,
@@ -301,6 +306,7 @@ pub static P_5: LazyLock<AuxSumcheckConfig> = LazyLock::new(|| AuxSumcheckConfig
     projection_ratio: 2usize.pow(7),
     projection_height: 2usize.pow(8),
     basic_commitment_rank: 5,
+    basic_commitment_diag_blocks: 1,
     nof_openings: 2,
     commitment_recursion: AuxRecursionConfig {
         decomposition_base_log: 13,
