@@ -4,6 +4,7 @@ use std::sync::LazyLock;
 use num::range;
 use rand::rand_core::le;
 
+use crate::common::norms::l2_norm_coeffs;
 use crate::protocol::config::ConfigBase;
 use crate::protocol::project_2::verifier_sample_projection_challenges;
 use crate::{
@@ -74,8 +75,8 @@ pub enum SalsaaProof {
         new_claims: Vec<RingElement>,
         decomposed_split_commitment: BasicCommitment,
         next: Box<SalsaaProof>,
-        projection_image_ct: [u64; 256],
-        projection_image_batched: [RingElement; 2],
+        projection_image_ct: VerticallyAlignedMatrix<RingElement>,
+        projection_image_batched: HorizontallyAlignedMatrix<RingElement>,
     },
     Last {
         common: SalsaaProofCommon,
@@ -218,7 +219,7 @@ impl SizeableProof for SalsaaProof {
                 let projection_image_size = 256 * 64; // over estimated
                 println!("  Projection image: {:.2} KB", to_kb(projection_image_size));
 
-                let batched_projection_size = ring_vec_size(projection_image_batched);
+                let batched_projection_size = ring_vec_size(&projection_image_batched.data);
                 println!(
                     "  Batched projection: {:.2} KB",
                     to_kb(batched_projection_size)
@@ -1180,16 +1181,16 @@ pub fn prover_round(
             _ => (None, None, None, None),
         };
 
-    let (unstructured_projection_matrix, batched_image, unstructured_batching_challenges) = match config {
+    let (unstructured_projection_matrix, batched_image, unstructured_batching_challenges, projection_ct) = match config {
         RoundConfig::IntermediateUnstructured { projection_ratio, .. } => {
             println!("Using unstructured projection with ratio {}", projection_ratio);
             let mut projection_matrix = ProjectionMatrix::new(*projection_ratio, PROJECTION_HEIGHT);
             projection_matrix.sample(hash_wrapper);
             let projection = project_coefficients(witness, &projection_matrix);
             let (batched_image, challenges ) = batch_projection_n_times(witness, &projection_matrix, hash_wrapper, NOF_BATCHES, false);
-            (Some(projection_matrix), Some(batched_image), Some(challenges))
+            (Some(projection_matrix), Some(batched_image), Some(challenges), Some(projection))
         }
-        _ => (None, None, None),
+        _ => (None, None, None, None),
     };
     //         // witness coeff = witness.height * DEGREE
     //         // outout =  PROJECTION_HEIGHT
@@ -1783,11 +1784,8 @@ pub fn prover_round(
                 new_claims: new_claims.data,
                 decomposed_split_commitment,
                 next: Box::new(next_level_proof),
-                projection_image_ct: [0u64; 256],
-                projection_image_batched: [
-                    RingElement::zero(Representation::IncompleteNTT),
-                    RingElement::zero(Representation::IncompleteNTT),
-                ],
+                projection_image_ct: projection_ct.unwrap(),
+                projection_image_batched: batched_image.unwrap(),
             }
         }
 
@@ -2547,6 +2545,7 @@ pub fn verifier_round(
     };
 
     let (projection_matrix_unstructures, projection_challenges_unstructured) = match config {
+
         RoundConfig::IntermediateUnstructured { projection_ratio, .. } => {
             let mut projection_matrix = ProjectionMatrix::new(*projection_ratio, PROJECTION_HEIGHT);
             projection_matrix.sample(hash_wrapper);
@@ -2557,6 +2556,14 @@ pub fn verifier_round(
         }
         _ => (None, None)
     };
+
+    match proof {
+        SalsaaProof::IntermediateUnstructured { projection_image_ct, .. } => {
+            let l2_norm_proj = l2_norm_coeffs(&projection_image_ct.data);
+            println!("L2 norm of projection image (unstructured): {}", l2_norm_proj);
+        }
+        _ => {}
+    }
 
     let vdf_challenge = if config.vdf {
         let mut challenge = RingElement::zero(Representation::IncompleteNTT);
