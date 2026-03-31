@@ -238,7 +238,7 @@ impl SizeableProof for SalsaaProof {
 pub struct RoundConfigCommon {
     pub main_witness_prefix: Prefix,
     pub main_witness_columns: usize,
-    pub witness_length: usize,
+    pub extended_witness_length: usize,
     pub exact_binariness: bool, // whether the proof should be for exact binariness
     pub vdf: bool,              // for the first round
     pub l2: bool,               // whether the proof should be for l2 norm of the witness
@@ -255,6 +255,7 @@ pub enum RoundConfig {
         next: Box<RoundConfig>,
     },
     IntermediateUnstructured {
+        projection_ratio: usize, 
         common: RoundConfigCommon,
         decomposition_base_log: u64,
         next: Box<RoundConfig>,
@@ -290,26 +291,28 @@ const PROJECTION_HEIGHT: usize = 256;
 /// - Subsequent rounds: 8 columns, projection_ratio=8, L2 enabled.
 /// - Recursion stops when the *next* round's single_col_height would be < PROJECTION_HEIGHT * projection_ratio
 ///   (i.e., the next round couldn't support projection).
-fn build_round_config(witness_length: usize, is_first_round: bool) -> RoundConfig {
+fn build_round_config(extended_witness_length: usize, is_first_round: bool) -> RoundConfig {
     let main_witness_columns = if is_first_round {
         NUM_COLUMNS_INITIAL
     } else {
         8
     };
+
+    // only for structured case
     let projection_ratio = if is_first_round { 2 } else { 8 };
 
-    let single_col_height = witness_length / 2 / main_witness_columns;
+    let single_col_height = extended_witness_length / 2 / main_witness_columns;
     // After fold+split+decompose, next round's column height = single_col_height / 2
     let next_single_col_height = single_col_height / 2;
     let next_main_witness_columns = 8usize;
     let next_projection_ratio = 8usize;
     let can_recurse = next_single_col_height >= PROJECTION_HEIGHT * next_projection_ratio;
-    println!("Building round config: witness_length={}, single_col_height={}, next_single_col_height={}, can_recurse={}", witness_length, single_col_height, next_single_col_height, can_recurse);
+    println!("Building round config: extended_witness_length={}, single_col_height={}, next_single_col_height={}, can_recurse={}", extended_witness_length, single_col_height, next_single_col_height, can_recurse);
 
     let inner_evaluation_claims = if is_first_round { 0 } else { 2 };
 
     let common = RoundConfigCommon {
-        witness_length,
+        extended_witness_length,
         exact_binariness: is_first_round,
         l2: !is_first_round,
         vdf: is_first_round,
@@ -322,7 +325,7 @@ fn build_round_config(witness_length: usize, is_first_round: bool) -> RoundConfi
     };
 
     if can_recurse {
-        let next_witness_length = next_single_col_height * next_main_witness_columns * 2;
+        let next_extended_witness_length = next_single_col_height * next_main_witness_columns * 2;
         RoundConfig::Intermediate {
             common,
             decomposition_base_log: 8,
@@ -331,22 +334,22 @@ fn build_round_config(witness_length: usize, is_first_round: bool) -> RoundConfi
                 prefix: main_witness_columns,
                 length: main_witness_columns.ilog2() as usize + 1,
             },
-            next: Box::new(build_round_config(next_witness_length, false)),
+            next: Box::new(build_round_config(next_extended_witness_length, false)),
         }
     } else {
         // Transition to unstructured rounds (no projection).
         // The first unstructured round has 8 input columns (from
-        // the Intermediate decomposition). With prefix=0, witness_length
+        // the Intermediate decomposition). With prefix=0, extended_witness_length
         // does not include the factor-of-2 doubling.
         let unstructured_cols = 8usize; // first unstructured inherits 8 cols from Intermediate output
-        let unstructured_witness_length = next_single_col_height * unstructured_cols;
+        let unstructured_extended_witness_length = next_single_col_height * unstructured_cols;
         let unstructured_single_col_height = next_single_col_height;
         let next_unstructured_height = unstructured_single_col_height / 2;
         let next_unstructured_cols = 4usize;
         let next_unstructured_wl = next_unstructured_height * next_unstructured_cols;
 
         let unstructured_common = RoundConfigCommon {
-            witness_length: unstructured_witness_length,
+            extended_witness_length: unstructured_extended_witness_length,
             exact_binariness: false,
             l2: true,
             vdf: false,
@@ -359,8 +362,8 @@ fn build_round_config(witness_length: usize, is_first_round: bool) -> RoundConfi
         };
 
         println!(
-            "Building unstructured round config: witness_length={}, single_col_height={}, next_height={}",
-            unstructured_witness_length, unstructured_single_col_height, next_unstructured_height
+            "Building unstructured round config: extended_witness_length={}, single_col_height={}, next_height={}",
+            unstructured_extended_witness_length, unstructured_single_col_height, next_unstructured_height
         );
 
         let next_unstructured_config = if next_unstructured_height >= PROJECTION_HEIGHT {
@@ -368,7 +371,7 @@ fn build_round_config(witness_length: usize, is_first_round: bool) -> RoundConfi
         } else {
             RoundConfig::Last {
                 common: RoundConfigCommon {
-                    witness_length: next_unstructured_wl,
+                    extended_witness_length: next_unstructured_wl,
                     exact_binariness: false,
                     l2: true,
                     vdf: false,
@@ -385,6 +388,7 @@ fn build_round_config(witness_length: usize, is_first_round: bool) -> RoundConfi
         let next_config = RoundConfig::IntermediateUnstructured {
             common: unstructured_common,
             decomposition_base_log: 8,
+            projection_ratio: next_unstructured_height / PROJECTION_HEIGHT, // for now, we assume that each column is projected to PROJECTION_HEIGHT Zq elements., 
             next: Box::new(next_unstructured_config),
         };
 
@@ -402,22 +406,22 @@ fn build_round_config(witness_length: usize, is_first_round: bool) -> RoundConfi
 }
 
 const LAST_ROUND_THRESHOLD: usize = 256;
-/// Builds unstructured round configs (4 columns, prefix 0, no projection).
+/// Builds unstructured round configs (4 columns, prefix 0, unstructured projection).
 /// Continues until single_col_height / 2 < PROJECTION_HEIGHT, then produces Last.
-fn build_unstructured_round_config(witness_length: usize) -> RoundConfig {
+fn build_unstructured_round_config(extended_witness_length: usize) -> RoundConfig {
     let main_witness_columns = 4usize;
-    let single_col_height = witness_length / main_witness_columns;
+    let single_col_height = extended_witness_length / main_witness_columns;
     let next_single_col_height = single_col_height / 2;
     let next_cols = 4usize;
     let next_wl = next_single_col_height * next_cols;
 
     println!(
-        "Building unstructured round config: witness_length={}, single_col_height={}, next_height={}",
-        witness_length, single_col_height, next_single_col_height
+        "Building unstructured round config: extended_witness_length={}, single_col_height={}, next_height={}",
+        extended_witness_length, single_col_height, next_single_col_height
     );
 
     let common = RoundConfigCommon {
-        witness_length,
+        extended_witness_length,
         exact_binariness: false,
         l2: true,
         vdf: false,
@@ -434,7 +438,7 @@ fn build_unstructured_round_config(witness_length: usize) -> RoundConfig {
     } else {
         RoundConfig::Last {
             common: RoundConfigCommon {
-                witness_length: next_wl,
+                extended_witness_length: next_wl,
                 exact_binariness: false,
                 l2: true,
                 vdf: false,
@@ -451,6 +455,7 @@ fn build_unstructured_round_config(witness_length: usize) -> RoundConfig {
     RoundConfig::IntermediateUnstructured {
         common,
         decomposition_base_log: 8,
+        projection_ratio: next_single_col_height / PROJECTION_HEIGHT, // for now, we assume that each column is projected to PROJECTION_HEIGHT Zq elements.
         next: Box::new(next_config),
     }
 }
@@ -573,8 +578,8 @@ fn init_prover_type_1_sumcheck(
     main_witness_sumcheck: ElephantCell<dyn HighOrderSumcheckData<Element = RingElement>>,
 ) -> Type1ProverSumcheckContext {
     let single_col_height =
-        (config.witness_length >> config.main_witness_prefix.length) / config.main_witness_columns;
-    let total_vars = config.witness_length.ilog2() as usize;
+        (config.extended_witness_length >> config.main_witness_prefix.length) / config.main_witness_columns;
+    let total_vars = config.extended_witness_length.ilog2() as usize;
     let inner_evaluation_sumcheck =
         ElephantCell::new(LinearSumcheck::new_with_prefixed_sufixed_data(
             single_col_height,
@@ -611,8 +616,8 @@ fn init_prover_vdf_sumcheck(
     config: &RoundConfig,
     main_witness_sumcheck: ElephantCell<dyn HighOrderSumcheckData<Element = RingElement>>,
 ) -> VDFProverSumcheckContext {
-    let total_vars = config.witness_length.ilog2() as usize;
-    let two_k = config.witness_length / 2 / VDF_MATRIX_WIDTH; // 2K = total VDF steps across both columns
+    let total_vars = config.extended_witness_length.ilog2() as usize;
+    let two_k = config.extended_witness_length / 2 / VDF_MATRIX_WIDTH; // 2K = total VDF steps across both columns
 
     // vdf_step_powers: varies over log2(2K) middle variables (one per VDF step)
     // prefix = 1 (main_witness_selector bit), suffix = 6 (element-within-block bits)
@@ -658,14 +663,14 @@ fn init_prover_type_3_sumcheck(
             let c2_len = config.main_witness_columns;
             let c1_len = PROJECTION_HEIGHT;
             // (c_2 \otimes c_0 \otimes c_1^T J) · witness = (c_2 \otimes c_0 \otimes c_1)^T projected_witness
-            let single_col_height = config.witness_length / 2 / config.main_witness_columns;
+            let single_col_height = config.extended_witness_length / 2 / config.main_witness_columns;
 
             let c0_len: usize = single_col_height / (PROJECTION_HEIGHT * projection_ratio);
             assert!(c0_len > 0, "c0_len must be greater than 0");
 
-            let total_vars = config.witness_length.ilog2() as usize;
+            let total_vars = config.extended_witness_length.ilog2() as usize;
 
-            assert_eq!(c0_len * c1_len * c2_len, config.witness_length / (2_usize.pow(projection_prefix.length as u32)), "c0_len * c1_len * c2_len must be equal to witness_length, got c0_len: {}, c1_len: {}, c2_len: {}, witness_length: {}", c0_len, c1_len, c2_len, config.witness_length);
+            assert_eq!(c0_len * c1_len * c2_len, config.extended_witness_length / (2_usize.pow(projection_prefix.length as u32)), "c0_len * c1_len * c2_len must be equal to extended_witness_length, got c0_len: {}, c1_len: {}, c2_len: {}, extended_witness_length: {}", c0_len, c1_len, c2_len, config.extended_witness_length);
 
             // We have the following variables structure:
             // LEFT
@@ -801,17 +806,17 @@ pub fn init_linf_sumcheck(
 }
 
 pub fn init_prover_sumcheck(crs: &CRS, config: &RoundConfig) -> ProverSumcheckContext {
-    let witness_sumcheck = ElephantCell::new(LinearSumcheck::new(config.witness_length));
+    let witness_sumcheck = ElephantCell::new(LinearSumcheck::new(config.extended_witness_length));
     let witness_conjugated_sumcheck =
         ElephantCell::new(LinearSumcheck::new_with_prefixed_sufixed_data(
-            config.witness_length >> config.main_witness_prefix.length,
+            config.extended_witness_length >> config.main_witness_prefix.length,
             config.main_witness_prefix.length as usize,
             0,
         ));
 
     let main_witness_selector_sumcheck = sumcheck_from_prefix(
         &config.main_witness_prefix,
-        config.witness_length.ilog2() as usize,
+        config.extended_witness_length.ilog2() as usize,
     );
 
     let main_witness_sumcheck: ElephantCell<ProductSumcheck<_>> =
@@ -825,7 +830,7 @@ pub fn init_prover_sumcheck(crs: &CRS, config: &RoundConfig) -> ProverSumcheckCo
             projection_prefix, ..
         } => Some(sumcheck_from_prefix(
             &projection_prefix,
-            config.witness_length.ilog2() as usize,
+            config.extended_witness_length.ilog2() as usize,
         )),
         _ => None,
     };
@@ -942,7 +947,7 @@ impl BatchingChallenges {
             } => {
                 let c2_len = config.main_witness_columns;
                 let c1_len = PROJECTION_HEIGHT;
-                let single_col_height = config.witness_length / 2 / config.main_witness_columns;
+                let single_col_height = config.extended_witness_length / 2 / config.main_witness_columns;
                 let c0_len: usize = single_col_height / (PROJECTION_HEIGHT * projection_ratio);
                 assert!(c0_len > 0, "c0_len must be greater than 0");
                 let mut result = Self {
@@ -1880,8 +1885,8 @@ fn init_verifier_type_1_sumcheck(
     main_witness_evaluation: ElephantCell<dyn EvaluationSumcheckData<Element = RingElement>>,
 ) -> Type1VerifierSumcheckContext {
     let single_col_height =
-        (config.witness_length >> config.main_witness_prefix.length) / config.main_witness_columns;
-    let total_vars = config.witness_length.ilog2() as usize;
+        (config.extended_witness_length >> config.main_witness_prefix.length) / config.main_witness_columns;
+    let total_vars = config.extended_witness_length.ilog2() as usize;
 
     let inner_evaluation_sumcheck = ElephantCell::new(
         StructuredRowEvaluationLinearSumcheck::new_with_prefixed_sufixed_data(
@@ -1927,9 +1932,9 @@ fn init_verifier_type_3_sumcheck(
         } => {
             let c2_len = config.main_witness_columns;
             let c1_len = PROJECTION_HEIGHT;
-            let single_col_height = config.witness_length / 2 / config.main_witness_columns;
+            let single_col_height = config.extended_witness_length / 2 / config.main_witness_columns;
             let c0_len: usize = single_col_height / (PROJECTION_HEIGHT * projection_ratio);
-            let total_vars = config.witness_length.ilog2() as usize;
+            let total_vars = config.extended_witness_length.ilog2() as usize;
 
             // LEFT: prefix, c2, c0, flattened_projection_matrix (c1^T J)
             let fltr_len = (projection_ratio * PROJECTION_HEIGHT).ilog2() as usize;
@@ -2078,7 +2083,7 @@ fn init_verifier_vdf_sumcheck(
     config: &RoundConfig,
     main_witness_evaluation: ElephantCell<dyn EvaluationSumcheckData<Element = RingElement>>,
 ) -> VDFVerifierSumcheckContext {
-    let total_vars = config.witness_length.ilog2() as usize;
+    let total_vars = config.extended_witness_length.ilog2() as usize;
 
     let vdf_step_powers_evaluation =
         ElephantCell::new(FakeEvaluationLinearSumcheck::<RingElement>::new());
@@ -2107,7 +2112,7 @@ fn init_verifier_vdf_sumcheck(
 }
 
 pub fn init_verifier_sumcheck(config: &RoundConfig) -> VerifierSumcheckContext {
-    let total_vars = config.witness_length.ilog2() as usize;
+    let total_vars = config.extended_witness_length.ilog2() as usize;
 
     let witness_evaluation = ElephantCell::new(FakeEvaluationLinearSumcheck::<RingElement>::new());
     let witness_conjugated_evaluation =
@@ -2442,7 +2447,7 @@ impl VerifierSumcheckContext {
 
             // Compute MLE[vdf_step_powers](x) = prod_i ((1-x_i) + x_i * c^{2^i})
             // step_powers variables: skip prefix=1 (MSB column selector), take log2(2K) vars
-            let two_k = config.witness_length / 2 / VDF_MATRIX_WIDTH;
+            let two_k = config.extended_witness_length / 2 / VDF_MATRIX_WIDTH;
             let step_powers_num_vars = two_k.ilog2() as usize;
             let prefix = 1usize; // MSB selector bit (column selector)
             let step_powers_vars = &evaluation_points_ring[prefix..prefix + step_powers_num_vars];
@@ -2720,7 +2725,7 @@ pub fn verifier_round(
             let mut temp = RingElement::zero(Representation::IncompleteNTT);
             for r in 0..RANK {
                 let layer = crs.structured_ck_for_wit_dim(
-                    config.witness_length / 2 / config.main_witness_columns,
+                    config.extended_witness_length / 2 / config.main_witness_columns,
                 )[r]
                     .tensor_layers
                     .get(0)
@@ -2858,7 +2863,7 @@ pub fn verifier_round(
             let mut temp = RingElement::zero(Representation::IncompleteNTT);
             for r in 0..RANK {
                 let layer = crs.structured_ck_for_wit_dim(
-                    (config.witness_length >> config.main_witness_prefix.length)
+                    (config.extended_witness_length >> config.main_witness_prefix.length)
                         / config.main_witness_columns,
                 )[r]
                     .tensor_layers
@@ -3123,7 +3128,7 @@ fn compute_ip_vdf_claim(
     }
     let c = vdf_challenge.expect("VDF enabled but no challenge");
     let (y_0, y_t, _) = vdf_params.expect("VDF enabled but no params");
-    let two_k = config.witness_length / 2 / VDF_MATRIX_WIDTH;
+    let two_k = config.extended_witness_length / 2 / VDF_MATRIX_WIDTH;
     let mut c_power = RingElement::constant(1, Representation::IncompleteNTT);
     for _ in 0..two_k {
         c_power *= c;
