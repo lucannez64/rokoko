@@ -1406,6 +1406,10 @@ pub fn prover_round(
         polys.push(poly_over_field);
     }
 
+    // Sumcheck rounds produce LS-first challenges; the rest of this prover flow
+    // still expects the legacy outer-first (MS-style) view for slicing/splitting.
+    evaluation_points.reverse();
+
     if DEBUG {
         println!(
             "Polynomial time: {:?} ms, Evaluation time: {:?} ms",
@@ -2489,8 +2493,6 @@ pub fn verifier_round(
     round_index: usize,
 ) {
     let round_start = std::time::Instant::now();
-    // TODO: check linf, l2 cts
-    // Replay prover's Fiat-Shamir: sample projection matrix, batching challenges
     let mut projection_matrix = match config {
         RoundConfig::Intermediate { .. } => {
             let mut pm = ProjectionMatrix::new(config.main_witness_columns, PROJECTION_HEIGHT);
@@ -2631,7 +2633,12 @@ pub fn verifier_round(
 
     let outer_points_len =
         config.main_witness_columns.ilog2() as usize + config.main_witness_prefix.length;
-    let layer = &evaluation_points_ring[outer_points_len];
+    let evaluation_points_ring_tree = evaluation_points_ring
+        .iter()
+        .rev()
+        .cloned()
+        .collect::<Vec<_>>();
+    let layer = &evaluation_points_ring_tree[outer_points_len];
     let conj_layer = layer.conjugate();
 
     // Compute the folded claim: sum_i folding_challenges[i] * claims[(0, i)]
@@ -2743,7 +2750,7 @@ pub fn verifier_round(
             verifier_context.load_data(
                 config,
                 proof,
-                &evaluation_points_ring,
+                &evaluation_points_ring_tree,
                 evaluation_points_inner,
                 &evaluation_points_outer,
                 &batching_challenges,
@@ -2766,7 +2773,7 @@ pub fn verifier_round(
             );
 
             // Recurse into the next round
-            let new_evaluation_points_inner = evaluation_points_ring
+            let new_evaluation_points_inner = evaluation_points_ring_tree
                 .iter()
                 .skip(outer_points_len + 1)
                 .cloned()
@@ -2875,7 +2882,7 @@ pub fn verifier_round(
             verifier_context.load_data(
                 config,
                 proof,
-                &evaluation_points_ring,
+                &evaluation_points_ring_tree,
                 evaluation_points_inner,
                 &evaluation_points_outer,
                 &batching_challenges,
@@ -2898,7 +2905,7 @@ pub fn verifier_round(
             );
 
             // Recurse into the next round
-            let new_evaluation_points_inner = evaluation_points_ring
+            let new_evaluation_points_inner = evaluation_points_ring_tree
                 .iter()
                 .skip(outer_points_len + 1)
                 .cloned()
@@ -2963,7 +2970,7 @@ pub fn verifier_round(
             // Use the current round's sumcheck evaluation points, including the "layer" variable
             // (no +1 skip since there's no split at the last round).
             // The prover computes claims using evaluation_points[outer_points_len..] from THIS round's sumcheck.
-            let current_inner_points: Vec<_> = evaluation_points_ring
+            let current_inner_points: Vec<_> = evaluation_points_ring_tree
                 .iter()
                 .skip(outer_points_len)
                 .cloned()
@@ -3071,7 +3078,7 @@ pub fn verifier_round(
             verifier_context.load_data(
                 config,
                 proof,
-                &evaluation_points_ring,
+                &evaluation_points_ring_tree,
                 evaluation_points_inner,
                 &evaluation_points_outer,
                 &batching_challenges,
