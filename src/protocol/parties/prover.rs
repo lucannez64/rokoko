@@ -452,7 +452,8 @@ pub fn prover_round(
             }
             _ => {
                 assert!(
-                    next_level_width as f64 * argued_witness_bound * argued_witness_bound < (MOD_Q as f64 / 2f64),
+                    next_level_width as f64 * argued_witness_bound * argued_witness_bound
+                        < (MOD_Q as f64 / 2f64),
                     "Witness bound too large for inner-product norm extraction!"
                 );
             }
@@ -573,19 +574,15 @@ pub fn prover_round(
                                 &next_round_commitment_with_aux,
                                 &next_round_witness,
                                 &vec![
-                                    evaluation_point_to_structured_row(
-                                        &new_evaluation_points_inner.to_vec(),
-                                    ),
+                                    evaluation_point_to_structured_row(new_evaluation_points_inner),
                                     evaluation_point_to_structured_row_conjugate(
-                                        &new_evaluation_points_inner.to_vec(),
+                                        new_evaluation_points_inner,
                                     ),
                                 ],
                                 &vec![
-                                    evaluation_point_to_structured_row(
-                                        &new_evaluation_points_outer.to_vec(),
-                                    ),
+                                    evaluation_point_to_structured_row(new_evaluation_points_outer),
                                     evaluation_point_to_structured_row_conjugate(
-                                        &new_evaluation_points_outer.to_vec(),
+                                        new_evaluation_points_outer,
                                     ),
                                 ],
                                 sumcheck_context.next.as_mut().unwrap(),
@@ -629,26 +626,21 @@ pub fn prover_round(
                     let (new_evaluation_points_outer, new_evaluation_points_inner) =
                         evaluation_points
                             .split_at(next_simple_config.witness_width.ilog2() as usize);
-
                     (
                         Some(RoundProof::Simple(prover_round_simple(
                             next_simple_config,
                             &basic_commitment,
                             &next_round_witness,
                             &vec![
-                                evaluation_point_to_structured_row(
-                                    &new_evaluation_points_inner.to_vec(),
-                                ),
+                                evaluation_point_to_structured_row(new_evaluation_points_inner),
                                 evaluation_point_to_structured_row_conjugate(
-                                    &new_evaluation_points_inner.to_vec(),
+                                    new_evaluation_points_inner,
                                 ),
                             ],
                             &vec![
-                                evaluation_point_to_structured_row(
-                                    &new_evaluation_points_outer.to_vec(),
-                                ),
+                                evaluation_point_to_structured_row(new_evaluation_points_outer),
                                 evaluation_point_to_structured_row_conjugate(
-                                    &new_evaluation_points_outer.to_vec(),
+                                    new_evaluation_points_outer,
                                 ),
                             ],
                             Some(hash_wrapper),
