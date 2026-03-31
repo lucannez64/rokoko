@@ -87,10 +87,11 @@ impl<E: SumcheckElement> HighOrderSumcheckData for SelectorEq<E> {
             if !self.is_univariate_polynomial_zero_at_point(point) {
                 return Some(&self.current_claim);
             }
-            // Point is in the zero region — polynomial is zero (degree 0),
-            // but we can't return a pointer to zero here. Callers should
-            // check is_zero first. Returning None is safe because the caller
-            // will fall through to the general path which also returns zero.
+            // Point is in the zero region — polynomial is logically zero (degree 0),
+            // but we can't return a pointer to zero here. Callers must first check
+            // is_univariate_polynomial_zero_at_point; if it returns true, they
+            // should treat the polynomial as identically zero rather than relying
+            // on the general evaluation path.
             return None;
         }
         None
@@ -199,7 +200,9 @@ impl<E: SumcheckElement> HighOrderSumcheckData for SelectorEq<E> {
 
 impl<E: SumcheckElement> SumcheckBaseData for SelectorEq<E> {
     fn partial_evaluate(&mut self, value: &E) {
-        if self.selector_variable_count > 0 && self.total_variable_count <= self.selector_variable_count {
+        if self.selector_variable_count > 0
+            && self.total_variable_count <= self.selector_variable_count
+        {
             // Selector round: consume the LS bit.
             let current_bit = self.selector & 1;
 
@@ -390,7 +393,7 @@ mod tests {
         debug_assert_eq!(
             claim_after_r2,
             RingElement::constant(
-                ((MOD_Q as i64 + 1 - 19)) as u64 % MOD_Q,
+                (MOD_Q as i64 + 1 - 19) as u64 % MOD_Q,
                 Representation::IncompleteNTT
             )
         );
@@ -432,9 +435,9 @@ mod tests {
             SelectorEqEvaluation::new(selector, selector_variable_count, total_variable_count);
 
         let point = vec![
-            RingElement::constant(53, Representation::IncompleteNTT),  // non-selector var 0
-            RingElement::constant(73, Representation::IncompleteNTT),  // non-selector var 1
-            RingElement::constant(19, Representation::IncompleteNTT),  // selector bit 0 (=0)
+            RingElement::constant(53, Representation::IncompleteNTT), // non-selector var 0
+            RingElement::constant(73, Representation::IncompleteNTT), // non-selector var 1
+            RingElement::constant(19, Representation::IncompleteNTT), // selector bit 0 (=0)
             RingElement::constant(743, Representation::IncompleteNTT), // selector bit 1 (=1)
         ];
 

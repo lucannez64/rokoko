@@ -62,7 +62,7 @@ impl<E: SumcheckElement> LinearSumcheck<E> {
         }
     }
     /// Populate the internal buffer with the provided values.
-    /// Scans backwards to find the actual non-zero boundary.
+    /// Marks the whole buffer as potentially non-zero.
     pub fn load_from(&mut self, src: &[E]) {
         assert_eq!(
             src.len(),
@@ -87,7 +87,12 @@ impl<E: SumcheckElement> LinearSumcheck<E> {
             self.data.len(),
             src.len()
         );
-        debug_assert!(non_zero_end <= src.len());
+        assert!(
+            non_zero_end <= src.len(),
+            "non_zero_end ({}) must not exceed source length ({})",
+            non_zero_end,
+            src.len()
+        );
         self.data.clone_from_slice(src);
         self.non_zero_end = non_zero_end;
     }
@@ -109,7 +114,9 @@ impl<E: SumcheckElement> Index<HypercubePoint> for LinearSumcheck<E> {
         if self.data.len() == 1 {
             return &self.data[0];
         }
-        if self.suffix > 0 || self.variable_count > self.data.len().trailing_zeros() as usize + self.suffix {
+        if self.suffix > 0
+            || self.variable_count > self.data.len().trailing_zeros() as usize + self.suffix
+        {
             // Prefix/suffix round — data isn't being split.
             // For suffix rounds under LS-first, the current round consumes
             // one suffix bit now, so the half-hypercube point still contains
@@ -188,8 +195,22 @@ impl<E: SumcheckElement> HighOrderSumcheckData for LinearSumcheck<E> {
         polynomial.num_coefficients = 2;
     }
 
-    fn is_univariate_polynomial_zero_at_point(&self, _point: HypercubePoint) -> bool {
-        false // even if the polynomial is zero, we still need to perform the folding as normal
+    fn is_univariate_polynomial_zero_at_point(&self, point: HypercubePoint) -> bool {
+        // For suffix/prefix rounds we intentionally expose no sparse range.
+        if self.suffix > 0 || self.data.len() <= 1 {
+            return false;
+        }
+        // Sparse tail tracking is only valid when data fills the full hypercube.
+        if self.data.len() != (1usize << self.variable_count) {
+            return false;
+        }
+        let half = self.data.len() / 2;
+        let pair_nz = (self.non_zero_end + 1) / 2;
+        if pair_nz >= half {
+            return false;
+        }
+        let p = point.masked(half - 1).coordinates;
+        p >= pair_nz
     }
 
     fn variable_count(&self) -> usize {
@@ -300,9 +321,10 @@ impl<E: SumcheckElement> SumcheckBaseData for LinearSumcheck<E> {
             // Move folded result from idx0 → slot i.
             if i != idx0 {
                 // idx0 = 2*i, which equals i only when i=0.
-                // For i>=1, copy to the compacted position.
-                let val = left[idx0].clone();
-                self.data[i] = val;
+                // For i>=1, copy to the compacted position without allocation.
+                // Split left at idx0 so source and destination are disjoint.
+                let (prefix, from_idx0) = left.split_at_mut(idx0);
+                prefix[i].set_from(&from_idx0[0]);
             }
         }
         // Clear the compacted tail: indices [fold_end, half) are outside the
@@ -668,10 +690,7 @@ mod tests {
         // constant = 4*(1+3+5+7) = 64, linear = 4*(1+1+1+1) = 16
         debug_assert_eq!(
             poly.coefficients[0],
-            RingElement::constant(
-                (1 + 3 + 5 + 7) * 4,
-                Representation::IncompleteNTT
-            )
+            RingElement::constant((1 + 3 + 5 + 7) * 4, Representation::IncompleteNTT)
         );
 
         debug_assert_eq!(
