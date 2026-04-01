@@ -60,7 +60,7 @@ use crate::{
 const DEBUG: bool = true;
 
 // const WITNESS_DIM: usize = 2usize.pow(14);
-const WITNESS_DIM: usize = 2usize.pow(19); // most can fit on 64 GB
+const WITNESS_DIM: usize = 2usize.pow(14); // most can fit on 64 GB
 const WITNESS_WIDTH: usize = 2usize;
 const RANK: usize = 8;
 
@@ -3711,9 +3711,8 @@ fn compute_ip_vdf_claim(
         claim -= &temp;
         // c^{VDF_STRIDE·2K + r} · y_t[r]
         temp *= (&c_stride_2k, &c_power); // temp = c^{VDF_STRIDE*2K + r}
-        let mut weighted_yt = temp.clone();
-        weighted_yt *= &y_t[r];
-        claim += &weighted_yt;
+        temp *= &y_t[r];
+        claim += &temp;
         c_power *= c;
     }
     Some(claim)
