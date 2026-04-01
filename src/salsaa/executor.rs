@@ -1,4 +1,5 @@
 use std::sync::LazyLock;
+use std::usize::MAX;
 use std::{array, process::Output};
 
 use num::range;
@@ -6,7 +7,9 @@ use rand::rand_core::le;
 
 use crate::common::norms::l2_norm_coeffs;
 use crate::protocol::config::ConfigBase;
-use crate::protocol::project_2::verifier_sample_projection_challenges;
+use crate::protocol::project_2::{
+    verifier_sample_projection_challenges, BatchedProjectionChallenges,
+};
 use crate::{
     common::{
         arithmetic::{
@@ -296,6 +299,8 @@ const NUM_COLUMNS_INITIAL: usize = 2;
 
 const PROJECTION_HEIGHT: usize = 256;
 
+const MAX_UNSTRUCT_PROJ_RATIO: usize = 128; // to prevent degenerate projection configs with very large proj matrx
+
 /// Recursively builds the round config chain.
 /// - First round: uses NUM_COLUMNS_INITIAL columns, projection_ratio=2, VDF+exact_binariness enabled.
 /// - Subsequent rounds: 8 columns, projection_ratio=8, L2 enabled.
@@ -398,7 +403,7 @@ fn build_round_config(extended_witness_length: usize, is_first_round: bool) -> R
         let next_config = RoundConfig::IntermediateUnstructured {
             common: unstructured_common,
             decomposition_base_log: 8,
-            projection_ratio: next_unstructured_height / PROJECTION_HEIGHT, // for now, we assume that each column is projected to PROJECTION_HEIGHT Zq elements.,
+            projection_ratio: std::cmp::min(DEGREE * unstructured_single_col_height / PROJECTION_HEIGHT, MAX_UNSTRUCT_PROJ_RATIO),
             next: Box::new(next_unstructured_config),
         };
 
@@ -465,7 +470,7 @@ fn build_unstructured_round_config(extended_witness_length: usize) -> RoundConfi
     RoundConfig::IntermediateUnstructured {
         common,
         decomposition_base_log: 8,
-        projection_ratio: single_col_height / PROJECTION_HEIGHT, // for now, we assume that each column is projected to PROJECTION_HEIGHT Zq elements.
+        projection_ratio: std::cmp::min(DEGREE * single_col_height / PROJECTION_HEIGHT, MAX_UNSTRUCT_PROJ_RATIO), // for now, we assume that each column is projected to PROJECTION_HEIGHT Zq elements.
         next: Box::new(next_config),
     }
 }
@@ -482,6 +487,7 @@ pub struct ProverSumcheckContext {
     pub projection_selector_sumcheck: Option<ElephantCell<SelectorEq<RingElement>>>,
     pub type1sumcheck: Vec<Type1ProverSumcheckContext>, // for verifying inner evaluation points
     pub type3sumcheck: Option<Type3ProverSumcheckContext>, // for verifying the projection
+    pub type31sumchecks: Option<[Type31ProverSumcheckContext; NOF_BATCHES]>, // for verifying the projection
     pub l2sumcheck: Option<L2ProverSumcheckContext>,
     pub linfsumcheck: Option<LinfSumcheckContext>,
     pub vdfsumcheck: Option<VDFProverSumcheckContext>, // for verifying the VDF, only used in the first round
@@ -779,6 +785,73 @@ fn init_prover_type_3_sumcheck(
     }
 }
 
+// we want to show
+// <c2 \otimes c0 \otimes j_batched, witness> = batched_projection
+struct Type31ProverSumcheckContext {
+    pub c_2_sumcheck: ElephantCell<LinearSumcheck<RingElement>>, // across columns
+    pub c_0_sumcheck: ElephantCell<LinearSumcheck<RingElement>>, // across blocks
+    pub j_batched_sumcheck: ElephantCell<LinearSumcheck<RingElement>>,
+    pub output: ElephantCell<ProductSumcheck<RingElement>>,
+}
+
+fn init_prover_type_3_1_sumcheck(
+    config: &RoundConfig,
+    main_witness_sumcheck: ElephantCell<dyn HighOrderSumcheckData<Element = RingElement>>,
+) -> Type31ProverSumcheckContext {
+    let projection_ratio = match config {
+        RoundConfig::IntermediateUnstructured {
+            projection_ratio, ..
+        } => *projection_ratio,
+        _ => panic!("type 3.1 sumcheck should only be initialized for rounds with projection"),
+    };
+    println!(
+        "Initializing type 3.1 sumcheck with projection_ratio: {}",
+        projection_ratio
+    );
+    let total_vars = config.extended_witness_length.ilog2() as usize;
+    let single_col_height = config.extended_witness_length / config.main_witness_columns; // no projection in sc for unstructured round
+    let c0_len: usize = DEGREE * single_col_height / (PROJECTION_HEIGHT * projection_ratio); // typically, 1
+    let c2_len: usize = config.main_witness_columns;
+
+    let c_2_sumcheck = ElephantCell::new(LinearSumcheck::new_with_prefixed_sufixed_data(
+        c2_len,
+        0,
+        total_vars - c2_len.ilog2() as usize,
+    ));
+
+    // c_0_sumcheck across blocks
+    let c_0_sumcheck = ElephantCell::new(LinearSumcheck::new_with_prefixed_sufixed_data(
+        c0_len,
+        c2_len.ilog2() as usize,
+        total_vars - c2_len.ilog2() as usize - c0_len.ilog2() as usize,
+    ));
+
+    // j_batched_sumcheck across elements within block
+    let j_batched_sumcheck = ElephantCell::new(LinearSumcheck::new_with_prefixed_sufixed_data(
+        single_col_height / c0_len,
+        c2_len.ilog2() as usize + c0_len.ilog2() as usize,
+        0,
+    ));
+
+    let output = ElephantCell::new(ProductSumcheck::new(
+        c_2_sumcheck.clone(),
+        ElephantCell::new(ProductSumcheck::new(
+            c_0_sumcheck.clone(),
+            ElephantCell::new(ProductSumcheck::new(
+                j_batched_sumcheck.clone(),
+                main_witness_sumcheck.clone(),
+            )),
+        )),
+    ));
+
+    Type31ProverSumcheckContext {
+        c_2_sumcheck,
+        c_0_sumcheck,
+        j_batched_sumcheck,
+        output,
+    }
+}
+
 pub fn init_linf_sumcheck(
     witness_sumcheck: ElephantCell<dyn HighOrderSumcheckData<Element = RingElement>>,
     main_witness_selector: ElephantCell<dyn HighOrderSumcheckData<Element = RingElement>>,
@@ -867,6 +940,13 @@ pub fn init_prover_sumcheck(crs: &CRS, config: &RoundConfig) -> ProverSumcheckCo
         _ => None,
     };
 
+    let type31sumchecks = match config {
+        RoundConfig::IntermediateUnstructured { .. } => Some(array::from_fn(|_| {
+            init_prover_type_3_1_sumcheck(config, main_witness_sumcheck.clone())
+        })),
+        _ => None,
+    };
+
     let l2sumcheck = if config.l2 {
         Some(L2ProverSumcheckContext {
             output: ElephantCell::new(ProductSumcheck::new(
@@ -926,6 +1006,7 @@ pub fn init_prover_sumcheck(crs: &CRS, config: &RoundConfig) -> ProverSumcheckCo
         projection_selector_sumcheck,
         type1sumcheck,
         type3sumcheck,
+        type31sumchecks,
         combiner,
         field_combiner,
         l2sumcheck,
@@ -1022,6 +1103,14 @@ impl ProverSumcheckContext {
             type3.c2l_sumcheck.borrow_mut().partial_evaluate(r);
         }
 
+        if let Some(type31sumchecks) = &mut self.type31sumchecks {
+            for type31 in type31sumchecks {
+                type31.c_2_sumcheck.borrow_mut().partial_evaluate(r);
+                type31.c_0_sumcheck.borrow_mut().partial_evaluate(r);
+                type31.j_batched_sumcheck.borrow_mut().partial_evaluate(r);
+            }
+        }
+
         // it's dumb, but it doesn't do anything except reducing the degree
         if let Some(linf) = &mut self.linfsumcheck {
             linf.all_one_constant_sumcheck
@@ -1047,6 +1136,9 @@ impl ProverSumcheckContext {
         evaluation_points_outer: &Vec<RingElement>,
         projection_matrix: &Option<ProjectionMatrix>,
         projection_batching_challenges: &Option<BatchingChallenges>,
+        unstructured_projection_batching_challenges: &Option<
+            [BatchedProjectionChallenges; NOF_BATCHES],
+        >,
         vdf_challenge: Option<&RingElement>,
         vdf_crs_param: Option<&vdf_crs>,
     ) {
@@ -1100,6 +1192,46 @@ impl ProverSumcheckContext {
                 panic!(
                     "Projection batching challenges provided but type3 sumcheck is not initialized"
                 );
+            }
+        }
+
+        if let Some(unstructured_projection_challenges) =
+            unstructured_projection_batching_challenges
+        {
+            for (batch_idx, batch_challenges) in
+                unstructured_projection_challenges.iter().enumerate()
+            {
+                // Lift c_0_values from u64 to RingElement and load into lhs_flatter_0
+                let c_0_ring: Vec<RingElement> = batch_challenges
+                    .c_0_values
+                    .iter()
+                    .map(|&val| RingElement::constant(val, Representation::IncompleteNTT))
+                    .collect();
+
+                let c_2_ring: Vec<RingElement> = batch_challenges
+                    .c_2_values
+                    .iter()
+                    .map(|&val| RingElement::constant(val, Representation::IncompleteNTT))
+                    .collect();
+
+                if let Some(type31sumchecks) = &mut self.type31sumchecks {
+                    type31sumchecks[batch_idx]
+                        .c_0_sumcheck
+                        .borrow_mut()
+                        .load_from(&c_0_ring);
+                    type31sumchecks[batch_idx]
+                        .c_2_sumcheck
+                        .borrow_mut()
+                        .load_from(&c_2_ring);
+                    type31sumchecks[batch_idx]
+                        .j_batched_sumcheck
+                        .borrow_mut()
+                        .load_from(&batch_challenges.j_batched);
+                } else {
+                    panic!(
+                        "Unstructured projection batching challenges provided but type 3.1 sumcheck is not initialized"
+                    );
+                }
             }
         }
         for (i, type1) in self.type1sumcheck.iter_mut().enumerate() {
@@ -1203,6 +1335,10 @@ pub fn prover_round(
                 "Using unstructured projection with ratio {}",
                 projection_ratio
             );
+            println!(
+                "Sampling projection matrix for unstructured projection with ratio {}",
+                projection_ratio
+            );
             let mut projection_matrix = ProjectionMatrix::new(*projection_ratio, PROJECTION_HEIGHT);
             projection_matrix.sample(hash_wrapper);
             let projection = project_coefficients(witness, &projection_matrix);
@@ -1222,28 +1358,7 @@ pub fn prover_round(
         }
         _ => (None, None, None, None),
     };
-    //         // witness coeff = witness.height * DEGREE
-    //         // outout =  PROJECTION_HEIGHT
-    //         // ratio = witness.height * DEGREE / PROJECTION_HEIGHT
-    //         let mut projection_matrix = ProjectionMatrix::new(
-    //             witness.height * DEGREE / PROJECTION_HEIGHT,
-    //             PROJECTION_HEIGHT,
-    //         );
-    //         projection_matrix.sample(hash_wrapper);
-    //         let projection_coeffs = project_coefficients(witness, &projection_matrix);
-    //         let batching_challnge = (0..PROJECTION_HEIGHT)
-    //             .map(|_| hash_wrapper.sample_u64_mod_q())
-    //             .collect::<Vec<_>>();
-    //         let j_batched_start = std::time::Instant::now();
-    //         let batched_projection_ring = compute_j_batched(&projection_matrix, &batching_challnge);
-    //         let j_batched_end = std::time::Instant::now();
-    //         println!("Time to compute j-batched projection matrix: {:?}", j_batched_end - j_batched_start);
-    //         println!("Dims of projection matrix: {}, {}",   witness.height * DEGREE / PROJECTION_HEIGHT,
-    //             PROJECTION_HEIGHT);
-    //         panic!("Unstructured projection is not implemented yet");
-    //     }
-    //     _ => {}
-    // }
+
     let vdf_challenge = if config.vdf {
         let mut challenge = RingElement::zero(Representation::IncompleteNTT);
         hash_wrapper.sample_ring_element_ntt_slots_into(&mut challenge);
@@ -1317,6 +1432,7 @@ pub fn prover_round(
         &evaluation_points_outer,
         &projection_matrix,
         &batching_challenges,
+        &unstructured_batching_challenges,
         vdf_challenge.as_ref(),
         vdf_params.map(|(_, _, crs)| crs),
     );
@@ -1410,6 +1526,36 @@ pub fn prover_round(
                 ip_vdf_claim.clone().unwrap(),
                 "VDF claim from the sumcheck does not match the expected VDF claim"
             );
+        }
+
+        match config {
+            RoundConfig::IntermediateUnstructured { .. } => {
+                for (batch_idx, type31) in sumcheck_context
+                    .type31sumchecks
+                    .as_ref()
+                    .unwrap()
+                    .iter()
+                    .enumerate()
+                {
+                    let projection_claim = type31.output.borrow().claim();
+                    let batch_image = &batched_image.as_ref().unwrap().row(batch_idx);
+                    let challenges = &unstructured_batching_challenges
+                        .as_ref()
+                        .unwrap()[batch_idx].c_2_values;
+                    let mut expected_projection_claim = RingElement::zero(Representation::IncompleteNTT);
+                    let mut temp = RingElement::zero(Representation::IncompleteNTT);
+                    for (c, r) in batch_image.iter().zip(challenges.iter()) {
+                        temp *= (c, &RingElement::constant(*r, Representation::IncompleteNTT));
+                        expected_projection_claim += &temp;
+                    }
+                    assert_eq!(
+                        projection_claim, expected_projection_claim,
+                        "Projection claim from the sumcheck does not match the expected projection claim"
+                    );
+                }
+                println!("Unstructured projection claims from the sumcheck match the expected projection claims");
+            }
+            _ => {}
         }
     }
 
@@ -2614,6 +2760,7 @@ pub fn verifier_round(
             for i in 0..NOF_BATCHES {
                 let c_0_values = precompute_structured_values_fast(&challenges[i].c_0_layers);
                 let c_1_values = precompute_structured_values_fast(&challenges[i].c_1_layers);
+                println!("c1 values len for batch {}: {:?}", i, c_1_values.len());
                 debug_assert_eq!(
                     c_1_values.len() % DEGREE,
                     0,
