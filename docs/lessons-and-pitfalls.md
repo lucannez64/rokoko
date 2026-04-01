@@ -53,8 +53,8 @@ Line 46 of executor.rs. Set to `true` for extensive assertions during developmen
 ## Proof Size
 Current p-26 config: ~507 KB total proof
 - Intermediate rounds (0-3): includes decomposed_split_commitment + projection_commitment
-- IntermediateUnstructured rounds (4-6): smaller — no projection columns
-- Last round (7): dominated by folded_witness (~96 KB)
+- IntermediateUnstructured rounds (4-6): includes decomposed_split_commitment + projection_image_ct + projection_image_batched (no structured projection columns)
+- Last round (7): dominated by folded_witness (~96 KB) + projection_image_ct + projection_image_batched
 
 ## Verifier Timing (p-26, 8 rounds)
 - Intermediate rounds (0-3): ~275-400µs each
@@ -68,6 +68,30 @@ Current p-26 config: ~507 KB total proof
 ## IntermediateUnstructured: Key Design Points
 - `Prefix { prefix: 0, length: 0 }` means NO extended witness doubling; `paste_by_prefix` with length 0 requires src fills entire dest; `SelectorEq` with 0 prefix bits evaluates to constant 1
 - First IntermediateUnstructured round has 8 columns (from Intermediate's 8-col decomposition output); subsequent ones have 4 columns (2 split × 2 decomp chunks)
-- No projection matrix, no batching challenges, no type3 sumcheck
+- No structured projection (no Type3 sumcheck), but has unstructured projection via Type3.1 sumcheck
+- `projection_ratio` field on both IntermediateUnstructured and Last variants, capped by `MAX_UNSTRUCT_PROJ_RATIO = 128`
 - `build_round_config`'s else branch must return `Intermediate { next: IntermediateUnstructured(...) }`, NOT `IntermediateUnstructured` directly (which would skip the last Intermediate round)
 - Verifier `load_data`: `main_cols_points` start index must use `config.main_witness_prefix.length`, not hardcoded 1
+
+## Type3.1 (Unstructured Projection) Sumcheck
+- Proves `<c_2 ⊗ c_0 ⊗ j_batched, witness> = batched_projection` for each of NOF_BATCHES (64) batches
+- `j_batched` = random linear combination of projection rows (via `compute_j_batched`)
+- `c_0` selects across blocks, `c_1` selects within blocks (for CT check), `c_2` selects across columns
+- `BatchedProjectionChallengesSuccinct` stores layered form of challenges for efficient MLE evaluation
+- Prover sends `projection_image_ct` (coefficient tuples) + `projection_image_batched` (NTT form)
+
+## CT Consistency Check
+The verifier checks that constant terms of `projection_image_batched` entries are consistent with `projection_image_ct`:
+- For each batch `i` and column `k`: recompute expected constant term by inner product of `c_1_values ⊗ c_0_values` with `projection_image_ct` entries
+- Compare against `projection_image_batched[(i,k)].constant_term_from_incomplete_ntt()`
+- This ensures the prover didn't cheat on the NTT-domain batched projections
+
+## Claim Batching Order
+`batch_claims()` combines claims in a fixed order with Fiat-Shamir combination coefficients:
+1. Type1 claims (inner_evaluation_claims × folded over outer evaluation points)
+2. Type3 zero claim (Intermediate only — placeholder since Diff sumcheck has 0 target)
+3. L2 product claim (if l2 enabled)
+4. Linf product claim (if exact_binariness enabled)
+5. VDF product claim (if vdf enabled)
+6. Type3.1 claims (NOF_BATCHES claims for unstructured projection)
+The verifier must reproduce this exact order.

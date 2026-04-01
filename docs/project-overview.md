@@ -16,20 +16,20 @@ binariness (round 0), L2 norm (rounds 1+), VDF chain, projection consistency.
 - Representation::IncompleteNTT (primary working representation)
 - `RingElement` supports `*=`, `+=`, conjugate, etc. The `*= (&a, &b)` pattern does `self = a * b`.
 
-## Key File: src/salsaa/executor.rs (~3100+ lines)
+## Key File: src/salsaa/executor.rs (~4058 lines)
 This is the main file. Contains everything: config, prover, verifier, proof structs.
 
 ### Core Types
 - `RoundConfig` — enum with 3 variants:
-  - `Intermediate { common, decomposition_base_log, projection_ratio, projection_prefix, next }` — has projection, prefix length=1
-  - `IntermediateUnstructured { common, decomposition_base_log, next }` — no projection, prefix length=0
-  - `Last { common }` — terminal round, no decomposition
+  - `Intermediate { common, decomposition_base_log, projection_ratio, projection_prefix, next }` — structured projection, prefix length=1
+  - `IntermediateUnstructured { projection_ratio, common, decomposition_base_log, next }` — unstructured projection (no prefix), prefix length=0
+  - `Last { common, projection_ratio }` — terminal round, no decomposition, has unstructured projection
 - `SalsaaProof` — enum with 3 variants:
   - `Intermediate { common, new_claims, decomposed_split_commitment, projection_commitment, claim_over_projection, next }`
   - `IntermediateUnstructured { common, new_claims, decomposed_split_commitment, next, projection_image_ct, projection_image_batched }`
   - `Last { common, folded_witness, projection_image_ct, projection_image_batched }`
 - Both use `Deref` to their `Common` structs for transparent field access
-- `RoundConfigCommon` fields: witness_length, exact_binariness, vdf, l2, main_witness_columns, main_witness_prefix, inner_evaluation_claims
+- `RoundConfigCommon` fields: main_witness_prefix, main_witness_columns, extended_witness_length, exact_binariness, vdf, l2, inner_evaluation_claims
 - `SalsaaProofCommon` fields: sumcheck_transcript, ip_l2_claim, ip_linf_claim, claims
 
 ### Round Structure
@@ -74,7 +74,8 @@ This is the main file. Contains everything: config, prover, verifier, proof stru
 
 ### Sumcheck Types
 - **Type1** (inner evaluation): Product(Product(inner_eval, outer_eval), main_witness) — verifies MLE claims
-- **Type3** (projection): Diff(LHS_product, RHS_product) — verifies projection consistency
+- **Type3** (structured projection): Diff(LHS_product, RHS_product) — verifies projection consistency (Intermediate rounds only)
+- **Type3.1** (unstructured projection): Product(c_2, Product(c_0, Product(j_batched, witness))) — proves `<c_2 ⊗ c_0 ⊗ j_batched, witness> = batched_projection` (IntermediateUnstructured and Last rounds, NOF_BATCHES=64 instances)
 - **L2**: Product(witness, conjugated_witness) — proves ||w||^2
 - **Linf**: Product((1-w), conjugated_w) — proves exact binariness
 - **VDF**: Product(Product(step_powers, batched_row), main_witness) — proves VDF chain
@@ -83,6 +84,18 @@ This is the main file. Contains everything: config, prover, verifier, proof stru
 - VerticallyAlignedMatrix: column-major, witness.col(i) gives column i
 - Extended witness: for Intermediate (prefix=1): 2x original (via paste_by_prefix with main_witness_prefix and projection_prefix); for IntermediateUnstructured/Last (prefix=0): same size as original (no doubling)
 - Prefix bits (Intermediate only): MSB selects main_witness (0) vs projection (main_witness_columns)
+
+### Batched Projection (Unstructured Rounds)
+- `batch_projection_n_times()` — projects witness via coefficient space and batches NOF_BATCHES (64) times
+- `project_coefficients()` — projects a column via coefficient-space multiplication
+- `BatchedProjectionChallengesSuccinct` — sparse challenge representation: `c_0_layers`, `c_1_layers`, `c_2_values`, `j_batched`
+- Prover sends `projection_image_ct` (coefficient-tuple form) and `projection_image_batched` (batched NTT form)
+- Verifier performs CT consistency check: constant terms of `projection_image_batched` must match those recomputed from `projection_image_ct` using the challenge structure
+
+### Claim Batching
+- `batch_claims()` combines all claims into a single batched claim using Fiat-Shamir combination coefficients
+- Order: Type1 claims → Type3 zero claim (Intermediate only) → L2 → Linf → VDF → Type3.1 claims
+- The batched claim is then mapped to field via `RingToFieldCombiner` for the sumcheck verifier
 
 ### Commitment
 - `commit_basic(crs, witness_matrix, rank) -> BasicCommitment` (= HorizontallyAlignedMatrix<RingElement>)
