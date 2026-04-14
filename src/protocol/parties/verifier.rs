@@ -6,30 +6,27 @@ use crate::protocol::config::{RoundConfig, SalsaaProof};
 use crate::protocol::parties::executor::compute_ip_vdf_claim;
 use crate::protocol::parties::prover::vdf_crs;
 use crate::protocol::project::BatchingChallenges;
-use crate::protocol::project_2::{
-    verifier_sample_projection_challenges, BatchedProjectionChallenges,
-};
+use crate::protocol::project_2::verifier_sample_projection_challenges;
 use crate::protocol::sumchecks::context_verifier::VerifierSumcheckContext;
 use crate::{
     common::{
         arithmetic::{
-            field_to_ring_element_into, precompute_structured_values_fast, ALL_ONE_COEFFS, ONE,
-            ZERO,
+            field_to_ring_element_into, precompute_structured_values_fast, ONE,
         },
-        config::{self, DEGREE, HALF_DEGREE, MOD_Q, NOF_BATCHES},
-        decomposition::{compose_from_decomposed, decompose_chunks_into},
+        config::{DEGREE, HALF_DEGREE, MOD_Q, NOF_BATCHES},
+        decomposition::compose_from_decomposed,
         hash::HashWrapper,
         matrix::{new_vec_zero_preallocated, HorizontallyAlignedMatrix, VerticallyAlignedMatrix},
-        projection_matrix::{self, ProjectionMatrix},
+        projection_matrix::ProjectionMatrix,
         ring_arithmetic::{QuadraticExtension, Representation, RingElement},
         structured_row::{PreprocessedRow, StructuredRow},
         sumcheck_element::SumcheckElement,
     },
     hexl::bindings::{add_mod, eltwise_mult_mod, multiply_mod},
     protocol::{
-        commitment::{self, commit_basic, commit_basic_internal, BasicCommitment, Prefix},
-        crs::{self, CRS},
-        open::{claim, evaluation_point_to_structured_row},
+        commitment::{commit_basic, BasicCommitment},
+        crs::CRS,
+        open::evaluation_point_to_structured_row,
         project_2::BatchedProjectionChallengesSuccinct,
     },
 };
@@ -62,12 +59,9 @@ fn batch_claims(
         idx += 1;
     }
 
-    match config {
-        RoundConfig::Intermediate { .. } => {
-            // zero claim, nothing to add
-            idx += 1;
-        }
-        _ => {}
+    if let RoundConfig::Intermediate { .. } = config {
+        // zero claim, nothing to add
+        idx += 1;
     }
 
     // L2: product sumcheck over conjugated witness and selected witness.
@@ -133,7 +127,7 @@ pub fn verifier_round(
     round_index: usize,
 ) {
     let round_start = std::time::Instant::now();
-    let mut projection_matrix = match config {
+    let projection_matrix = match config {
         RoundConfig::Intermediate { .. } => {
             let mut pm = ProjectionMatrix::new(config.main_witness_columns, PROJECTION_HEIGHT);
             pm.sample(hash_wrapper);
@@ -374,7 +368,7 @@ pub fn verifier_round(
         num_vars -= 1;
         let poly_over_field = &proof.sumcheck_transcript[round_idx];
 
-        if round_idx < 3 {}
+        
 
         hash_wrapper.update_with_quadratic_extension_slice(&poly_over_field.coefficients);
 
@@ -388,7 +382,7 @@ pub fn verifier_round(
         let mut f = QuadraticExtension::zero();
         hash_wrapper.sample_field_element_into(&mut f);
 
-        if round_idx < 3 {}
+        
 
         batched_claim_over_field = poly_over_field.at(&f);
 
@@ -499,8 +493,7 @@ pub fn verifier_round(
                 let layer = crs.structured_ck_for_wit_dim(
                     config.extended_witness_length / 2 / config.main_witness_columns,
                 )[r]
-                    .tensor_layers
-                    .get(0)
+                    .tensor_layers.first()
                     .unwrap();
 
                 let mut folded_commitment_r = RingElement::zero(Representation::IncompleteNTT);
@@ -539,11 +532,10 @@ pub fn verifier_round(
                 vdf_crs_param,
             );
 
-            let verifier_eval = verifier_context
+            let verifier_eval = *verifier_context
                 .field_combiner_evaluation
                 .borrow_mut()
-                .evaluate_at_ring_point(&evaluation_points_ring)
-                .clone();
+                .evaluate_at_ring_point(&evaluation_points_ring);
 
             assert_eq!(
                 verifier_eval, batched_claim_over_field,
@@ -639,8 +631,7 @@ pub fn verifier_round(
                     (config.extended_witness_length >> config.main_witness_prefix.length)
                         / config.main_witness_columns,
                 )[r]
-                    .tensor_layers
-                    .get(0)
+                    .tensor_layers.first()
                     .unwrap();
 
                 let mut folded_commitment_r = RingElement::zero(Representation::IncompleteNTT);
@@ -672,11 +663,10 @@ pub fn verifier_round(
                 vdf_crs_param,
             );
 
-            let verifier_eval = verifier_context
+            let verifier_eval = *verifier_context
                 .field_combiner_evaluation
                 .borrow_mut()
-                .evaluate_at_ring_point(&evaluation_points_ring)
-                .clone();
+                .evaluate_at_ring_point(&evaluation_points_ring);
 
             assert_eq!(
                 verifier_eval, batched_claim_over_field,
@@ -869,11 +859,10 @@ pub fn verifier_round(
                 vdf_crs_param,
             );
 
-            let verifier_eval = verifier_context
+            let verifier_eval = *verifier_context
                 .field_combiner_evaluation
                 .borrow_mut()
-                .evaluate_at_ring_point(&evaluation_points_ring)
-                .clone();
+                .evaluate_at_ring_point(&evaluation_points_ring);
 
             assert_eq!(
                 verifier_eval, batched_claim_over_field,

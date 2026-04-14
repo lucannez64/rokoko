@@ -65,8 +65,7 @@ pub fn estimate_sis_security(params: &SISParameters) -> Result<EstimatorResult, 
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
-        return Err(io::Error::new(
-            io::ErrorKind::Other,
+        return Err(io::Error::other(
             format!("Estimator script failed: {}", stderr),
         ));
     }

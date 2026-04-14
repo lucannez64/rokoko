@@ -49,7 +49,7 @@ pub fn centered_i64_from_u64_mod_q_scalar(x: u64) -> i64 {
 #[inline(always)]
 pub fn pack_i64_to_i16_deg16(dst: &mut [i16], src: &[i64]) {
     debug_assert_eq!(dst.len(), src.len());
-    debug_assert!(src.len() % 16 == 0);
+    debug_assert!(src.len().is_multiple_of(16));
 
     // #[cfg(feature = "debug-decomp")]
     // {
@@ -83,7 +83,6 @@ pub fn pack_i64_to_i16_deg16(dst: &mut [i16], src: &[i64]) {
         debug_assert!(s >= i16::MIN as i64 && s <= i16::MAX as i64);
         *d = s as i16;
     }
-    return;
 }
 
 /// Converts unsigned residues in `[0, Q)` to centred signed form in `(-Q/2, Q/2]`.
@@ -205,7 +204,7 @@ pub fn project_one_row_i16_to_u64<const DEGREE: usize>(
     neg: &[u16],
     out_u64: &mut [u64; DEGREE],
 ) {
-    debug_assert!(DEGREE % 16 == 0);
+    debug_assert!(DEGREE.is_multiple_of(16));
 
     let mut acc: [i32; DEGREE] = [0; DEGREE];
 

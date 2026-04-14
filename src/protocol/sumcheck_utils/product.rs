@@ -294,8 +294,8 @@ impl<E: SumcheckElement> HighOrderSumcheckData for ProductSumcheck<E> {
 
             // Number of possibly non-zero pairs. If the slice has odd length,
             // the last pair has an implicit odd entry equal to zero.
-            let a_pairs = (a_data.len() + 1) / 2;
-            let b_pairs = (b_data.len() + 1) / 2;
+            let a_pairs = a_data.len().div_ceil(2);
+            let b_pairs = b_data.len().div_ceil(2);
             let dense_end = a_pairs.min(b_pairs);
             let zero = Self::Element::zero();
 

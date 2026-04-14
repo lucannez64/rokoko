@@ -33,7 +33,7 @@ pub(crate) fn composition_sumcheck(
         .map(|i| {
             // Basis element corresponding to 2^{base_log * i}
             RingElement::constant(
-                1u64 << (base_log as u64 * i as u64),
+                1u64 << (base_log * i as u64),
                 Representation::IncompleteNTT,
             )
         })

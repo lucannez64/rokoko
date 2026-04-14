@@ -203,7 +203,7 @@ impl<E: SumcheckElement> HighOrderSumcheckData for LinearSumcheck<E> {
             return false;
         }
         let half = self.data.len() / 2;
-        let pair_nz = (self.non_zero_end + 1) / 2;
+        let pair_nz = self.non_zero_end.div_ceil(2);
         if pair_nz >= half {
             return false;
         }
@@ -257,7 +257,7 @@ impl<E: SumcheckElement> HighOrderSumcheckData for LinearSumcheck<E> {
         // non_zero_end tracks pairs: pair i covers data[2i] and data[2i+1].
         // Points run over [0, half), and pair i is non-zero if 2i < non_zero_end,
         // i.e. i < ceil(non_zero_end / 2).
-        let pair_nz = (self.non_zero_end + 1) / 2;
+        let pair_nz = self.non_zero_end.div_ceil(2);
         if pair_nz < half {
             Some((0, pair_nz))
         } else {
@@ -295,7 +295,7 @@ impl<E: SumcheckElement> SumcheckBaseData for LinearSumcheck<E> {
         // data[2i] = value at current_var=0, data[2i+1] = value at current_var=1.
         // folded[i] = data[2i] + (data[2i+1] - data[2i]) * r
         let n = self.data.len();
-        if n % 2 != 0 {
+        if !n.is_multiple_of(2) {
             panic!("Sumcheck data length must be a power of 2");
         }
         let half = n / 2;
@@ -303,7 +303,7 @@ impl<E: SumcheckElement> SumcheckBaseData for LinearSumcheck<E> {
         // even_nz: number of folded output slots that might be non-zero.
         // Pair i has even=data[2i], odd=data[2i+1]. If 2i >= non_zero_end
         // then both are zero → folded[i] is zero.
-        let pair_nz = (self.non_zero_end + 1) / 2; // ceil(non_zero_end / 2)
+        let pair_nz = self.non_zero_end.div_ceil(2); // ceil(non_zero_end / 2)
         let fold_end = pair_nz.min(half);
 
         for i in 0..fold_end {
@@ -501,7 +501,7 @@ impl<E: SumcheckElement + 'static> EvaluationSumcheckData
     type Element = E;
 
     fn evaluate(&mut self, point: &Vec<Self::Element>) -> &Self::Element {
-        self.result.set_from(&*E::one_ref());
+        self.result.set_from(E::one_ref());
         if point.len() != self.variable_count {
             panic!(
                 "Point has incorrect number of variables, expected {}, got {}",
@@ -525,10 +525,10 @@ impl<E: SumcheckElement + 'static> EvaluationSumcheckData
             // Compute: (1-layer)*(1-r) + layer*r = 1 - layer - r + 2*layer*r
             self.scratch.set_from(layer);
             self.scratch *= r; // layer*r
-            self.scratch *= &*E::two_ref(); // 2*layer*r
+            self.scratch *= E::two_ref(); // 2*layer*r
             self.scratch -= layer; // 2*layer*r - layer
             self.scratch -= r; // 2*layer*r - layer - r
-            self.scratch += &*E::one_ref(); // 1 - layer - r + 2*layer*r
+            self.scratch += E::one_ref(); // 1 - layer - r + 2*layer*r
 
             self.result *= &self.scratch;
         }
@@ -539,6 +539,12 @@ impl<E: SumcheckElement + 'static> EvaluationSumcheckData
 
 pub struct FakeEvaluationLinearSumcheck<E: SumcheckElement = RingElement> {
     result: E,
+}
+
+impl<E: SumcheckElement> Default for FakeEvaluationLinearSumcheck<E> {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl<E: SumcheckElement> FakeEvaluationLinearSumcheck<E> {

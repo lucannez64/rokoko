@@ -30,10 +30,10 @@ impl ProverSumcheckContext {
         vdf_challenge: Option<&RingElement>,
         vdf_crs_param: Option<&vdf_crs>,
     ) {
-        self.witness_sumcheck.borrow_mut().load_from(&witness);
+        self.witness_sumcheck.borrow_mut().load_from(witness);
         self.witness_conjugated_sumcheck
             .borrow_mut()
-            .load_from(&witness_conjugated);
+            .load_from(witness_conjugated);
         if let Some(projection_challenges) = projection_batching_challenges {
             let c0_expanded = PreprocessedRow::from_structured_row(&projection_challenges.c0);
             let c1_expanded = PreprocessedRow::from_structured_row(&projection_challenges.c1);
@@ -132,7 +132,7 @@ impl ProverSumcheckContext {
             type1
                 .outer_evaluation_sumcheck
                 .borrow_mut()
-                .load_from(&evaluation_points_outer);
+                .load_from(evaluation_points_outer);
         }
 
         if let Some(vdf) = &mut self.vdfsumcheck {

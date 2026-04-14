@@ -1,21 +1,13 @@
 use crate::{
     common::{
-        arithmetic::field_to_ring_element_into,
         config::NOF_BATCHES,
-        matrix::new_vec_zero_preallocated,
-        projection_matrix::ProjectionMatrix,
-        ring_arithmetic::{Representation, RingElement},
-        structured_row::{PreprocessedRow, StructuredRow},
+        ring_arithmetic::RingElement,
     },
-    protocol::{
-        project_2::BatchedProjectionChallenges,
-        sumcheck_utils::{
+    protocol::sumcheck_utils::{
             combiner::Combiner, common::SumcheckBaseData, diff::DiffSumcheck,
             elephant_cell::ElephantCell, linear::LinearSumcheck, product::ProductSumcheck,
             ring_to_field_combiner::RingToFieldCombiner, selector_eq::SelectorEq,
         },
-        sumchecks::helpers::projection_flatter_1_times_matrix,
-    },
 };
 
 pub struct ProverSumcheckContext {
@@ -141,9 +133,8 @@ impl ProverSumcheckContext {
         self.main_witness_selector_sumcheck
             .borrow_mut()
             .partial_evaluate(r);
-        self.projection_selector_sumcheck
-            .as_ref()
-            .map(|sumcheck| sumcheck.borrow_mut().partial_evaluate(r));
+        if let Some(sumcheck) = self.projection_selector_sumcheck
+            .as_ref() { sumcheck.borrow_mut().partial_evaluate(r) }
         for type1 in &mut self.type1sumcheck {
             type1
                 .inner_evaluation_sumcheck

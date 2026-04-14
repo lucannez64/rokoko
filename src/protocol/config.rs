@@ -513,7 +513,7 @@ impl SizeableProof for SalsaaProof {
 pub fn paste_by_prefix(dest: &mut Vec<RingElement>, src: &Vec<RingElement>, prefix: &Prefix) {
     debug_assert_eq!(
         src.len().next_power_of_two(),
-        1 << dest.len().ilog2() as usize - prefix.length,
+        1 << (dest.len().ilog2() as usize - prefix.length),
         "Pasting failed. Source length does not match prefix length."
     );
     // e.g. if dest.len() = 2048, prefix.length = 4, prefix.prefix = 9 (0b1001)

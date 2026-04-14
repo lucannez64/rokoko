@@ -202,8 +202,8 @@ impl EvaluationSumcheckData for DiffSumcheckEvaluation {
 
     fn evaluate(&mut self, point: &Vec<Self::Element>) -> &Self::Element {
         self.result -= (
-            self.lhs_evaluation.borrow_mut().evaluate(&point),
-            self.rhs_evaluation.borrow_mut().evaluate(&point),
+            self.lhs_evaluation.borrow_mut().evaluate(point),
+            self.rhs_evaluation.borrow_mut().evaluate(point),
         );
         &self.result
     }

@@ -68,13 +68,13 @@ pub fn prepare_i16_witness(
     let mut witness_i16: Vec<Signed16RingElement> =
         vec![Signed16RingElement([0i16; DEGREE]); witness.data.len()];
 
-    let mut ring_el = [0 as i64; DEGREE];
+    let mut ring_el = [0_i64; DEGREE];
     let mut temp = RingElement::zero(Representation::IncompleteNTT);
     for (i, cr) in witness.data.iter().enumerate() {
         temp.set_from(cr);
         temp.from_incomplete_ntt_to_even_odd_coefficients();
         centered_coeffs_u64_to_i64_inplace(&mut ring_el, &temp.v);
-        pack_i64_to_i16_deg16(&mut witness_i16[i].0, &mut ring_el);
+        pack_i64_to_i16_deg16(&mut witness_i16[i].0, &ring_el);
     }
 
     VerticallyAlignedMatrix::<Signed16RingElement> {

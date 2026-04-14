@@ -77,7 +77,7 @@ impl ProjectionMatrix {
     pub fn new(projection_ratio: usize, projection_height: usize) -> Self {
         let projection_width = projection_height * projection_ratio;
         debug_assert!(
-            projection_width % 8 == 0,
+            projection_width.is_multiple_of(8),
             "projection_width must be multiple of 8"
         );
 
@@ -85,12 +85,12 @@ impl ProjectionMatrix {
 
         let pos_masks = HorizontallyAlignedMatrix {
             data: vec![0u8; projection_height * width],
-            width: width,
+            width,
             height: projection_height,
         };
         let non_zero_masks = HorizontallyAlignedMatrix {
             data: vec![0u8; projection_height * width],
-            width: width,
+            width,
             height: projection_height,
         };
 
@@ -117,7 +117,7 @@ impl ProjectionMatrix {
     pub fn get_row_masks_u8(&self, row: usize, col_base: usize) -> (u8, u8) {
         debug_assert!(row < self.projection_height);
         debug_assert!(col_base < self.projection_width);
-        debug_assert!(col_base % 8 == 0, "col_base must be aligned to 8");
+        debug_assert!(col_base.is_multiple_of(8), "col_base must be aligned to 8");
 
         let chunk = col_base >> 3;
         debug_assert!(chunk < self.width);

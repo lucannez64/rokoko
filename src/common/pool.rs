@@ -98,7 +98,7 @@ pub fn get_preallocated_quad_vec(len: usize) -> Vec<QuadraticExtension> {
 /// Preallocate RingElement vectors in the pool
 pub fn preallocate_ring_element_vecs(len: usize, count: usize) {
     let mut pool = PREALLOCATED_RING.lock().expect("pool poisoned");
-    let entry = pool.entry(len).or_insert_with(Vec::new);
+    let entry = pool.entry(len).or_default();
     entry.reserve(count);
     for _ in 0..count {
         entry.push(vec![ZERO_REP_INCOMPLETE_NTT.clone(); len]);
@@ -108,7 +108,7 @@ pub fn preallocate_ring_element_vecs(len: usize, count: usize) {
 /// Preallocate QuadraticExtension vectors in the pool
 pub fn preallocate_quad_vecs(len: usize, count: usize) {
     let mut pool = PREALLOCATED_QUAD.lock().expect("pool poisoned");
-    let entry = pool.entry(len).or_insert_with(Vec::new);
+    let entry = pool.entry(len).or_default();
     entry.reserve(count);
     for _ in 0..count {
         entry.push(vec![QuadraticExtension::zero(); len]);

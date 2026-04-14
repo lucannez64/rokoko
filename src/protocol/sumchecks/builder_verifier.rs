@@ -373,7 +373,7 @@ pub fn init_verifier_sumcheck(config: &RoundConfig) -> VerifierSumcheckContext {
         .collect::<Vec<_>>();
 
     let type3evaluation = match config {
-        RoundConfig::Intermediate { projection_ratio, .. } => Some(init_verifier_type_3_sumcheck(
+        RoundConfig::Intermediate { projection_ratio: _, .. } => Some(init_verifier_type_3_sumcheck(
             config,
             main_witness_evaluation.clone(),
             projection_eval.expect("Projection evaluation should be initialized for intermediate rounds with projection"),

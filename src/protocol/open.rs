@@ -40,13 +40,13 @@ pub fn open_at(
     let nof_evaluation_points = structured_points_inner.len();
 
     let preprocessed_points_inner = structured_points_inner
-        .into_iter()
-        .map(|sr| PreprocessedRow::from_structured_row(&sr))
+        .iter()
+        .map(PreprocessedRow::from_structured_row)
         .collect::<Vec<PreprocessedRow>>();
 
     let preprocessed_points_outer = structured_points_outer
-        .into_iter()
-        .map(|sr| PreprocessedRow::from_structured_row(&sr))
+        .iter()
+        .map(PreprocessedRow::from_structured_row)
         .collect::<Vec<PreprocessedRow>>();
 
     // it's not a commitment, but we can reuse the same structure

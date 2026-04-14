@@ -52,18 +52,15 @@ impl VerifierSumcheckContext {
             claim_over_witness += &temp;
         }
 
-        match proof {
-            SalsaaProof::Intermediate {
+        if let SalsaaProof::Intermediate {
                 claim_over_projection,
                 ..
-            } => {
-                temp *= (
-                    claim_over_projection.get(0).unwrap(),
-                    &outer_points_expanded[config.main_witness_columns],
-                );
-                claim_over_witness += &temp;
-            }
-            _ => {}
+            } = proof {
+            temp *= (
+                claim_over_projection.first().unwrap(),
+                &outer_points_expanded[config.main_witness_columns],
+            );
+            claim_over_witness += &temp;
         }
 
         let mut main_cols_points =

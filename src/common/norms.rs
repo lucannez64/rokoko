@@ -11,9 +11,9 @@ pub fn inf_norm(vec: &Vec<RingElement>) -> u64 {
                 .iter()
                 .map(|&x| {
                     if x > MOD_Q / 2 {
-                        MOD_Q - x as u64
+                        MOD_Q - x
                     } else {
-                        x as u64
+                        x
                     }
                 })
                 .max()
@@ -33,7 +33,7 @@ pub fn l2_norm(vec: &Vec<RingElement>) -> f64 {
             sum += centered * centered;
         }
     }
-    (sum as f64).sqrt() as f64
+    (sum as f64).sqrt()
 }
 
 pub fn l2_norm_coeffs(vec: &Vec<RingElement>) -> f64 {
@@ -44,5 +44,5 @@ pub fn l2_norm_coeffs(vec: &Vec<RingElement>) -> f64 {
             sum += centered * centered;
         }
     }
-    (sum as f64).sqrt() as f64
+    (sum as f64).sqrt()
 }

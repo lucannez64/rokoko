@@ -289,7 +289,7 @@ pub fn init_linf_sumcheck(
 
     all_one_constant_sumcheck
         .borrow_mut()
-        .load_from(&vec![ALL_ONE_COEFFS.clone()]);
+        .load_from(&[ALL_ONE_COEFFS.clone()]);
 
     let one_minus_wit_sumcheck = ElephantCell::new(DiffSumcheck::new(
         all_one_constant_sumcheck.clone(),
@@ -317,7 +317,7 @@ pub fn init_prover_sumcheck(crs: &CRS, config: &RoundConfig) -> ProverSumcheckCo
     let witness_conjugated_sumcheck =
         ElephantCell::new(LinearSumcheck::new_with_prefixed_sufixed_data(
             config.extended_witness_length >> config.main_witness_prefix.length,
-            config.main_witness_prefix.length as usize,
+            config.main_witness_prefix.length,
             0,
         ));
 
@@ -336,7 +336,7 @@ pub fn init_prover_sumcheck(crs: &CRS, config: &RoundConfig) -> ProverSumcheckCo
         RoundConfig::Intermediate {
             projection_prefix, ..
         } => Some(sumcheck_from_prefix(
-            &projection_prefix,
+            projection_prefix,
             config.extended_witness_length.ilog2() as usize,
         )),
         _ => None,

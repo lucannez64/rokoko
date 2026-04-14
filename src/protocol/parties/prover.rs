@@ -19,12 +19,12 @@ use crate::{
         sumcheck_element::SumcheckElement,
     },
     protocol::{
-        commitment::{commit_basic, commit_basic_internal, BasicCommitment, Prefix},
+        commitment::{commit_basic, commit_basic_internal},
         config::paste_by_prefix,
-        crs::{self, CRS},
+        crs::CRS,
         fold::fold,
-        open::{claim, evaluation_point_to_structured_row},
-        project::{self, prepare_i16_witness, project},
+        open::evaluation_point_to_structured_row,
+        project::{prepare_i16_witness, project},
     },
 };
 
@@ -79,7 +79,7 @@ pub fn prover_round(
         };
 
     let (
-        unstructured_projection_matrix,
+        _unstructured_projection_matrix,
         batched_image,
         unstructured_batching_challenges,
         projection_ct,
@@ -168,17 +168,14 @@ pub fn prover_round(
         &config.main_witness_prefix,
     );
 
-    match config {
-        RoundConfig::Intermediate {
+    if let RoundConfig::Intermediate {
             projection_prefix, ..
-        } => {
-            paste_by_prefix(
-                &mut extended_witness,
-                &projected_witness.as_ref().unwrap().data,
-                projection_prefix,
-            );
-        }
-        _ => {}
+        } = config {
+        paste_by_prefix(
+            &mut extended_witness,
+            &projected_witness.as_ref().unwrap().data,
+            projection_prefix,
+        );
     }
 
     let mut evaluation_points_outer = new_vec_zero_preallocated(config.main_witness_columns);
@@ -219,7 +216,7 @@ pub fn prover_round(
     if DEBUG {
         let ip_vdf_claim = compute_ip_vdf_claim(config, vdf_challenge.as_ref(), vdf_params);
 
-        if sumcheck_context.type1sumcheck.len() > 0 {
+        if !sumcheck_context.type1sumcheck.is_empty() {
             let claim = sumcheck_context.type1sumcheck[0].output.borrow().claim();
 
             let mut expected_claim = ZERO.clone();
@@ -229,22 +226,19 @@ pub fn prover_round(
             assert_eq!(claim, expected_claim, "Claim from the sumcheck does not match the expected claim computed from the committed witness and the evaluation points");
         }
 
-        match config {
-            RoundConfig::Intermediate { .. } => {
-                let projection_claim = sumcheck_context
-                    .type3sumcheck
-                    .as_ref()
-                    .unwrap()
-                    .output
-                    .borrow()
-                    .claim();
-                let expected_projection_claim = ZERO.clone();
-                assert_eq!(
-                projection_claim, expected_projection_claim,
-                "Projection claim from the sumcheck does not match the expected projection claim"
-            );
-            }
-            _ => {}
+        if let RoundConfig::Intermediate { .. } = config {
+            let projection_claim = sumcheck_context
+                .type3sumcheck
+                .as_ref()
+                .unwrap()
+                .output
+                .borrow()
+                .claim();
+            let expected_projection_claim = ZERO.clone();
+            assert_eq!(
+            projection_claim, expected_projection_claim,
+            "Projection claim from the sumcheck does not match the expected projection claim"
+        );
         };
 
         if config.l2 {
@@ -294,34 +288,31 @@ pub fn prover_round(
             );
         }
 
-        match config {
-            RoundConfig::IntermediateUnstructured { .. } => {
-                for (batch_idx, type31) in sumcheck_context
-                    .type31sumchecks
-                    .as_ref()
-                    .unwrap()
-                    .iter()
-                    .enumerate()
-                {
-                    let projection_claim = type31.output.borrow().claim();
-                    let batch_image = &batched_image.as_ref().unwrap().row(batch_idx);
-                    let challenges =
-                        &unstructured_batching_challenges.as_ref().unwrap()[batch_idx].c_2_values;
-                    let mut expected_projection_claim =
-                        RingElement::zero(Representation::IncompleteNTT);
-                    let mut temp = RingElement::zero(Representation::IncompleteNTT);
-                    for (c, r) in batch_image.iter().zip(challenges.iter()) {
-                        temp *= (c, &RingElement::constant(*r, Representation::IncompleteNTT));
-                        expected_projection_claim += &temp;
-                    }
-                    assert_eq!(
-                        projection_claim, expected_projection_claim,
-                        "Projection claim from the sumcheck does not match the expected projection claim"
-                    );
+        if let RoundConfig::IntermediateUnstructured { .. } = config {
+            for (batch_idx, type31) in sumcheck_context
+                .type31sumchecks
+                .as_ref()
+                .unwrap()
+                .iter()
+                .enumerate()
+            {
+                let projection_claim = type31.output.borrow().claim();
+                let batch_image = &batched_image.as_ref().unwrap().row(batch_idx);
+                let challenges =
+                    &unstructured_batching_challenges.as_ref().unwrap()[batch_idx].c_2_values;
+                let mut expected_projection_claim =
+                    RingElement::zero(Representation::IncompleteNTT);
+                let mut temp = RingElement::zero(Representation::IncompleteNTT);
+                for (c, r) in batch_image.iter().zip(challenges.iter()) {
+                    temp *= (c, &RingElement::constant(*r, Representation::IncompleteNTT));
+                    expected_projection_claim += &temp;
                 }
-                println!("Unstructured projection claims from the sumcheck match the expected projection claims");
+                assert_eq!(
+                    projection_claim, expected_projection_claim,
+                    "Projection claim from the sumcheck does not match the expected projection claim"
+                );
             }
-            _ => {}
+            println!("Unstructured projection claims from the sumcheck match the expected projection claims");
         }
     }
 
@@ -406,20 +397,17 @@ pub fn prover_round(
         }
     }
 
-    match config {
-        RoundConfig::Intermediate { .. } => {
-            for (c, r) in projected_witness
-                .as_ref()
-                .unwrap()
-                .data
-                .iter()
-                .zip(preprocessed_evaluation_points_inner.preprocessed_row.iter())
-            {
-                temp *= (c, r);
-                claim_over_projection.as_mut().unwrap()[0] += &temp;
-            }
+    if let RoundConfig::Intermediate { .. } = config {
+        for (c, r) in projected_witness
+            .as_ref()
+            .unwrap()
+            .data
+            .iter()
+            .zip(preprocessed_evaluation_points_inner.preprocessed_row.iter())
+        {
+            temp *= (c, r);
+            claim_over_projection.as_mut().unwrap()[0] += &temp;
         }
-        _ => {}
     }
 
     // now let's conjugate eval point in place and repeat the logic to get the claims for the conjugated witness, which will be used in the l2 and linf sumchecks
@@ -441,20 +429,17 @@ pub fn prover_round(
         }
     }
 
-    match config {
-        RoundConfig::Intermediate { .. } => {
-            for (c, r) in projected_witness
-                .as_ref()
-                .unwrap()
-                .data
-                .iter()
-                .zip(preprocessed_evaluation_points_inner.preprocessed_row.iter())
-            {
-                temp *= (c, r);
-                claim_over_projection.as_mut().unwrap()[1] += &temp;
-            }
+    if let RoundConfig::Intermediate { .. } = config {
+        for (c, r) in projected_witness
+            .as_ref()
+            .unwrap()
+            .data
+            .iter()
+            .zip(preprocessed_evaluation_points_inner.preprocessed_row.iter())
+        {
+            temp *= (c, r);
+            claim_over_projection.as_mut().unwrap()[1] += &temp;
         }
-        _ => {}
     }
 
     // for i in 0..config.main_witness_columns {
@@ -471,7 +456,7 @@ pub fn prover_round(
     let mut folding_challenges = new_vec_zero_preallocated(config.main_witness_columns);
     hash_wrapper.sample_biased_ternary_ring_element_vec_into(&mut folding_challenges);
 
-    let folded_witness = fold(&witness, &folding_challenges);
+    let folded_witness = fold(witness, &folding_challenges);
 
     let common = SalsaaProofCommon {
         // projection_commitment,
@@ -554,12 +539,10 @@ pub fn prover_round(
                 let old_ck = crs.structured_ck_for_wit_dim(split_witness.height * 2);
 
                 let composed = compose_from_decomposed(
-                    &vec![
-                        decomposed_split_commitment[(0, 0)].clone(),
+                    &[decomposed_split_commitment[(0, 0)].clone(),
                         decomposed_split_commitment[(0, 1)].clone(),
                         decomposed_split_commitment[(0, 2)].clone(),
-                        decomposed_split_commitment[(0, 3)].clone(),
-                    ],
+                        decomposed_split_commitment[(0, 3)].clone()],
                     *decomposition_base_log,
                     2,
                 );
@@ -569,12 +552,10 @@ pub fn prover_round(
                 assert_eq!(composed[1], commitment_to_split_witness[(0, 1)], "Composed commitment from the decomposed split projected witness does not match the commitment to the projected witness");
 
                 let composed_projection = compose_from_decomposed(
-                    &vec![
-                        decomposed_split_commitment[(0, 4)].clone(),
+                    &[decomposed_split_commitment[(0, 4)].clone(),
                         decomposed_split_commitment[(0, 5)].clone(),
                         decomposed_split_commitment[(0, 6)].clone(),
-                        decomposed_split_commitment[(0, 7)].clone(),
-                    ],
+                        decomposed_split_commitment[(0, 7)].clone()],
                     *decomposition_base_log,
                     2,
                 );

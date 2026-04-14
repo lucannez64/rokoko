@@ -56,9 +56,9 @@ pub fn commit_basic(
     rank: usize,
 ) -> BasicCommitment {
     let ck = crs.ck_for_wit_dim(witness.height);
-    let commitment = commit_basic_internal(ck, witness, rank);
+    
 
-    commitment
+    commit_basic_internal(ck, witness, rank)
 }
 
 #[derive(Clone)]
@@ -118,7 +118,7 @@ pub fn recursive_commit(
     data: &Vec<RingElement>,
 ) -> RecursiveCommitmentWithAux {
     let committed_data = decompose(
-        &data,
+        data,
         config.decomposition_base_log as u64,
         config.decomposition_chunks,
     );
@@ -135,10 +135,7 @@ pub fn recursive_commit(
         }
     }
 
-    let next = match &config.next {
-        Some(next_config) => Some(Box::new(recursive_commit(crs, next_config, &commitment))),
-        None => None,
-    };
+    let next = config.next.as_ref().map(|next_config| Box::new(recursive_commit(crs, next_config, &commitment)));
 
     RecursiveCommitmentWithAux {
         decomposition_base_log: config.decomposition_base_log,

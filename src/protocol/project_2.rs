@@ -1,4 +1,3 @@
-use std::any::Any;
 
 use crate::{
     common::{
@@ -631,14 +630,14 @@ pub fn batch_projection_n_times(
     let mut result = HorizontallyAlignedMatrix::new_zero_preallocated(n, witness.width);
     let challenges = [
         batch_projection_into(
-            &mut result.row_slice_mut(0),
+            result.row_slice_mut(0),
             witness,
             projection_matrix,
             hash_wrapper,
             is_simple_config,
         ),
         batch_projection_into(
-            &mut result.row_slice_mut(1),
+            result.row_slice_mut(1),
             witness,
             projection_matrix,
             hash_wrapper,

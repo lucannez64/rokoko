@@ -288,7 +288,7 @@ pub fn execute() {
         &mut verifier_context,
         &commitment,
         &proof,
-        &vec![],    // no evaluation points for first round
+        &[],    // no evaluation points for first round
         &no_claims, // no claims for first round
         &mut HashWrapper::new(),
         Some(&vdf_crs),

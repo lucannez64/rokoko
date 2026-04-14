@@ -266,7 +266,7 @@ impl EvaluationSumcheckData for SelectorEqEvaluation {
             panic!("Point has incorrect number of variables");
         }
 
-        self.result.set_from(&*ONE);
+        self.result.set_from(&ONE);
 
         // LS-first: the selector variables are folded LAST.
         // point layout: [non-selector LS vars..., selector vars from LSB to MSB...]

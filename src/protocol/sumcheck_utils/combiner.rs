@@ -211,7 +211,7 @@ impl<E: SumcheckElement> EvaluationSumcheckData for CombinerEvaluation<E> {
 
         for i in 0..self.evaluations.len() {
             self.scratch *= (
-                self.evaluations[i].borrow_mut().evaluate(&point),
+                self.evaluations[i].borrow_mut().evaluate(point),
                 &self.challenges[i],
             );
             self.result += &self.scratch;

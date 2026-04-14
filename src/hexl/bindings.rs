@@ -225,7 +225,7 @@ mod inner {
 
         // If result aliases operand1, copy operand1 into a static
         // buffer so writes don't destroy inputs needed by later steps.
-        let op1: *const u64 = if result as *const u64 == operand1 {
+        let op1: *const u64 = if std::ptr::eq(result, operand1) {
             let aux = &mut *FUSED_AUX;
             std::ptr::copy_nonoverlapping(operand1, aux.as_mut_ptr(), 2 * n);
             aux.as_ptr()
