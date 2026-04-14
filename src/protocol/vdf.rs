@@ -202,3 +202,184 @@ pub fn decompose_binary_into(element: &RingElement, target: &mut [RingElement]) 
         bit_elem.from_even_odd_coefficients_to_incomplete_ntt_representation();
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::common::config::MOD_Q;
+
+    #[test]
+    fn test_decompose_binary_roundtrip() {
+        let elem = RingElement::random(Representation::IncompleteNTT);
+        let mut bits: Vec<RingElement> = (0..64)
+            .map(|_| RingElement::zero(Representation::IncompleteNTT))
+            .collect();
+        decompose_binary_into(&elem, &mut bits);
+
+        assert_eq!(bits.len(), 64);
+
+        // Recompose: sum_b bits[b] * 2^b  (in EvenOdd space, then convert back)
+        let mut recomposed = RingElement::zero(Representation::IncompleteNTT);
+        recomposed.from_incomplete_ntt_to_even_odd_coefficients();
+        for (b, bit_elem) in bits.iter().enumerate() {
+            let mut bit_copy = bit_elem.clone();
+            bit_copy.from_incomplete_ntt_to_even_odd_coefficients();
+            let shift = 1u64 << b;
+            for j in 0..DEGREE {
+                recomposed.v[j] = (recomposed.v[j] + bit_copy.v[j] * shift) % MOD_Q;
+            }
+        }
+        recomposed.from_even_odd_coefficients_to_incomplete_ntt_representation();
+
+        assert_eq!(recomposed, elem, "Binary decomposition roundtrip failed");
+    }
+
+    #[test]
+    fn test_decompose_binary_bits_are_binary() {
+        let elem = RingElement::random(Representation::IncompleteNTT);
+        let mut bits: Vec<RingElement> = (0..64)
+            .map(|_| RingElement::zero(Representation::IncompleteNTT))
+            .collect();
+        decompose_binary_into(&elem, &mut bits);
+
+        for (b, bit_elem) in bits.iter().enumerate() {
+            let mut bit_copy = bit_elem.clone();
+            bit_copy.from_incomplete_ntt_to_even_odd_coefficients();
+            for j in 0..DEGREE {
+                assert!(
+                    bit_copy.v[j] == 0 || bit_copy.v[j] == 1,
+                    "Bit plane {} coeff {} is {}, expected 0 or 1",
+                    b,
+                    j,
+                    bit_copy.v[j]
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn test_decompose_binary_high_bits_zero() {
+        // MOD_Q < 2^51, so bits 51..63 should be all zero
+        let elem = RingElement::random(Representation::IncompleteNTT);
+        let mut bits: Vec<RingElement> = (0..64)
+            .map(|_| RingElement::zero(Representation::IncompleteNTT))
+            .collect();
+        decompose_binary_into(&elem, &mut bits);
+
+        for b in 51..64 {
+            let mut bit_copy = bits[b].clone();
+            bit_copy.from_incomplete_ntt_to_even_odd_coefficients();
+            for j in 0..DEGREE {
+                assert_eq!(
+                    bit_copy.v[j], 0,
+                    "Bit plane {} coeff {} should be 0 (above modulus bit-width)",
+                    b, j
+                );
+            }
+        }
+    }
+
+    /// Verify the matrix equation from execute_vdf:
+    ///
+    /// | G       |    | w_0 w_K |     | -y_0   -y_int |
+    /// | A G     |    | w_1 ... |     |   0      0    |
+    /// |   A G   |  * | ...     |  =  |   0      0    |
+    /// |     A G |    | ...     |     |   0      0    |
+    /// |       A |    |---------|     |  y_int  y_t   |
+    ///
+    /// where K = steps_per_col and G = I_{HEIGHT} ⊗ g^T recomposes
+    /// each component independently via sum_j 2^j * bit_j.
+    #[test]
+    fn test_vdf_matrix_equation() {
+        let test_dim: usize = 1 << 12; // 4096, giving steps_per_col = 4096 / 128 = 32
+        let y_0: [RingElement; VDF_MATRIX_HEIGHT] =
+            std::array::from_fn(|_| RingElement::random(Representation::IncompleteNTT));
+        let vdf_crs = vdf_init();
+        let vdf_output = run_vdf(&y_0, test_dim, &vdf_crs);
+
+        let steps_per_col = test_dim / VDF_MATRIX_WIDTH;
+        let w = &vdf_output.trace_witness;
+
+        // Helper: compute G * w_block where G = I_{HEIGHT} ⊗ g^T.
+        // Component r recomposes VDF_BITS bits starting at offset r * VDF_BITS.
+        let recompose = |base_row: usize, col: usize| -> [RingElement; VDF_MATRIX_HEIGHT] {
+            std::array::from_fn(|r| {
+                let mut result = RingElement::zero(Representation::IncompleteNTT);
+                result.from_incomplete_ntt_to_even_odd_coefficients();
+                for j in 0..VDF_BITS {
+                    let mut bit_copy = w[(base_row + r * VDF_BITS + j, col)].clone();
+                    bit_copy.from_incomplete_ntt_to_even_odd_coefficients();
+                    let shift = 1u64 << j;
+                    for k in 0..DEGREE {
+                        result.v[k] = (result.v[k] + bit_copy.v[k] * shift) % MOD_Q;
+                    }
+                }
+                result.from_even_odd_coefficients_to_incomplete_ntt_representation();
+                result
+            })
+        };
+
+        // Helper: compute A * w_block where A is HEIGHT × WIDTH.
+        // Returns one ring element per row of A.
+        let inner_product_a = |base_row: usize, col: usize| -> [RingElement; VDF_MATRIX_HEIGHT] {
+            std::array::from_fn(|r| {
+                let mut result = RingElement::zero(Representation::IncompleteNTT);
+                let mut temp = RingElement::zero(Representation::IncompleteNTT);
+                for j in 0..VDF_MATRIX_WIDTH {
+                    temp *= (&vdf_crs.data[(r, j)], &w[(base_row + j, col)]);
+                    result += &temp;
+                }
+                result
+            })
+        };
+
+        let zero = RingElement::zero(Representation::IncompleteNTT);
+
+        // Check both columns
+        let y_starts: [&[RingElement; VDF_MATRIX_HEIGHT]; 2] = [&y_0, &vdf_output.y_int];
+        let y_ends: [&[RingElement; VDF_MATRIX_HEIGHT]; 2] = [&vdf_output.y_int, &vdf_output.y_t];
+
+        for col in 0..2 {
+            // First row: G * w_0 = -y_start
+            let gw0 = recompose(0, col);
+            for r in 0..VDF_MATRIX_HEIGHT {
+                assert_eq!(
+                    gw0[r],
+                    y_starts[col][r].negate(),
+                    "Column {}, component {}: G * w_0 != -y_start",
+                    col,
+                    r
+                );
+            }
+
+            // Middle rows: A * w_i + G * w_{i+1} = 0
+            for i in 0..steps_per_col - 1 {
+                let aw_i = inner_product_a(i * VDF_MATRIX_WIDTH, col);
+                let gw_next = recompose((i + 1) * VDF_MATRIX_WIDTH, col);
+                for r in 0..VDF_MATRIX_HEIGHT {
+                    let sum = &aw_i[r] + &gw_next[r];
+                    assert_eq!(
+                        sum,
+                        zero,
+                        "Column {}, step {}, component {}: A*w_{} + G*w_{} != 0",
+                        col,
+                        i + 1,
+                        r,
+                        i,
+                        i + 1
+                    );
+                }
+            }
+
+            // Last row: A * w_last = y_end
+            let aw_last = inner_product_a((steps_per_col - 1) * VDF_MATRIX_WIDTH, col);
+            for r in 0..VDF_MATRIX_HEIGHT {
+                assert_eq!(
+                    aw_last[r], y_ends[col][r],
+                    "Column {}, component {}: A * w_last != y_end",
+                    col, r
+                );
+            }
+        }
+    }
+}
