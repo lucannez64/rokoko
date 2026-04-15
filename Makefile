@@ -18,7 +18,7 @@ SRC=polynomial.cpp misc.cpp
 ALL_SRC = $(addprefix ./, $(SRC))
 
 wrapper:
-	$(CC) -std=c++17 -fPIC -shared -o libhexl_wrapper.so hexl-bindings/hexl_wrapper.cpp $(OPT_FLAGS) $(LIBS) $(LDFLAGS)
+	$(CC) -std=c++17 -fPIC -shared -o libhexl_wrapper.dll hexl-bindings/hexl_wrapper.cpp $(OPT_FLAGS) $(LIBS) $(LDFLAGS)
 
 hexl: hexl/build
 	cmake --build ./hexl-bindings/hexl/build

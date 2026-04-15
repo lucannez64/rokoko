@@ -503,7 +503,6 @@ impl EvaluationSumcheckData for ProductSumcheckEvaluation {
 mod tests {
     use super::*;
     #[test]
-    #[ignore = "Pre-existing bug: Case 1b Karatsuba formula in univariate_polynomial_into is incorrect for interleaved data layout after partial_evaluate. The formula assumes (g(0,x1,x2), g(1,x1,x2)) pairs but LinearSumcheck's LS-first layout uses a different indexing. Needs deeper analysis to fix properly."]
     fn test_inner_product_sumcheck() {
         let lhs_data = vec![
             RingElement::constant(1, Representation::IncompleteNTT),
@@ -595,18 +594,20 @@ mod tests {
         );
 
         // Explicit multilinear evaluations of each folded claim for documentation.
+        // LS-first layout: data[i] is indexed with x0 as the least-significant bit,
+        // so data[index(x0,x1,x2)] where index = x0 + 2*x1 + 4*x2.
         debug_assert_eq!(
             sumcheck_0.get_ref().final_evaluations(),
             &RingElement::constant(
                 (MOD_Q as i64
-                    + (1 - 524) * (1 - 1337) * (1 - 42) * 1
-                    + (1 - 524) * (1 - 1337) * (42) * 2
-                    + (1 - 524) * (1337) * (1 - 42) * 3
-                    + (1 - 524) * (1337) * (42) * 4
-                    + (524) * (1 - 1337) * (1 - 42) * 5
-                    + (524) * (1 - 1337) * (42) * 6
-                    + (524) * (1337) * (1 - 42) * 7
-                    + (524) * (1337) * (42) * 8) as u64,
+                    + (1 - 524) * (1 - 1337) * (1 - 42) * 1  // x=(0,0,0), index 0
+                    + (524) * (1 - 1337) * (1 - 42) * 2       // x=(1,0,0), index 1
+                    + (1 - 524) * (1337) * (1 - 42) * 3       // x=(0,1,0), index 2
+                    + (524) * (1337) * (1 - 42) * 4            // x=(1,1,0), index 3
+                    + (1 - 524) * (1 - 1337) * (42) * 5       // x=(0,0,1), index 4
+                    + (524) * (1 - 1337) * (42) * 6            // x=(1,0,1), index 5
+                    + (1 - 524) * (1337) * (42) * 7            // x=(0,1,1), index 6
+                    + (524) * (1337) * (42) * 8) as u64,       // x=(1,1,1), index 7
                 Representation::IncompleteNTT,
             )
         );
@@ -616,12 +617,12 @@ mod tests {
             &RingElement::constant(
                 (MOD_Q as i64
                     + (1 - 524) * (1 - 1337) * (1 - 42) * 9
-                    + (1 - 524) * (1 - 1337) * (42) * 10
+                    + (524) * (1 - 1337) * (1 - 42) * 10
                     + (1 - 524) * (1337) * (1 - 42) * 11
-                    + (1 - 524) * (1337) * (42) * 12
-                    + (524) * (1 - 1337) * (1 - 42) * 13
+                    + (524) * (1337) * (1 - 42) * 12
+                    + (1 - 524) * (1 - 1337) * (42) * 13
                     + (524) * (1 - 1337) * (42) * 14
-                    + (524) * (1337) * (1 - 42) * 15
+                    + (1 - 524) * (1337) * (42) * 15
                     + (524) * (1337) * (42) * 16) as u64,
                 Representation::IncompleteNTT,
             )
@@ -633,20 +634,20 @@ mod tests {
             RingElement::constant(
                 (MOD_Q as i64
                     + ((1 - 524) * (1 - 1337) * (1 - 42) * 1
-                        + (1 - 524) * (1 - 1337) * (42) * 2
+                        + (524) * (1 - 1337) * (1 - 42) * 2
                         + (1 - 524) * (1337) * (1 - 42) * 3
-                        + (1 - 524) * (1337) * (42) * 4
-                        + (524) * (1 - 1337) * (1 - 42) * 5
+                        + (524) * (1337) * (1 - 42) * 4
+                        + (1 - 524) * (1 - 1337) * (42) * 5
                         + (524) * (1 - 1337) * (42) * 6
-                        + (524) * (1337) * (1 - 42) * 7
+                        + (1 - 524) * (1337) * (42) * 7
                         + (524) * (1337) * (42) * 8)
                         * ((1 - 524) * (1 - 1337) * (1 - 42) * 9
-                            + (1 - 524) * (1 - 1337) * (42) * 10
+                            + (524) * (1 - 1337) * (1 - 42) * 10
                             + (1 - 524) * (1337) * (1 - 42) * 11
-                            + (1 - 524) * (1337) * (42) * 12
-                            + (524) * (1 - 1337) * (1 - 42) * 13
+                            + (524) * (1337) * (1 - 42) * 12
+                            + (1 - 524) * (1 - 1337) * (42) * 13
                             + (524) * (1 - 1337) * (42) * 14
-                            + (524) * (1337) * (1 - 42) * 15
+                            + (1 - 524) * (1337) * (42) * 15
                             + (524) * (1337) * (42) * 16)) as u64,
                 Representation::IncompleteNTT,
             )
