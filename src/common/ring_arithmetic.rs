@@ -421,24 +421,25 @@ impl RingElement {
         let transform = &*CONJUGATION_NTT_TRANSFORM;
         let temp = get_temp_buffer();
 
-        // Apply even part permutation
-        for i in 0..HALF_DEGREE {
-            temp[transform.even_permutation[i]] = self.v[i];
-        }
-        self.v[..HALF_DEGREE].copy_from_slice(&temp[..HALF_DEGREE]);
-
-        // Apply odd part: multiply by factors, then permute
         unsafe {
+            // Apply even part permutation
+            for i in 0..HALF_DEGREE {
+                (*temp)[transform.even_permutation[i]] = self.v[i];
+            }
+            std::ptr::copy_nonoverlapping((*temp).as_ptr(), self.v.as_mut_ptr(), HALF_DEGREE);
+
+            // Apply odd part: multiply by factors, then permute
             eltwise_mult_mod(
-                temp.as_mut_ptr(),
+                (*temp).as_mut_ptr(),
                 self.v.as_ptr().add(HALF_DEGREE),
                 transform.odd_factors.as_ptr(),
                 HALF_DEGREE as u64,
                 MOD_Q,
             );
-        }
-        for i in 0..HALF_DEGREE {
-            self.v[HALF_DEGREE + transform.odd_permutation[i]] = temp[i];
+
+            for i in 0..HALF_DEGREE {
+                self.v[HALF_DEGREE + transform.odd_permutation[i]] = (*temp)[i];
+            }
         }
     }
 
@@ -449,21 +450,23 @@ impl RingElement {
 
         let transform = &*CONJUGATION_NTT_TRANSFORM;
         let temp = get_temp_buffer();
-        for i in 0..HALF_DEGREE {
-            temp[transform.even_permutation[i]] = self.v[i];
-        }
-        result.v[..HALF_DEGREE].copy_from_slice(&temp[..HALF_DEGREE]);
         unsafe {
+            for i in 0..HALF_DEGREE {
+                (*temp)[transform.even_permutation[i]] = self.v[i];
+            }
+            std::ptr::copy_nonoverlapping((*temp).as_ptr(), result.v.as_mut_ptr(), HALF_DEGREE);
+
             eltwise_mult_mod(
-                temp.as_mut_ptr(),
+                (*temp).as_mut_ptr(),
                 self.v.as_ptr().add(HALF_DEGREE),
                 transform.odd_factors.as_ptr(),
                 HALF_DEGREE as u64,
                 MOD_Q,
             );
-        }
-        for i in 0..HALF_DEGREE {
-            result.v[HALF_DEGREE + transform.odd_permutation[i]] = temp[i];
+
+            for i in 0..HALF_DEGREE {
+                result.v[HALF_DEGREE + transform.odd_permutation[i]] = (*temp)[i];
+            }
         }
     }
 
@@ -581,24 +584,22 @@ impl RingElement {
 
     pub fn constant_term_from_incomplete_ntt(&self) -> u64 {
         debug_assert_eq!(self.representation, Representation::IncompleteNTT);
-        let buf = &mut *get_temp_buffer();
-        buf.copy_from_slice(&self.v);
         unsafe {
+            let buf = get_temp_buffer();
+            (*buf).copy_from_slice(&self.v);
             eltwise_mult_mod(
-                buf.as_mut_ptr(),
+                (*buf).as_mut_ptr(),
                 self.v.as_ptr(),
                 CONSTANT_TERM_FACTORS.as_ptr(),
                 HALF_DEGREE as u64,
                 MOD_Q,
             );
+            let mut sum = 0u64;
+            for i in 0..HALF_DEGREE {
+                sum += (*buf)[i];
+            }
+            sum % MOD_Q
         }
-        let mut sum = 0u64;
-        for i in 0..HALF_DEGREE {
-            sum += buf[i];
-        }
-
-        // we call it once so it's probably fine
-        sum % MOD_Q
     }
 }
 
@@ -640,20 +641,13 @@ pub struct ConjugationTransform {
     pub odd_factors: [u64; HALF_DEGREE],
 }
 
-pub static mut TEMP_BUFFER: LazyLock<[u64; DEGREE]> = LazyLock::new(|| [0u64; DEGREE]);
-
-#[inline(always)]
-fn get_temp_buffer() -> &'static mut [u64; DEGREE] {
-    unsafe { &mut TEMP_BUFFER }
+thread_local! {
+    static TEMP_BUFFER: std::cell::UnsafeCell<[u64; DEGREE]> = std::cell::UnsafeCell::new([0u64; DEGREE]);
 }
 
-pub static mut AUX: LazyLock<RingElement> =
-    LazyLock::new(|| RingElement::new(Representation::IncompleteNTT));
-
-#[allow(dead_code)]
 #[inline(always)]
-fn get_aux() -> &'static mut RingElement {
-    unsafe { &mut AUX }
+fn get_temp_buffer() -> *mut [u64; DEGREE] {
+    TEMP_BUFFER.with(|buf| buf.get())
 }
 
 /// Empirically derive the conjugation transformation in NTT domain
@@ -924,7 +918,7 @@ pub fn incomplete_ntt_multiplication_inner(
 
         // temp = op1_odd * op2_odd
         eltwise_mult_mod(
-            temp.as_mut_ptr(),
+            (*temp).as_mut_ptr(),
             op1_data.as_ptr().add(HALF_DEGREE),
             op2_data.as_ptr().add(HALF_DEGREE),
             HALF_DEGREE as u64,
@@ -934,7 +928,7 @@ pub fn incomplete_ntt_multiplication_inner(
         // result_even += temp * SHIFT_FACTORS[0]
         eltwise_fma_mod(
             result.v.as_mut_ptr(),
-            temp.as_ptr(),
+            (*temp).as_ptr(),
             SHIFT_FACTORS[0],
             result.v.as_ptr(),
             HALF_DEGREE as u64,
@@ -943,7 +937,7 @@ pub fn incomplete_ntt_multiplication_inner(
 
         // Reuse temp for op1_even * op2_odd
         eltwise_mult_mod(
-            temp.as_mut_ptr(),
+            (*temp).as_mut_ptr(),
             op1_data.as_ptr(),
             op2_data.as_ptr().add(HALF_DEGREE),
             HALF_DEGREE as u64,
@@ -954,7 +948,7 @@ pub fn incomplete_ntt_multiplication_inner(
         eltwise_add_mod(
             result.v.as_mut_ptr().add(HALF_DEGREE),
             result.v.as_ptr().add(HALF_DEGREE),
-            temp.as_ptr(),
+            (*temp).as_ptr(),
             HALF_DEGREE as u64,
             MOD_Q,
         );
@@ -992,7 +986,7 @@ pub fn incomplete_ntt_multiplication_in_place_inner(
 
         // temp = op1_odd * op2_odd
         eltwise_mult_mod(
-            temp.as_mut_ptr(),
+            (*temp).as_mut_ptr(),
             op1_data.as_ptr().add(HALF_DEGREE),
             result.v.as_ptr().add(HALF_DEGREE),
             HALF_DEGREE as u64,
@@ -1003,7 +997,7 @@ pub fn incomplete_ntt_multiplication_in_place_inner(
             // result_even += temp * SHIFT_FACTORS[0]
             eltwise_fma_mod(
                 result.v.as_mut_ptr(),
-                temp.as_ptr(),
+                (*temp).as_ptr(),
                 SHIFT_FACTORS[0],
                 result.v.as_ptr(),
                 HALF_DEGREE as u64,
@@ -1012,8 +1006,8 @@ pub fn incomplete_ntt_multiplication_in_place_inner(
         } else {
             // Apply shift factors
             eltwise_mult_mod(
-                temp.as_mut_ptr(),
-                temp.as_ptr(),
+                (*temp).as_mut_ptr(),
+                (*temp).as_ptr(),
                 SHIFT_FACTORS.as_ptr(),
                 HALF_DEGREE as u64,
                 MOD_Q,
@@ -1023,7 +1017,7 @@ pub fn incomplete_ntt_multiplication_in_place_inner(
             eltwise_add_mod(
                 result.v.as_mut_ptr(),
                 result.v.as_ptr(),
-                temp.as_ptr(),
+                (*temp).as_ptr(),
                 HALF_DEGREE as u64,
                 MOD_Q,
             );
@@ -1031,7 +1025,7 @@ pub fn incomplete_ntt_multiplication_in_place_inner(
 
         // Reuse temp for op1_even * op2_odd
         eltwise_mult_mod(
-            temp.as_mut_ptr(),
+            (*temp).as_mut_ptr(),
             op1_data.as_ptr(),
             result.v.as_ptr().add(HALF_DEGREE),
             HALF_DEGREE as u64,
@@ -1042,7 +1036,7 @@ pub fn incomplete_ntt_multiplication_in_place_inner(
         eltwise_add_mod(
             result.v.as_mut_ptr().add(HALF_DEGREE),
             result.v.as_ptr().add(HALF_DEGREE),
-            temp.as_ptr(),
+            (*temp).as_ptr(),
             HALF_DEGREE as u64,
             MOD_Q,
         );

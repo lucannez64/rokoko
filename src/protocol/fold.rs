@@ -2,23 +2,38 @@ use crate::common::{
     matrix::VerticallyAlignedMatrix,
     ring_arithmetic::{Representation, RingElement},
 };
+use rayon::prelude::*;
 
 pub fn fold(
     witness: &VerticallyAlignedMatrix<RingElement>,
     fold_challenge: &[RingElement],
 ) -> VerticallyAlignedMatrix<RingElement> {
-    let mut folded_witness = VerticallyAlignedMatrix::new_zero_preallocated(witness.height, 1);
-
     debug_assert_eq!(witness.width, fold_challenge.len());
 
-    let mut temp = RingElement::zero(Representation::IncompleteNTT);
-    for col in 0..witness.used_cols {
+    let mut folded_witness = VerticallyAlignedMatrix::new_zero_preallocated(witness.height, 1);
+
+    if witness.used_cols <= 1 {
         for row in 0..folded_witness.height {
-            let w_el = &witness[(row, col)];
-            let challenge = &fold_challenge[col];
-            temp *= (challenge, w_el);
-            folded_witness[(row, 0)] += &temp;
+            let mut temp = RingElement::zero(Representation::IncompleteNTT);
+            for col in 0..witness.used_cols {
+                temp *= (&fold_challenge[col], &witness[(row, col)]);
+                folded_witness[(row, 0)] += &temp;
+            }
         }
+    } else {
+        let results: Vec<RingElement> = (0..folded_witness.height)
+            .into_par_iter()
+            .map(|row| {
+                let mut acc = RingElement::zero(Representation::IncompleteNTT);
+                let mut temp = RingElement::zero(Representation::IncompleteNTT);
+                for col in 0..witness.used_cols {
+                    temp *= (&fold_challenge[col], &witness[(row, col)]);
+                    acc += &temp;
+                }
+                acc
+            })
+            .collect();
+        folded_witness.data.clone_from_slice(&results);
     }
     folded_witness
 }

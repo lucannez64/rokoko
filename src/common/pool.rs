@@ -139,6 +139,27 @@ pub fn save_access_stats<P: AsRef<Path>>(path: P) -> io::Result<()> {
     Ok(())
 }
 
+/// Drain all preallocated vectors from both pools, freeing their memory.
+/// Call this before `load_and_preallocate` to replace pool contents rather than accumulate.
+pub fn drain_pool() {
+    PREALLOCATED_RING.lock().expect("pool poisoned").clear();
+    PREALLOCATED_QUAD.lock().expect("pool poisoned").clear();
+}
+
+/// Reset the access tracker counters to zero without touching the pool contents.
+///
+/// Call this before the single warmup run that is used to sample access patterns,
+/// so that `save_access_stats` captures counts from exactly one prove+verify and
+/// `load_and_preallocate` doesn't over-allocate due to counts accumulated across
+/// many previous iterations.
+pub fn reset_access_tracker() {
+    ACCESS_TRACKER.lock().expect("tracker poisoned").clear();
+    ACCESS_TRACKER_QUAD
+        .lock()
+        .expect("tracker poisoned")
+        .clear();
+}
+
 /// Load access statistics from a file and preallocate accordingly.
 /// If the file doesn't exist, initializes an empty pool (no error).
 pub fn load_and_preallocate<P: AsRef<Path>>(path: P) -> io::Result<()> {

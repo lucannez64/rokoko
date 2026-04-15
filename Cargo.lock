@@ -527,6 +527,7 @@ dependencies = [
  "libloading",
  "num",
  "rand",
+ "rayon",
 ]
 
 [[package]]

@@ -8,7 +8,7 @@ use crate::{
             incomplete_ntt_multiplication, QuadraticExtension, Representation, RingElement,
         },
     },
-    hexl::bindings::{multiply_mod, sub_mod},
+    hexl::bindings::{eltwise_reduce_mod, multiply_mod, sub_mod},
 };
 
 pub static HALF_WAY_MOD_Q: LazyLock<u64> = LazyLock::new(|| {
@@ -78,7 +78,43 @@ pub fn pack_i64_to_i16_deg16(dst: &mut [i16], src: &[i64]) {
         }
     }
 
-    #[cfg(not(all(target_arch = "x86_64", target_feature = "avx512f")))]
+    #[cfg(all(
+        target_arch = "x86_64",
+        target_feature = "avx2",
+        not(target_feature = "avx512f")
+    ))]
+    {
+        use std::arch::x86_64::*;
+        // Process 8 i64 → 8 i16 per iteration using two __m256i (4+4) → one __m128i.
+        // Values are guaranteed to fit in i16, so signed-saturating packs == truncation.
+        for k in 0..src.len() / 8 {
+            unsafe {
+                let i = k * 8;
+                let a0 = _mm256_loadu_si256(src.as_ptr().add(i) as *const __m256i);
+                let a1 = _mm256_loadu_si256(src.as_ptr().add(i + 4) as *const __m256i);
+
+                // Gather the low 32 bits of each i64 into positions 0,1 of each 128-bit half.
+                // _MM_SHUFFLE(0,0,2,0) = 0b00_00_10_00 = 8
+                let s0 = _mm256_shuffle_epi32(a0, 8);
+                let s1 = _mm256_shuffle_epi32(a1, 8);
+
+                // Interleave the two low-32 pairs from the halves of each register.
+                let c0 =
+                    _mm_unpacklo_epi64(_mm256_castsi256_si128(s0), _mm256_extracti128_si256(s0, 1));
+                let c1 =
+                    _mm_unpacklo_epi64(_mm256_castsi256_si128(s1), _mm256_extracti128_si256(s1, 1));
+
+                // Pack 4+4 i32 → 8 i16 (signed saturating = truncating since values fit).
+                let packed = _mm_packs_epi32(c0, c1);
+                _mm_storeu_si128(dst.as_mut_ptr().add(i) as *mut __m128i, packed);
+            }
+        }
+    }
+
+    #[cfg(not(all(
+        target_arch = "x86_64",
+        any(target_feature = "avx512f", target_feature = "avx2")
+    )))]
     for (d, &s) in dst.iter_mut().zip(src.iter()) {
         debug_assert!(s >= i16::MIN as i64 && s <= i16::MAX as i64);
         *d = s as i16;
@@ -125,7 +161,33 @@ pub fn centered_coeffs_u64_to_i64_inplace(out_i64: &mut [i64; DEGREE], in_u64: &
         }
     }
 
-    #[cfg(not(all(target_arch = "x86_64", target_feature = "avx512f")))]
+    #[cfg(all(
+        target_arch = "x86_64",
+        target_feature = "avx2",
+        not(target_feature = "avx512f")
+    ))]
+    unsafe {
+        use std::arch::x86_64::*;
+        let half_q = MOD_Q >> 1;
+        // All values are < 2^50 (< Q < 2^50+1), so the sign bit is never set.
+        // Signed _mm256_cmpgt_epi64 is therefore equivalent to unsigned comparison here.
+        let vq = _mm256_set1_epi64x(MOD_Q as i64);
+        let vhalfq = _mm256_set1_epi64x(half_q as i64);
+        let n = in_u64.len();
+        for k in 0..(n / 4) {
+            let i = k * 4;
+            let a = _mm256_loadu_si256(in_u64.as_ptr().add(i) as *const __m256i);
+            // Lanes where x > halfQ need subtracting Q to become negative.
+            let neg = _mm256_cmpgt_epi64(a, vhalfq);
+            let adjusted = _mm256_sub_epi64(a, _mm256_and_si256(vq, neg));
+            _mm256_storeu_si256(out_i64.as_mut_ptr().add(i) as *mut __m256i, adjusted);
+        }
+    }
+
+    #[cfg(not(all(
+        target_arch = "x86_64",
+        any(target_feature = "avx512f", target_feature = "avx2")
+    )))]
     for (dst, &src) in out_i64.iter_mut().zip(in_u64.iter()) {
         *dst = centered_i64_from_u64_mod_q_scalar(src);
     }
@@ -194,11 +256,74 @@ pub fn project_one_row_i16_to_u64<const DEGREE: usize>(
     }
 }
 
+/// AVX2 path for [`project_one_row_i16_to_u64`].
+///
+/// Accumulates 16 × `i16` lanes per iteration using `__m256i`, then converts
+/// the accumulated `i16` result to `u64` residues mod `Q`.
+#[cfg(all(
+    target_arch = "x86_64",
+    target_feature = "avx2",
+    not(target_feature = "avx512f")
+))]
+pub fn project_one_row_i16_to_u64<const DEGREE: usize>(
+    subwitness_i16: &[Signed16RingElement],
+    pos: &[u16],
+    neg: &[u16],
+    out_u64: &mut [u64; DEGREE],
+) {
+    use std::arch::x86_64::*;
+    debug_assert!(DEGREE % 16 == 0);
+
+    unsafe {
+        for j in 0..(DEGREE / 16) {
+            let k = j * 16;
+
+            let mut acc0 = _mm256_setzero_si256();
+            let mut acc1 = _mm256_setzero_si256();
+
+            for &i in pos {
+                let v = _mm256_loadu_si256(
+                    subwitness_i16[i as usize].0.as_ptr().add(k) as *const __m256i
+                );
+                acc0 = _mm256_add_epi16(acc0, v);
+            }
+            for &i in neg {
+                let v = _mm256_loadu_si256(
+                    subwitness_i16[i as usize].0.as_ptr().add(k) as *const __m256i
+                );
+                acc1 = _mm256_sub_epi16(acc1, v);
+            }
+            let acc = _mm256_add_epi16(acc0, acc1);
+
+            // Unpack 16 × i16 → 16 × u64 via a temp array, mapping negatives to [0,Q).
+            let mut tmp = [0i16; 16];
+            _mm256_storeu_si256(tmp.as_mut_ptr() as *mut __m256i, acc);
+            let q_i64 = MOD_Q as i64;
+            for lane in 0..16 {
+                let mut r = tmp[lane] as i64;
+                if r < 0 {
+                    r += q_i64;
+                }
+                out_u64[k + lane] = r as u64;
+            }
+        }
+        eltwise_reduce_mod(
+            out_u64.as_mut_ptr(),
+            out_u64.as_ptr(),
+            out_u64.len() as u64,
+            MOD_Q,
+        );
+    }
+}
+
 /// Scalar fallback for [`project_one_row_i16_to_u64`].
 ///
 /// Uses `i32` accumulators (to avoid `i16` overflow) and final modular
 /// reduction to produce `u64` residues in `[0, Q)`.
-#[cfg(not(all(target_arch = "x86_64", target_feature = "avx512f")))]
+#[cfg(not(all(
+    target_arch = "x86_64",
+    any(target_feature = "avx512f", target_feature = "avx2")
+)))]
 pub fn project_one_row_i16_to_u64<const DEGREE: usize>(
     subwitness_i16: &[Signed16RingElement],
     pos: &[u16],

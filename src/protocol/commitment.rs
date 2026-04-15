@@ -1,5 +1,7 @@
 use std::ops::IndexMut;
 
+use rayon::prelude::*;
+
 use crate::{
     common::{
         decomposition::decompose,
@@ -34,19 +36,48 @@ pub fn commit_basic_internal(
     witness: &VerticallyAlignedMatrix<RingElement>,
     rank: usize,
 ) -> BasicCommitment {
-    let mut commitment =
-        HorizontallyAlignedMatrix::new_zero_preallocated(rank.next_power_of_two(), witness.width);
+    let actual_rank = rank.next_power_of_two();
 
-    let mut temp = RingElement::zero(Representation::IncompleteNTT);
-    for (i, row) in ck.iter().take(rank).enumerate() {
-        for col in 0..witness.used_cols {
-            for (elem, w_elem) in row.preprocessed_row.iter().zip(witness.col(col).iter()) {
-                temp *= (elem, w_elem);
-                *commitment.index_mut((i, col)) += &temp;
+    if actual_rank <= 1 || witness.used_cols <= 1 {
+        let mut commitment =
+            HorizontallyAlignedMatrix::new_zero_preallocated(actual_rank, witness.width);
+
+        let mut temp = RingElement::zero(Representation::IncompleteNTT);
+        for (i, row) in ck.iter().take(rank).enumerate() {
+            for col in 0..witness.used_cols {
+                for (elem, w_elem) in row.preprocessed_row.iter().zip(witness.col(col).iter()) {
+                    temp *= (elem, w_elem);
+                    *commitment.index_mut((i, col)) += &temp;
+                }
             }
         }
+        commitment
+    } else {
+        let width = witness.used_cols;
+        let data: Vec<RingElement> = (0..rank)
+            .into_par_iter()
+            .flat_map(|i| {
+                let row = &ck[i];
+                (0..width)
+                    .map(|col| {
+                        let mut acc = RingElement::zero(Representation::IncompleteNTT);
+                        let mut temp = RingElement::zero(Representation::IncompleteNTT);
+                        for (elem, w_elem) in
+                            row.preprocessed_row.iter().zip(witness.col(col).iter())
+                        {
+                            temp *= (elem, w_elem);
+                            acc += &temp;
+                        }
+                        acc
+                    })
+                    .collect::<Vec<_>>()
+            })
+            .collect();
+
+        let mut commitment = HorizontallyAlignedMatrix::new_zero_preallocated(actual_rank, width);
+        commitment.data[..rank * width].clone_from_slice(&data);
+        commitment
     }
-    commitment
 }
 
 // this is first level commit for FW = Y

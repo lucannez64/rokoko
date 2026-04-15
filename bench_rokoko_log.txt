@@ -1,0 +1,823 @@
+rokoko/prove/vela_auth  time:   [32.016 s 32.108 s 32.194 s]
+                        change: [−32.985% −32.731% −32.481%] (p = 0.00 < 0.05)
+                        Performance has improved.
+Found 3 outliers among 10 measurements (30.00%)
+  2 (20.00%) low mild
+  1 (10.00%) high mild
+
+Preallocated RingElement pool miss for size 65536, allocating new
+Preallocated RingElement pool miss for size 8192, allocating new
+Preallocated RingElement pool miss for size 8192, allocating new
+Preallocated RingElement pool miss for size 8192, allocating new
+Preallocated RingElement pool miss for size 8192, allocating new
+Preallocated RingElement pool miss for size 8192, allocating new
+Preallocated RingElement pool miss for size 8192, allocating new
+Preallocated RingElement pool miss for size 8192, allocating new
+Preallocated RingElement pool miss for size 8192, allocating new
+Preallocated RingElement pool miss for size 8192, allocating new
+Preallocated RingElement pool miss for size 65536, allocating new
+Preallocated RingElement pool miss for size 8192, allocating new
+Preallocated RingElement pool miss for size 8192, allocating new
+Preallocated RingElement pool miss for size 16, allocating new
+Preallocated RingElement pool miss for size 1024, allocating new
+Preallocated RingElement pool miss for size 1024, allocating new
+Preallocated RingElement pool miss for size 16, allocating new
+Preallocated RingElement pool miss for size 32768, allocating new
+Preallocated RingElement pool miss for size 8192, allocating new
+Preallocated RingElement pool miss for size 8192, allocating new
+Preallocated RingElement pool miss for size 8192, allocating new
+Preallocated RingElement pool miss for size 8192, allocating new
+Preallocated RingElement pool miss for size 8192, allocating new
+Preallocated RingElement pool miss for size 8192, allocating new
+Preallocated RingElement pool miss for size 8192, allocating new
+Preallocated RingElement pool miss for size 8192, allocating new
+Preallocated RingElement pool miss for size 8192, allocating new
+Preallocated RingElement pool miss for size 32768, allocating new
+Preallocated RingElement pool miss for size 512, allocating new
+Preallocated RingElement pool miss for size 512, allocating new
+Preallocated RingElement pool miss for size 16, allocating new
+Preallocated RingElement pool miss for size 16, allocating new
+Preallocated RingElement pool miss for size 4096, allocating new
+Preallocated RingElement pool miss for size 4096, allocating new
+Preallocated RingElement pool miss for size 16, allocating new
+Preallocated RingElement pool miss for size 8192, allocating new
+Preallocated RingElement pool miss for size 1024, allocating new
+Preallocated RingElement pool miss for size 1024, allocating new
+Preallocated RingElement pool miss for size 1024, allocating new
+Preallocated RingElement pool miss for size 1024, allocating new
+Preallocated RingElement pool miss for size 1024, allocating new
+Preallocated RingElement pool miss for size 1024, allocating new
+Preallocated RingElement pool miss for size 1024, allocating new
+Preallocated RingElement pool miss for size 1024, allocating new
+Preallocated RingElement pool miss for size 16, allocating new
+Preallocated RingElement pool miss for size 32, allocating new
+Preallocated RingElement pool miss for size 1024, allocating new
+Preallocated RingElement pool miss for size 16, allocating new
+Preallocated RingElement pool miss for size 32, allocating new
+Preallocated RingElement pool miss for size 1024, allocating new
+Preallocated RingElement pool miss for size 8192, allocating new
+Preallocated RingElement pool miss for size 2048, allocating new
+Preallocated RingElement pool miss for size 2048, allocating new
+Preallocated RingElement pool miss for size 16, allocating new
+Preallocated RingElement pool miss for size 512, allocating new
+Preallocated RingElement pool miss for size 512, allocating new
+Preallocated RingElement pool miss for size 16, allocating new
+Preallocated RingElement pool miss for size 2048, allocating new
+Preallocated RingElement pool miss for size 2048, allocating new
+Preallocated RingElement pool miss for size 16, allocating new
+Preallocated RingElement pool miss for size 512, allocating new
+Preallocated RingElement pool miss for size 512, allocating new
+Preallocated RingElement pool miss for size 16, allocating new
+Preallocated RingElement pool miss for size 4096, allocating new
+Preallocated RingElement pool miss for size 256, allocating new
+Preallocated RingElement pool miss for size 256, allocating new
+Preallocated RingElement pool miss for size 32, allocating new
+Preallocated RingElement pool miss for size 256, allocating new
+Preallocated RingElement pool miss for size 256, allocating new
+Preallocated RingElement pool miss for size 32, allocating new
+Preallocated RingElement pool miss for size 32, allocating new
+Preallocated RingElement pool miss for size 32, allocating new
+Preallocated RingElement pool miss for size 32, allocating new
+Preallocated RingElement pool miss for size 32, allocating new
+Preallocated RingElement pool miss for size 4096, allocating new
+Preallocated RingElement pool miss for size 2048, allocating new
+Preallocated RingElement pool miss for size 2048, allocating new
+Preallocated RingElement pool miss for size 16, allocating new
+Preallocated RingElement pool miss for size 512, allocating new
+Preallocated RingElement pool miss for size 512, allocating new
+Preallocated RingElement pool miss for size 16, allocating new
+Preallocated RingElement pool miss for size 256, allocating new
+Preallocated RingElement pool miss for size 256, allocating new
+Preallocated RingElement pool miss for size 16, allocating new
+Preallocated RingElement pool miss for size 512, allocating new
+Preallocated RingElement pool miss for size 512, allocating new
+Preallocated RingElement pool miss for size 16, allocating new
+Preallocated RingElement pool miss for size 2048, allocating new
+Preallocated RingElement pool miss for size 512, allocating new
+Preallocated RingElement pool miss for size 512, allocating new
+Preallocated RingElement pool miss for size 512, allocating new
+Preallocated RingElement pool miss for size 512, allocating new
+Preallocated RingElement pool miss for size 512, allocating new
+Preallocated RingElement pool miss for size 512, allocating new
+Preallocated RingElement pool miss for size 512, allocating new
+Preallocated RingElement pool miss for size 1, allocating new
+Preallocated RingElement pool miss for size 1, allocating new
+Preallocated RingElement pool miss for size 2048, allocating new
+Preallocated RingElement pool miss for size 512, allocating new
+Preallocated RingElement pool miss for size 512, allocating new
+Preallocated RingElement pool miss for size 16, allocating new
+Preallocated RingElement pool miss for size 16, allocating new
+Preallocated RingElement pool miss for size 8, allocating new
+Preallocated RingElement pool miss for size 128, allocating new
+Preallocated RingElement pool miss for size 128, allocating new
+Preallocated RingElement pool miss for size 16, allocating new
+Preallocated RingElement pool miss for size 8, allocating new
+Preallocated RingElement pool miss for size 128, allocating new
+Preallocated RingElement pool miss for size 128, allocating new
+Preallocated RingElement pool miss for size 16, allocating new
+Preallocated RingElement pool miss for size 1024, allocating new
+Preallocated RingElement pool miss for size 256, allocating new
+Preallocated RingElement pool miss for size 256, allocating new
+Preallocated RingElement pool miss for size 256, allocating new
+Preallocated RingElement pool miss for size 256, allocating new
+Preallocated RingElement pool miss for size 256, allocating new
+Preallocated RingElement pool miss for size 4, allocating new
+Preallocated RingElement pool miss for size 8, allocating new
+Preallocated RingElement pool miss for size 256, allocating new
+Preallocated RingElement pool miss for size 256, allocating new
+Preallocated RingElement pool miss for size 8, allocating new
+Preallocated RingElement pool miss for size 8, allocating new
+Preallocated RingElement pool miss for size 4, allocating new
+Preallocated RingElement pool miss for size 8, allocating new
+Preallocated RingElement pool miss for size 1, allocating new
+Preallocated RingElement pool miss for size 1, allocating new
+Preallocated RingElement pool miss for size 256, allocating new
+Preallocated RingElement pool miss for size 8, allocating new
+Preallocated RingElement pool miss for size 16, allocating new
+Preallocated RingElement pool miss for size 1, allocating new
+Preallocated RingElement pool miss for size 1, allocating new
+Preallocated RingElement pool miss for size 256, allocating new
+Preallocated RingElement pool miss for size 8, allocating new
+Preallocated RingElement pool miss for size 16, allocating new
+Preallocated RingElement pool miss for size 1, allocating new
+Preallocated RingElement pool miss for size 1024, allocating new
+Preallocated RingElement pool miss for size 256, allocating new
+Preallocated RingElement pool miss for size 256, allocating new
+Preallocated RingElement pool miss for size 256, allocating new
+Preallocated RingElement pool miss for size 64, allocating new
+Preallocated RingElement pool miss for size 64, allocating new
+Preallocated RingElement pool miss for size 64, allocating new
+Preallocated RingElement pool miss for size 32, allocating new
+Preallocated RingElement pool miss for size 32, allocating new
+Preallocated RingElement pool miss for size 32, allocating new
+Preallocated RingElement pool miss for size 64, allocating new
+Preallocated RingElement pool miss for size 64, allocating new
+Preallocated RingElement pool miss for size 64, allocating new
+Preallocated RingElement pool miss for size 4, allocating new
+Preallocated RingElement pool miss for size 8, allocating new
+Preallocated RingElement pool miss for size 8, allocating new
+Preallocated RingElement pool miss for size 128, allocating new
+Preallocated RingElement pool miss for size 8, allocating new
+Preallocated RingElement pool miss for size 8, allocating new
+Preallocated RingElement pool miss for size 8, allocating new
+Preallocated RingElement pool miss for size 8, allocating new
+Preallocated RingElement pool miss for size 8, allocating new
+Preallocated RingElement pool miss for size 8, allocating new
+Preallocated RingElement pool miss for size 8, allocating new
+Preallocated RingElement pool miss for size 8, allocating new
+Preallocated RingElement pool miss for size 8, allocating new
+Preallocated RingElement pool miss for size 8, allocating new
+Preallocated RingElement pool miss for size 8, allocating new
+Preallocated RingElement pool miss for size 32, allocating new
+Preallocated RingElement pool miss for size 8, allocating new
+Preallocated RingElement pool miss for size 32, allocating new
+Preallocated RingElement pool miss for size 2, allocating new
+Preallocated RingElement pool miss for size 64, allocating new
+Preallocated RingElement pool miss for size 1, allocating new
+Preallocated RingElement pool miss for size 64, allocating new
+Preallocated RingElement pool miss for size 1, allocating new
+Preallocated RingElement pool miss for size 8, allocating new
+Preallocated RingElement pool miss for size 8, allocating new
+Preallocated RingElement pool miss for size 8, allocating new
+Preallocated RingElement pool miss for size 8, allocating new
+Preallocated RingElement pool miss for size 2, allocating new
+Preallocated RingElement pool miss for size 8, allocating new
+Preallocated RingElement pool miss for size 8, allocating new
+Preallocated RingElement pool miss for size 32, allocating new
+Preallocated RingElement pool miss for size 8, allocating new
+Preallocated RingElement pool miss for size 32, allocating new
+Preallocated RingElement pool miss for size 2, allocating new
+Preallocated RingElement pool miss for size 128, allocating new
+Preallocated RingElement pool miss for size 1, allocating new
+Preallocated RingElement pool miss for size 128, allocating new
+Preallocated RingElement pool miss for size 1, allocating new
+Preallocated RingElement pool miss for size 8, allocating new
+Preallocated RingElement pool miss for size 8, allocating new
+Preallocated RingElement pool miss for size 8, allocating new
+Preallocated RingElement pool miss for size 8, allocating new
+Preallocated RingElement pool miss for size 2, allocating new
+Preallocated RingElement pool miss for size 8, allocating new
+Preallocated RingElement pool miss for size 8, allocating new
+Preallocated RingElement pool miss for size 8, allocating new
+Preallocated RingElement pool miss for size 8, allocating new
+Preallocated RingElement pool miss for size 8, allocating new
+Preallocated RingElement pool miss for size 2, allocating new
+Preallocated RingElement pool miss for size 128, allocating new
+Preallocated RingElement pool miss for size 1, allocating new
+Preallocated RingElement pool miss for size 128, allocating new
+Preallocated RingElement pool miss for size 1, allocating new
+Preallocated RingElement pool miss for size 8, allocating new
+Preallocated RingElement pool miss for size 8, allocating new
+Preallocated RingElement pool miss for size 8, allocating new
+Preallocated RingElement pool miss for size 8, allocating new
+Preallocated RingElement pool miss for size 2, allocating new
+Preallocated RingElement pool miss for size 4, allocating new
+Preallocated RingElement pool miss for size 4, allocating new
+Preallocated RingElement pool miss for size 8, allocating new
+Preallocated RingElement pool miss for size 4, allocating new
+Preallocated RingElement pool miss for size 8, allocating new
+Preallocated RingElement pool miss for size 2, allocating new
+Preallocated RingElement pool miss for size 256, allocating new
+Preallocated RingElement pool miss for size 1, allocating new
+Preallocated RingElement pool miss for size 256, allocating new
+Preallocated RingElement pool miss for size 1, allocating new
+Preallocated RingElement pool miss for size 1024, allocating new
+Preallocated RingElement pool miss for size 8192, allocating new
+Preallocated RingElement pool miss for size 2, allocating new
+Preallocated RingElement pool miss for size 16, allocating new
+Preallocated RingElement pool miss for size 1, allocating new
+Preallocated RingElement pool miss for size 128, allocating new
+Preallocated RingElement pool miss for size 1, allocating new
+  open_at: 1850 ms
+Preallocated RingElement pool miss for size 1024, allocating new
+Preallocated RingElement pool miss for size 2, allocating new
+Preallocated RingElement pool miss for size 16, allocating new
+Preallocated RingElement pool miss for size 1, allocating new
+  rc_opening: 6 ms
+  Skipping projection recursion as per configuration. Likely the first round
+
+Preallocated RingElement pool miss for size 8192, allocating new
+  fold: 1809 ms
+Preallocated RingElement pool miss for size 65536, allocating new
+Preallocated RingElement pool miss for size 32768, allocating new
+  decompose: 102 ms
+Preallocated RingElement pool miss for size 64, allocating new
+Preallocated RingElement pool miss for size 512, allocating new
+Preallocated RingElement pool miss for size 2, allocating new
+Preallocated RingElement pool miss for size 16, allocating new
+Preallocated RingElement pool miss for size 1, allocating new
+Next round commitment created of length 512.
+Preallocated RingElement pool miss for size 65536, allocating new
+Preallocated RingElement pool miss for size 18, allocating new
+    load_sumcheck_data: 13 ms
+    sumcheck num_vars: 16, hypercube_size: 32768
+
+    sumcheck loop: 5503 ms (poly: 5139 ms, eval: 351 ms)
+Next round prover done.
+Preallocated RingElement pool miss for size 16, allocating new
+  open_at: 246 ms
+Preallocated RingElement pool miss for size 128, allocating new
+Preallocated RingElement pool miss for size 2, allocating new
+Preallocated RingElement pool miss for size 16, allocating new
+Preallocated RingElement pool miss for size 1, allocating new
+  rc_opening: 1 ms
+Preallocated RingElement pool miss for size 2048, allocating new
+  project: 286 ms
+Preallocated RingElement pool miss for size 4096, allocating new
+Preallocated RingElement pool miss for size 2, allocating new
+Preallocated RingElement pool miss for size 16, allocating new
+Preallocated RingElement pool miss for size 1, allocating new
+  rc_projection: 32 ms
+Preallocated RingElement pool miss for size 8192, allocating new
+  fold: 86 ms
+Preallocated RingElement pool miss for size 32768, allocating new
+Preallocated RingElement pool miss for size 16384, allocating new
+  decompose: 55 ms
+Preallocated RingElement pool miss for size 256, allocating new
+Preallocated RingElement pool miss for size 2048, allocating new
+Preallocated RingElement pool miss for size 2, allocating new
+Preallocated RingElement pool miss for size 16, allocating new
+Preallocated RingElement pool miss for size 1, allocating new
+Next round commitment created of length 2048.
+Preallocated RingElement pool miss for size 8, allocating new
+Preallocated RingElement pool miss for size 32768, allocating new
+Preallocated RingElement pool miss for size 22, allocating new
+Preallocated RingElement pool miss for size 8192, allocating new
+    load_sumcheck_data: 43 ms
+    sumcheck num_vars: 15, hypercube_size: 16384
+    sumcheck loop: 2827 ms (poly: 2568 ms, eval: 247 ms)
+Next round prover done.
+Preallocated RingElement pool miss for size 64, allocating new
+  open_at: 80 ms
+Preallocated RingElement pool miss for size 512, allocating new
+Preallocated RingElement pool miss for size 2, allocating new
+Preallocated RingElement pool miss for size 16, allocating new
+Preallocated RingElement pool miss for size 1, allocating new
+  rc_opening: 3 ms
+Preallocated RingElement pool miss for size 32768, allocating new
+Preallocated RingElement pool miss for size 1024, allocating new
+  project_cf: 1124 ms
+Preallocated RingElement pool miss for size 2048, allocating new
+Preallocated RingElement pool miss for size 2, allocating new
+Preallocated RingElement pool miss for size 16, allocating new
+Preallocated RingElement pool miss for size 1, allocating new
+  rc_projection_ct: 12 ms
+Preallocated RingElement pool miss for size 64, allocating new
+Preallocated RingElement pool miss for size 64, allocating new
+Preallocated RingElement pool miss for size 64, allocating new
+  batch_projection_n_times: 83 ms
+Preallocated RingElement pool miss for size 512, allocating new
+Preallocated RingElement pool miss for size 2, allocating new
+Preallocated RingElement pool miss for size 16, allocating new
+Preallocated RingElement pool miss for size 1, allocating new
+  rc_projection_batched: 3 ms
+Preallocated RingElement pool miss for size 1024, allocating new
+  fold: 36 ms
+Preallocated RingElement pool miss for size 8192, allocating new
+Preallocated RingElement pool miss for size 2048, allocating new
+  decompose: 6 ms
+Preallocated RingElement pool miss for size 256, allocating new
+Preallocated RingElement pool miss for size 2048, allocating new
+Preallocated RingElement pool miss for size 2, allocating new
+Preallocated RingElement pool miss for size 16, allocating new
+Preallocated RingElement pool miss for size 1, allocating new
+Next round commitment created of length 2048.
+Preallocated RingElement pool miss for size 8192, allocating new
+Preallocated RingElement pool miss for size 28, allocating new
+    load_sumcheck_data: 6 ms
+    sumcheck num_vars: 13, hypercube_size: 4096
+    sumcheck loop: 677 ms (poly: 601 ms, eval: 64 ms)
+Next round prover done.
+Preallocated RingElement pool miss for size 64, allocating new
+  open_at: 27 ms
+Preallocated RingElement pool miss for size 512, allocating new
+Preallocated RingElement pool miss for size 2, allocating new
+Preallocated RingElement pool miss for size 16, allocating new
+Preallocated RingElement pool miss for size 1, allocating new
+  rc_opening: 3 ms
+Preallocated RingElement pool miss for size 8192, allocating new
+Preallocated RingElement pool miss for size 128, allocating new
+  project_cf: 381 ms
+Preallocated RingElement pool miss for size 256, allocating new
+Preallocated RingElement pool miss for size 2, allocating new
+Preallocated RingElement pool miss for size 16, allocating new
+Preallocated RingElement pool miss for size 1, allocating new
+  rc_projection_ct: 1 ms
+Preallocated RingElement pool miss for size 64, allocating new
+Preallocated RingElement pool miss for size 128, allocating new
+Preallocated RingElement pool miss for size 128, allocating new
+  batch_projection_n_times: 40 ms
+Preallocated RingElement pool miss for size 512, allocating new
+Preallocated RingElement pool miss for size 2, allocating new
+Preallocated RingElement pool miss for size 16, allocating new
+Preallocated RingElement pool miss for size 1, allocating new
+  rc_projection_batched: 3 ms
+Preallocated RingElement pool miss for size 256, allocating new
+  fold: 12 ms
+Preallocated RingElement pool miss for size 4096, allocating new
+Preallocated RingElement pool miss for size 512, allocating new
+  decompose: 1 ms
+Preallocated RingElement pool miss for size 64, allocating new
+Preallocated RingElement pool miss for size 512, allocating new
+Preallocated RingElement pool miss for size 2, allocating new
+Preallocated RingElement pool miss for size 16, allocating new
+Preallocated RingElement pool miss for size 1, allocating new
+Next round commitment created of length 512.
+Preallocated RingElement pool miss for size 4096, allocating new
+Preallocated RingElement pool miss for size 27, allocating new
+    load_sumcheck_data: 2 ms
+    sumcheck num_vars: 12, hypercube_size: 2048
+    sumcheck loop: 262 ms (poly: 221 ms, eval: 30 ms)
+Next round prover done.
+Preallocated RingElement pool miss for size 16, allocating new
+  open_at: 17 ms
+Preallocated RingElement pool miss for size 128, allocating new
+Preallocated RingElement pool miss for size 2, allocating new
+Preallocated RingElement pool miss for size 16, allocating new
+Preallocated RingElement pool miss for size 1, allocating new
+  rc_opening: 0 ms
+Preallocated RingElement pool miss for size 4096, allocating new
+Preallocated RingElement pool miss for size 64, allocating new
+^F  project_cf: 209 ms
+Preallocated RingElement pool miss for size 128, allocating new
+Preallocated RingElement pool miss for size 2, allocating new
+Preallocated RingElement pool miss for size 16, allocating new
+Preallocated RingElement pool miss for size 1, allocating new
+  rc_projection_ct: 0 ms
+Preallocated RingElement pool miss for size 16, allocating new
+Preallocated RingElement pool miss for size 128, allocating new
+Preallocated RingElement pool miss for size 128, allocating new
+  batch_projection_n_times: 29 ms
+Preallocated RingElement pool miss for size 128, allocating new
+Preallocated RingElement pool miss for size 2, allocating new
+Preallocated RingElement pool miss for size 16, allocating new
+Preallocated RingElement pool miss for size 1, allocating new
+  rc_projection_batched: 0 ms
+Preallocated RingElement pool miss for size 512, allocating new
+  fold: 7 ms
+Preallocated RingElement pool miss for size 2048, allocating new
+Preallocated RingElement pool miss for size 1024, allocating new
+  decompose: 3 ms
+Preallocated RingElement pool miss for size 64, allocating new
+Preallocated RingElement pool miss for size 256, allocating new
+Preallocated RingElement pool miss for size 3, allocating new
+Next round commitment created of length 256.
+Preallocated RingElement pool miss for size 2048, allocating new
+Preallocated RingElement pool miss for size 27, allocating new
+    load_sumcheck_data: 1 ms
+    sumcheck num_vars: 11, hypercube_size: 1024
+    sumcheck loop: 216 ms (poly: 191 ms, eval: 15 ms)
+Next round prover done.
+Preallocated RingElement pool miss for size 16, allocating new
+  open_at: 8 ms
+Preallocated RingElement pool miss for size 64, allocating new
+Preallocated RingElement pool miss for size 3, allocating new
+  rc_opening: 0 ms
+Preallocated RingElement pool miss for size 2048, allocating new
+Preallocated RingElement pool miss for size 16, allocating new
+  project_cf: 106 ms
+Preallocated RingElement pool miss for size 32, allocating new
+Preallocated RingElement pool miss for size 3, allocating new
+  rc_projection_ct: 0 ms
+Preallocated RingElement pool miss for size 16, allocating new
+Preallocated RingElement pool miss for size 256, allocating new
+Preallocated RingElement pool miss for size 256, allocating new
+  batch_projection_n_times: 36 ms
+Preallocated RingElement pool miss for size 64, allocating new
+Preallocated RingElement pool miss for size 3, allocating new
+  rc_projection_batched: 0 ms
+Preallocated RingElement pool miss for size 256, allocating new
+  fold: 3 ms
+Preallocated RingElement pool miss for size 1024, allocating new
+Preallocated RingElement pool miss for size 512, allocating new
+  decompose: 1 ms
+Preallocated RingElement pool miss for size 64, allocating new
+Preallocated RingElement pool miss for size 1024, allocating new
+Preallocated RingElement pool miss for size 27, allocating new
+    load_sumcheck_data: 0 ms
+    sumcheck num_vars: 10, hypercube_size: 512
+    sumcheck loop: 117 ms (poly: 101 ms, eval: 6 ms)
+Preallocated RingElement pool miss for size 16, allocating new
+Preallocated RingElement pool miss for size 1024, allocating new
+Preallocated RingElement pool miss for size 16, allocating new
+Preallocated RingElement pool miss for size 16, allocating new
+Preallocated RingElement pool miss for size 128, allocating new
+Preallocated RingElement pool miss for size 128, allocating new
+Preallocated RingElement pool miss for size 128, allocating new
+  sumcheck: 217 ms
+Prover: 381995756 ns
+  sumcheck: 628 ms
+Prover: 901602437 ns
+  sumcheck: 1226 ms
+Prover: 1701293878 ns
+  sumcheck: 2534 ms
+Prover: 3888728551 ns
+  sumcheck: 7074 ms
+Prover: 7792920620 ns
+  sumcheck: 13982 ms
+Prover: 17768668345 ns
+Preallocated RingElement pool miss for size 18, allocating new
+Norm claim via inner-product: 75345.63664871377
+Most inner norm claim via inner-product: 2215.5367295533606
+Verifier: 2335075 ns
+Preallocated RingElement pool miss for size 8, allocating new
+Preallocated RingElement pool miss for size 22, allocating new
+Norm claim via inner-product: 149431.72122410958
+Most inner norm claim via inner-product: 2716.789649568034
+Preallocated QuadraticExtension pool miss for size 8192, allocating new
+Verifier: 32822346 ns
+Preallocated RingElement pool miss for size 64, allocating new
+Preallocated RingElement pool miss for size 64, allocating new
+Preallocated RingElement pool miss for size 28, allocating new
+Norm claim via inner-product: 121829.88550433757
+Most inner norm claim via inner-product: 3106.5109045358267
+Verifier: 11084376 ns
+Preallocated RingElement pool miss for size 128, allocating new
+Preallocated RingElement pool miss for size 128, allocating new
+Preallocated RingElement pool miss for size 27, allocating new
+Norm claim via inner-product: 45926.69319687626
+Most inner norm claim via inner-product: 3134.0719519500503
+Verifier: 19496343 ns
+Preallocated RingElement pool miss for size 128, allocating new
+Preallocated RingElement pool miss for size 128, allocating new
+Preallocated RingElement pool miss for size 27, allocating new
+Norm claim via inner-product: 33214.46615557745
+Most inner norm claim via inner-product: 3132.6635631679314
+Verifier: 19080368 ns
+Preallocated RingElement pool miss for size 256, allocating new
+Preallocated RingElement pool miss for size 256, allocating new
+Preallocated RingElement pool miss for size 27, allocating new
+Norm claim via inner-product: 428413.4423941434
+Most inner norm claim via inner-product: 428222.5785336406
+Verifier: 35336215 ns
+Preallocated RingElement pool miss for size 128, allocating new
+Preallocated RingElement pool miss for size 128, allocating new
+Preallocated RingElement pool miss for size 8, allocating new
+Preallocated RingElement pool miss for size 2, allocating new
+Preallocated RingElement pool miss for size 2, allocating new
+Preallocated RingElement pool miss for size 2, allocating new
+Preallocated RingElement pool miss for size 2, allocating new
+Preallocated RingElement pool miss for size 2, allocating new
+Preallocated RingElement pool miss for size 128, allocating new
+L2 norm of folded witness in simple verifier: 3250983.568772534
+L2 norm of projection image in simple verifier: 4926202.755678251
+Simple verifier: 20810128 ns
+  open_at: 1845 ms
+  rc_opening: 6 ms
+  Skipping projection recursion as per configuration. Likely the first round
+
+  fold: 1797 ms
+  decompose: 91 ms
+Next round commitment created of length 512.
+    load_sumcheck_data: 13 ms
+    sumcheck num_vars: 16, hypercube_size: 32768
+    sumcheck loop: 5516 ms (poly: 5154 ms, eval: 347 ms)
+Next round prover done.
+  open_at: 227 ms
+  rc_opening: 0 ms
+  project: 272 ms
+  rc_projection: 27 ms
+  fold: 84 ms
+  decompose: 53 ms
+Next round commitment created of length 2048.
+    load_sumcheck_data: 41 ms
+    sumcheck num_vars: 15, hypercube_size: 16384
+    sumcheck loop: 2838 ms (poly: 2574 ms, eval: 250 ms)
+Next round prover done.
+  open_at: 81 ms
+  rc_opening: 3 ms
+  project_cf: 1117 ms
+  rc_projection_ct: 12 ms
+  batch_projection_n_times: 83 ms
+  rc_projection_batched: 3 ms
+  fold: 37 ms
+  decompose: 6 ms
+Next round commitment created of length 2048.
+    load_sumcheck_data: 5 ms
+    sumcheck num_vars: 13, hypercube_size: 4096
+    sumcheck loop: 674 ms (poly: 598 ms, eval: 65 ms)
+Next round prover done.
+  open_at: 27 ms
+  rc_opening: 3 ms
+
+  project_cf: 384 ms
+  rc_projection_ct: 1 ms
+  batch_projection_n_times: 40 ms
+  rc_projection_batched: 3 ms
+  fold: 13 ms
+  decompose: 1 ms
+Next round commitment created of length 512.
+    load_sumcheck_data: 1 ms
+    sumcheck num_vars: 12, hypercube_size: 2048
+    sumcheck loop: 261 ms (poly: 220 ms, eval: 30 ms)
+Next round prover done.
+  open_at: 17 ms
+  rc_opening: 0 ms
+  project_cf: 208 ms
+  rc_projection_ct: 0 ms
+  batch_projection_n_times: 28 ms
+  rc_projection_batched: 0 ms
+  fold: 7 ms
+  decompose: 3 ms
+Next round commitment created of length 256.
+    load_sumcheck_data: 1 ms
+    sumcheck num_vars: 11, hypercube_size: 1024
+    sumcheck loop: 216 ms (poly: 191 ms, eval: 15 ms)
+Next round prover done.
+  open_at: 8 ms
+  rc_opening: 0 ms
+  project_cf: 104 ms
+  rc_projection_ct: 0 ms
+  batch_projection_n_times: 37 ms
+  rc_projection_batched: 0 ms
+  fold: 3 ms
+  decompose: 1 ms
+    load_sumcheck_data: 0 ms
+    sumcheck num_vars: 10, hypercube_size: 512
+    sumcheck loop: 116 ms (poly: 101 ms, eval: 6 ms)
+  sumcheck: 214 ms
+Prover: 375381547 ns
+  sumcheck: 622 ms
+Prover: 892817435 ns
+  sumcheck: 1215 ms
+Prover: 1692986897 ns
+  sumcheck: 2517 ms
+Prover: 3865977608 ns
+  sumcheck: 7055 ms
+Prover: 7725619215 ns
+  sumcheck: 13915 ms
+Prover: 17660512633 ns
+Benchmarking rokoko/verify/vela_auth: Warming up for 3.0000 sNorm claim via inner-product: 75345.63664871377
+Most inner norm claim via inner-product: 2215.5367295533606
+Verifier: 2303085 ns
+Norm claim via inner-product: 149431.72122410958
+Most inner norm claim via inner-product: 2716.789649568034
+Verifier: 33011160 ns
+Norm claim via inner-product: 121829.88550433757
+Most inner norm claim via inner-product: 3106.5109045358267
+Verifier: 10685360 ns
+Norm claim via inner-product: 45926.69319687626
+Most inner norm claim via inner-product: 3134.0719519500503
+Verifier: 19482632 ns
+Norm claim via inner-product: 33214.46615557745
+Most inner norm claim via inner-product: 3132.6635631679314
+Verifier: 18951211 ns
+Norm claim via inner-product: 428413.4423941434
+Most inner norm claim via inner-product: 428222.5785336406
+Verifier: 37345926 ns
+L2 norm of folded witness in simple verifier: 3250983.568772534
+L2 norm of projection image in simple verifier: 4926202.755678251
+Simple verifier: 20982822 ns
+
+Warning: Unable to complete 10 samples in 5.0s. You may wish to increase target time to 32.3s.
+Benchmarking rokoko/verify/vela_auth: Collecting 10 samples in estimated 32.307 s (10 iterations)Norm claim via inner-product: 75345.63664871377
+Most inner norm claim via inner-product: 2215.5367295533606
+Verifier: 2311396 ns
+Norm claim via inner-product: 149431.72122410958
+Most inner norm claim via inner-product: 2716.789649568034
+Verifier: 33030159 ns
+Norm claim via inner-product: 121829.88550433757
+Most inner norm claim via inner-product: 3106.5109045358267
+Verifier: 11098333 ns
+Norm claim via inner-product: 45926.69319687626
+Most inner norm claim via inner-product: 3134.0719519500503
+Verifier: 19217447 ns
+Norm claim via inner-product: 33214.46615557745
+Most inner norm claim via inner-product: 3132.6635631679314
+Verifier: 19422990 ns
+Norm claim via inner-product: 428413.4423941434
+Most inner norm claim via inner-product: 428222.5785336406
+Verifier: 36992254 ns
+L2 norm of folded witness in simple verifier: 3250983.568772534
+L2 norm of projection image in simple verifier: 4926202.755678251
+Simple verifier: 20481155 ns
+Norm claim via inner-product: 75345.63664871377
+Most inner norm claim via inner-product: 2215.5367295533606
+Verifier: 2389758 ns
+Norm claim via inner-product: 149431.72122410958
+Most inner norm claim via inner-product: 2716.789649568034
+Verifier: 33138066 ns
+Norm claim via inner-product: 121829.88550433757
+Most inner norm claim via inner-product: 3106.5109045358267
+Verifier: 10962143 ns
+Norm claim via inner-product: 45926.69319687626
+Most inner norm claim via inner-product: 3134.0719519500503
+Verifier: 19828280 ns
+Norm claim via inner-product: 33214.46615557745
+Most inner norm claim via inner-product: 3132.6635631679314
+Verifier: 18795817 ns
+Norm claim via inner-product: 428413.4423941434
+Most inner norm claim via inner-product: 428222.5785336406
+Verifier: 36960478 ns
+L2 norm of folded witness in simple verifier: 3250983.568772534
+L2 norm of projection image in simple verifier: 4926202.755678251
+Simple verifier: 24797974 ns
+Norm claim via inner-product: 75345.63664871377
+Most inner norm claim via inner-product: 2215.5367295533606
+Verifier: 2447238 ns
+Norm claim via inner-product: 149431.72122410958
+Most inner norm claim via inner-product: 2716.789649568034
+Verifier: 32633186 ns
+Norm claim via inner-product: 121829.88550433757
+Most inner norm claim via inner-product: 3106.5109045358267
+Verifier: 10809610 ns
+Norm claim via inner-product: 45926.69319687626
+Most inner norm claim via inner-product: 3134.0719519500503
+Verifier: 20408522 ns
+Norm claim via inner-product: 33214.46615557745
+Most inner norm claim via inner-product: 3132.6635631679314
+Verifier: 19449532 ns
+Norm claim via inner-product: 428413.4423941434
+Most inner norm claim via inner-product: 428222.5785336406
+Verifier: 36433249 ns
+L2 norm of folded witness in simple verifier: 3250983.568772534
+L2 norm of projection image in simple verifier: 4926202.755678251
+Simple verifier: 21070618 ns
+Norm claim via inner-product: 75345.63664871377
+Most inner norm claim via inner-product: 2215.5367295533606
+Verifier: 2266139 ns
+Norm claim via inner-product: 149431.72122410958
+Most inner norm claim via inner-product: 2716.789649568034
+Verifier: 33190871 ns
+Norm claim via inner-product: 121829.88550433757
+Most inner norm claim via inner-product: 3106.5109045358267
+Verifier: 11037573 ns
+Norm claim via inner-product: 45926.69319687626
+Most inner norm claim via inner-product: 3134.0719519500503
+Verifier: 19287082 ns
+Norm claim via inner-product: 33214.46615557745
+Most inner norm claim via inner-product: 3132.6635631679314
+Verifier: 19014632 ns
+Norm claim via inner-product: 428413.4423941434
+Most inner norm claim via inner-product: 428222.5785336406
+Verifier: 36188039 ns
+L2 norm of folded witness in simple verifier: 3250983.568772534
+L2 norm of projection image in simple verifier: 4926202.755678251
+Simple verifier: 20634041 ns
+Norm claim via inner-product: 75345.63664871377
+Most inner norm claim via inner-product: 2215.5367295533606
+Verifier: 2278012 ns
+Norm claim via inner-product: 149431.72122410958
+Most inner norm claim via inner-product: 2716.789649568034
+Verifier: 33209521 ns
+Norm claim via inner-product: 121829.88550433757
+Most inner norm claim via inner-product: 3106.5109045358267
+Verifier: 10682990 ns
+Norm claim via inner-product: 45926.69319687626
+Most inner norm claim via inner-product: 3134.0719519500503
+Verifier: 18698182 ns
+Norm claim via inner-product: 33214.46615557745
+Most inner norm claim via inner-product: 3132.6635631679314
+Verifier: 18568837 ns
+Norm claim via inner-product: 428413.4423941434
+Most inner norm claim via inner-product: 428222.5785336406
+Verifier: 35803495 ns
+L2 norm of folded witness in simple verifier: 3250983.568772534
+L2 norm of projection image in simple verifier: 4926202.755678251
+Simple verifier: 20762830 ns
+Norm claim via inner-product: 75345.63664871377
+Most inner norm claim via inner-product: 2215.5367295533606
+Verifier: 2441790 ns
+Norm claim via inner-product: 149431.72122410958
+Most inner norm claim via inner-product: 2716.789649568034
+Verifier: 33694081 ns
+Norm claim via inner-product: 121829.88550433757
+Most inner norm claim via inner-product: 3106.5109045358267
+Verifier: 11605035 ns
+Norm claim via inner-product: 45926.69319687626
+Most inner norm claim via inner-product: 3134.0719519500503
+Verifier: 19837085 ns
+Norm claim via inner-product: 33214.46615557745
+Most inner norm claim via inner-product: 3132.6635631679314
+Verifier: 19755092 ns
+Norm claim via inner-product: 428413.4423941434
+Most inner norm claim via inner-product: 428222.5785336406
+Verifier: 37995047 ns
+L2 norm of folded witness in simple verifier: 3250983.568772534
+L2 norm of projection image in simple verifier: 4926202.755678251
+Simple verifier: 21916190 ns
+Norm claim via inner-product: 75345.63664871377
+Most inner norm claim via inner-product: 2215.5367295533606
+Verifier: 2262858 ns
+Norm claim via inner-product: 149431.72122410958
+Most inner norm claim via inner-product: 2716.789649568034
+Verifier: 32491697 ns
+Norm claim via inner-product: 121829.88550433757
+Most inner norm claim via inner-product: 3106.5109045358267
+Verifier: 10620274 ns
+Norm claim via inner-product: 45926.69319687626
+Most inner norm claim via inner-product: 3134.0719519500503
+Verifier: 19815924 ns
+Norm claim via inner-product: 33214.46615557745
+Most inner norm claim via inner-product: 3132.6635631679314
+Verifier: 18946261 ns
+Norm claim via inner-product: 428413.4423941434
+Most inner norm claim via inner-product: 428222.5785336406
+Verifier: 35489144 ns
+L2 norm of folded witness in simple verifier: 3250983.568772534
+L2 norm of projection image in simple verifier: 4926202.755678251
+Simple verifier: 20195442 ns
+Norm claim via inner-product: 75345.63664871377
+Most inner norm claim via inner-product: 2215.5367295533606
+Verifier: 2596769 ns
+Norm claim via inner-product: 149431.72122410958
+Most inner norm claim via inner-product: 2716.789649568034
+Verifier: 35109279 ns
+Norm claim via inner-product: 121829.88550433757
+Most inner norm claim via inner-product: 3106.5109045358267
+Verifier: 10935049 ns
+Norm claim via inner-product: 45926.69319687626
+Most inner norm claim via inner-product: 3134.0719519500503
+Verifier: 19513443 ns
+Norm claim via inner-product: 33214.46615557745
+Most inner norm claim via inner-product: 3132.6635631679314
+Verifier: 19843374 ns
+Norm claim via inner-product: 428413.4423941434
+Most inner norm claim via inner-product: 428222.5785336406
+Verifier: 39649033 ns
+L2 norm of folded witness in simple verifier: 3250983.568772534
+L2 norm of projection image in simple verifier: 4926202.755678251
+Simple verifier: 22541063 ns
+Norm claim via inner-product: 75345.63664871377
+Most inner norm claim via inner-product: 2215.5367295533606
+Verifier: 2405194 ns
+Norm claim via inner-product: 149431.72122410958
+Most inner norm claim via inner-product: 2716.789649568034
+Verifier: 33669504 ns
+Norm claim via inner-product: 121829.88550433757
+Most inner norm claim via inner-product: 3106.5109045358267
+Verifier: 11424985 ns
+Norm claim via inner-product: 45926.69319687626
+Most inner norm claim via inner-product: 3134.0719519500503
+Verifier: 20325699 ns
+Norm claim via inner-product: 33214.46615557745
+Most inner norm claim via inner-product: 3132.6635631679314
+Verifier: 19794207 ns
+Norm claim via inner-product: 428413.4423941434
+Most inner norm claim via inner-product: 428222.5785336406
+Verifier: 38601834 ns
+L2 norm of folded witness in simple verifier: 3250983.568772534
+L2 norm of projection image in simple verifier: 4926202.755678251
+Simple verifier: 21527457 ns
+Norm claim via inner-product: 75345.63664871377
+Most inner norm claim via inner-product: 2215.5367295533606
+Verifier: 2385988 ns
+Norm claim via inner-product: 149431.72122410958
+Most inner norm claim via inner-product: 2716.789649568034
+Verifier: 33747798 ns
+Norm claim via inner-product: 121829.88550433757
+Most inner norm claim via inner-product: 3106.5109045358267
+Verifier: 11439513 ns
+Norm claim via inner-product: 45926.69319687626
+Most inner norm claim via inner-product: 3134.0719519500503
+Verifier: 19905186 ns
+Norm claim via inner-product: 33214.46615557745
+Most inner norm claim via inner-product: 3132.6635631679314
+Verifier: 19410080 ns
+Norm claim via inner-product: 428413.4423941434
+Most inner norm claim via inner-product: 428222.5785336406
+Verifier: 38349570 ns
+L2 norm of folded witness in simple verifier: 3250983.568772534
+L2 norm of projection image in simple verifier: 4926202.755678251
+Simple verifier: 21974653 ns
+rokoko/verify/vela_auth time:   [142.68 ms 144.81 ms 146.93 ms]

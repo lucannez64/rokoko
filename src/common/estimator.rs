@@ -90,6 +90,15 @@ mod tests {
 
     #[test]
     fn test_estimator() {
+        if std::process::Command::new("sage")
+            .arg("--version")
+            .output()
+            .is_err()
+        {
+            eprintln!("test_estimator ignored: Sage is not installed");
+            return;
+        }
+
         let params = SISParameters {
             n: 113,
             m: 1000,

@@ -199,12 +199,27 @@ mod inner {
     }
 
     use crate::common::config::DEGREE;
-    use std::sync::LazyLock;
 
-    // Static scratch buffers – avoids heap allocations on every call.
-    static mut FUSED_TMP: LazyLock<[u64; DEGREE]> = LazyLock::new(|| [0u64; DEGREE]);
-    static mut FUSED_STMP: LazyLock<[u64; DEGREE]> = LazyLock::new(|| [0u64; DEGREE]);
-    static mut FUSED_AUX: LazyLock<[u64; DEGREE]> = LazyLock::new(|| [0u64; DEGREE]);
+    thread_local! {
+        static FUSED_TMP: std::cell::UnsafeCell<[u64; DEGREE]> = std::cell::UnsafeCell::new([0u64; DEGREE]);
+        static FUSED_STMP: std::cell::UnsafeCell<[u64; DEGREE]> = std::cell::UnsafeCell::new([0u64; DEGREE]);
+        static FUSED_AUX: std::cell::UnsafeCell<[u64; DEGREE]> = std::cell::UnsafeCell::new([0u64; DEGREE]);
+    }
+
+    #[inline(always)]
+    fn get_fused_tmp() -> *mut [u64; DEGREE] {
+        FUSED_TMP.with(|b| b.get())
+    }
+
+    #[inline(always)]
+    fn get_fused_stmp() -> *mut [u64; DEGREE] {
+        FUSED_STMP.with(|b| b.get())
+    }
+
+    #[inline(always)]
+    fn get_fused_aux() -> *mut [u64; DEGREE] {
+        FUSED_AUX.with(|b| b.get())
+    }
 
     /// Fallback: decompose into separate eltwise calls when the fused
     /// Rust AVX512 kernel is not available.
@@ -223,18 +238,18 @@ mod inner {
     ) {
         let n64 = n as u64;
 
-        // If result aliases operand1, copy operand1 into a static
+        // If result aliases operand1, copy operand1 into a thread-local
         // buffer so writes don't destroy inputs needed by later steps.
         let op1: *const u64 = if result as *const u64 == operand1 {
-            let aux = &mut *FUSED_AUX;
-            std::ptr::copy_nonoverlapping(operand1, aux.as_mut_ptr(), 2 * n);
-            aux.as_ptr()
+            let aux = get_fused_aux();
+            std::ptr::copy_nonoverlapping(operand1, (*aux).as_mut_ptr(), 2 * n);
+            (*aux).as_ptr()
         } else {
             operand1
         };
 
-        let tmp = &mut *FUSED_TMP;
-        let stmp = &mut *FUSED_STMP;
+        let tmp = get_fused_tmp();
+        let stmp = get_fused_stmp();
 
         // result_even = op1_even * op2_even
         eltwise_mult_mod(result, op1, operand2, n64, modulus);
@@ -243,20 +258,32 @@ mod inner {
         eltwise_mult_mod(result.add(n), op1.add(n), operand2, n64, modulus);
 
         // tmp = op1_odd * op2_odd
-        eltwise_mult_mod(tmp.as_mut_ptr(), op1.add(n), operand2.add(n), n64, modulus);
+        eltwise_mult_mod(
+            (*tmp).as_mut_ptr(),
+            op1.add(n),
+            operand2.add(n),
+            n64,
+            modulus,
+        );
 
         // result_even += shift_factors[i] * tmp[i]
-        eltwise_mult_mod(stmp.as_mut_ptr(), tmp.as_ptr(), shift_factors, n64, modulus);
-        eltwise_add_mod(result, result, stmp.as_ptr(), n64, modulus);
+        eltwise_mult_mod(
+            (*stmp).as_mut_ptr(),
+            (*tmp).as_ptr(),
+            shift_factors,
+            n64,
+            modulus,
+        );
+        eltwise_add_mod(result, result, (*stmp).as_ptr(), n64, modulus);
 
         // tmp = op1_even * op2_odd
-        eltwise_mult_mod(tmp.as_mut_ptr(), op1, operand2.add(n), n64, modulus);
+        eltwise_mult_mod((*tmp).as_mut_ptr(), op1, operand2.add(n), n64, modulus);
 
         // result_odd += tmp
         eltwise_add_mod(
             result.add(n),
             result.add(n) as *const u64,
-            tmp.as_ptr(),
+            (*tmp).as_ptr(),
             n64,
             modulus,
         );

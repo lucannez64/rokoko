@@ -1,3 +1,5 @@
+use rayon::prelude::*;
+
 use crate::{
     common::{
         arithmetic::{field_to_ring_element_into, inner_product},
@@ -85,8 +87,8 @@ pub fn sumcheck(
 
     let mut conjugated_combined_witness = new_vec_zero_preallocated(combined_witness.len());
     combined_witness
-        .iter()
-        .zip(conjugated_combined_witness.iter_mut())
+        .par_iter()
+        .zip(conjugated_combined_witness.par_iter_mut())
         .for_each(|(orig, conj)| {
             orig.conjugate_into(conj);
         });

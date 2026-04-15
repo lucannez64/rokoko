@@ -1,5 +1,7 @@
 use std::any::Any;
 
+use rayon::prelude::*;
+
 use crate::{
     common::{
         arithmetic::{precompute_structured_values_fast, HALF_WAY_MOD_Q_RING_CF},
@@ -276,11 +278,10 @@ pub fn project_coefficients(
 
     witness_coeff.data.clone_from_slice(&witness.data);
 
-    for i in 0..witness_coeff.data.len() {
-        witness_coeff.data[i].from_incomplete_ntt_to_even_odd_coefficients();
-        // this is possible to operate on even-odd representation directly, but coeeficent rep is better for locality.
-        witness_coeff.data[i].from_even_odd_coefficients_to_coefficients();
-    }
+    witness_coeff.data.par_iter_mut().for_each(|el| {
+        el.from_incomplete_ntt_to_even_odd_coefficients();
+        el.from_even_odd_coefficients_to_coefficients();
+    });
 
     #[cfg(feature = "debug-hardness")]
     {
@@ -456,11 +457,9 @@ pub fn project_coefficients(
             }
         }
     }
-    for el in image_ct.data.iter_mut() {
-        unsafe {
-            eltwise_reduce_mod(el.v.as_mut_ptr(), el.v.as_mut_ptr(), DEGREE as u64, MOD_Q);
-        }
-    }
+    image_ct.data.par_iter_mut().for_each(|el| unsafe {
+        eltwise_reduce_mod(el.v.as_mut_ptr(), el.v.as_mut_ptr(), DEGREE as u64, MOD_Q);
+    });
 
     #[cfg(feature = "debug-hardness")]
     {

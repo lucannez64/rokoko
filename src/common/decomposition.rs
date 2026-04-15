@@ -1,3 +1,5 @@
+use rayon::prelude::*;
+
 use crate::common::{
     matrix::new_vec_zero_preallocated,
     ring_arithmetic::{Representation, RingElement},
@@ -36,26 +38,40 @@ pub fn decompose(input: &[RingElement], base_log: u64, radix: usize) -> Vec<Ring
         big_shift_val += small_shift_val << (i as u64 * base_log);
     }
     let big_shift = RingElement::all(big_shift_val, Representation::EvenOddCoefficients);
-
     let small_shift = RingElement::all(1u64 << (base_log - 1), Representation::EvenOddCoefficients);
 
-    let mut temp = RingElement::all(0, Representation::EvenOddCoefficients);
+    decomposed.par_iter_mut().for_each(|el| {
+        el.to_representation(Representation::EvenOddCoefficients);
+    });
 
+    // Each input element produces disjoint output chunks, so we can parallelize
+    // by splitting the output into chunks of size `radix`.
+    let chunks = decomposed.as_mut_slice();
+    chunks
+        .par_chunks_mut(radix)
+        .zip(input.par_iter())
+        .for_each(|(out_chunk, el)| {
+            let mut temp = RingElement::all(0, Representation::EvenOddCoefficients);
+            temp.set_from(el);
+            temp.to_representation(Representation::EvenOddCoefficients);
+            temp += &big_shift;
+            for i in 0..radix {
+                out_chunk[i].to_representation(Representation::EvenOddCoefficients);
+                temp.bits_into(
+                    &mut out_chunk[i],
+                    i as u64 * base_log,
+                    (i as u64 + 1) * base_log,
+                );
+                out_chunk[i] -= &small_shift;
+            }
+        });
+
+    decomposed.par_iter_mut().for_each(|el| {
+        el.to_representation(Representation::IncompleteNTT);
+    });
+
+    #[cfg(feature = "debug-decomp")]
     for (index, el) in input.iter().enumerate() {
-        temp.set_from(el);
-        temp.to_representation(Representation::EvenOddCoefficients);
-        temp += &big_shift;
-        for i in 0..radix {
-            decomposed[index * radix + i].to_representation(Representation::EvenOddCoefficients);
-            temp.bits_into(
-                &mut decomposed[index * radix + i],
-                i as u64 * base_log,
-                (i as u64 + 1) * base_log,
-            );
-            decomposed[index * radix + i] -= &small_shift;
-            decomposed[index * radix + i].to_representation(Representation::IncompleteNTT);
-        }
-        #[cfg(feature = "debug-decomp")]
         {
             // check that recomposition works
             let mut recomposed = RingElement::all(0, Representation::IncompleteNTT);
