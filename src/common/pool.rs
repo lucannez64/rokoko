@@ -67,13 +67,16 @@ pub fn get_preallocated_ring_element_vec(len: usize) -> Vec<RingElement> {
     }
 
     let mut pool = PREALLOCATED_RING.lock().expect("pool poisoned");
-    pool.get_mut(&len).and_then(|v| v.pop()).unwrap_or_else(|| {
+    if let Some(mut vec) = pool.get_mut(&len).and_then(|v| v.pop()) {
+        vec.fill(ZERO_REP_INCOMPLETE_NTT.clone());
+        vec
+    } else {
         println!(
             "Preallocated RingElement pool miss for size {}, allocating new",
             len
         );
         vec![ZERO_REP_INCOMPLETE_NTT.clone(); len]
-    })
+    }
 }
 
 /// Get a preallocated vector from the QuadraticExtension pool
@@ -86,13 +89,16 @@ pub fn get_preallocated_quad_vec(len: usize) -> Vec<QuadraticExtension> {
     }
 
     let mut pool = PREALLOCATED_QUAD.lock().expect("pool poisoned");
-    pool.get_mut(&len).and_then(|v| v.pop()).unwrap_or_else(|| {
+    if let Some(mut vec) = pool.get_mut(&len).and_then(|v| v.pop()) {
+        vec.fill(QuadraticExtension::zero());
+        vec
+    } else {
         println!(
             "Preallocated QuadraticExtension pool miss for size {}, allocating new",
             len
         );
         vec![QuadraticExtension::zero(); len]
-    })
+    }
 }
 
 /// Preallocate RingElement vectors in the pool
@@ -158,6 +164,30 @@ pub fn reset_access_tracker() {
         .lock()
         .expect("tracker poisoned")
         .clear();
+}
+
+pub fn access_stats_snapshot() -> (HashMap<usize, usize>, HashMap<usize, usize>) {
+    (
+        ACCESS_TRACKER.lock().expect("tracker poisoned").clone(),
+        ACCESS_TRACKER_QUAD.lock().expect("tracker poisoned").clone(),
+    )
+}
+
+pub fn preallocate_from_stats(
+    ring_stats: &HashMap<usize, usize>,
+    quad_stats: &HashMap<usize, usize>,
+) {
+    for (&len, &count) in ring_stats.iter() {
+        if len != 0 && count != 0 {
+            preallocate_ring_element_vecs(len, count);
+        }
+    }
+
+    for (&len, &count) in quad_stats.iter() {
+        if len != 0 && count != 0 {
+            preallocate_quad_vecs(len, count);
+        }
+    }
 }
 
 /// Load access statistics from a file and preallocate accordingly.

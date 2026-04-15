@@ -81,7 +81,7 @@ pub fn mul_poly_into<E: SumcheckElement>(
         "Resulting polynomial degree exceeds supported maximum"
     );
 
-    // result.set_zero();
+    result.set_zero();
 
     if poly_0.num_coefficients == 2 && poly_1.num_coefficients == 2 {
         // Both are linear. Use Karatsuba with 3 multiplications:
@@ -142,7 +142,8 @@ pub fn mul_poly_into<E: SumcheckElement>(
     }
 
     if poly_0.num_coefficients == 3 && poly_1.num_coefficients == 2 {
-        panic!("Not implemented yet");
+        mul_poly_into(result, poly_1, poly_0);
+        return;
     }
 
     // This works only in one poly is constant
