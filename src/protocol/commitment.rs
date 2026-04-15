@@ -53,12 +53,12 @@ pub fn commit_basic_internal(
         }
         commitment
     } else {
-        let width = witness.used_cols;
-        let data: Vec<RingElement> = (0..rank)
+        let width = witness.width;
+        let row_data: Vec<Vec<RingElement>> = (0..rank)
             .into_par_iter()
-            .flat_map(|i| {
+            .map(|i| {
                 let row = &ck[i];
-                (0..width)
+                (0..witness.used_cols)
                     .map(|col| {
                         let mut acc = RingElement::zero(Representation::IncompleteNTT);
                         let mut temp = RingElement::zero(Representation::IncompleteNTT);
@@ -75,7 +75,11 @@ pub fn commit_basic_internal(
             .collect();
 
         let mut commitment = HorizontallyAlignedMatrix::new_zero_preallocated(actual_rank, width);
-        commitment.data[..rank * width].clone_from_slice(&data);
+        for i in 0..rank {
+            for col in 0..witness.used_cols {
+                commitment[(i, col)] = row_data[i][col].clone();
+            }
+        }
         commitment
     }
 }

@@ -201,6 +201,7 @@ impl EvaluationSumcheckData for DiffSumcheckEvaluation {
     type Element = RingElement;
 
     fn evaluate(&mut self, point: &Vec<Self::Element>) -> &Self::Element {
+        self.result = RingElement::zero(Representation::IncompleteNTT);
         self.result -= (
             self.lhs_evaluation.borrow_mut().evaluate(&point),
             self.rhs_evaluation.borrow_mut().evaluate(&point),
@@ -213,7 +214,10 @@ impl EvaluationSumcheckData for DiffSumcheckEvaluation {
 mod tests {
     use super::*;
     use crate::protocol::sumcheck_utils::{
-        common::SumcheckBaseData, linear::LinearSumcheck, selector_eq::SelectorEq,
+        common::SumcheckBaseData,
+        elephant_cell::ElephantCell,
+        linear::{FakeEvaluationLinearSumcheck, LinearSumcheck},
+        selector_eq::SelectorEq,
     };
 
     #[test]
@@ -339,5 +343,24 @@ mod tests {
             sumcheck_0.get_ref().final_evaluations() - sumcheck_1.get_ref().final_evaluations();
 
         debug_assert_eq!(diff_eval.evaluate(&point), &expected);
+    }
+
+    #[test]
+    fn test_diff_sumcheck_evaluation_is_stable_across_repeated_calls() {
+        let lhs = ElephantCell::new(FakeEvaluationLinearSumcheck::new());
+        lhs.borrow_mut()
+            .set_result(RingElement::constant(11, Representation::IncompleteNTT));
+        let rhs = ElephantCell::new(FakeEvaluationLinearSumcheck::new());
+        rhs.borrow_mut()
+            .set_result(RingElement::constant(4, Representation::IncompleteNTT));
+
+        let mut eval = DiffSumcheckEvaluation::new(lhs, rhs);
+        let point = vec![RingElement::constant(0, Representation::IncompleteNTT)];
+
+        let first = eval.evaluate(&point).clone();
+        let second = eval.evaluate(&point).clone();
+
+        assert_eq!(first, RingElement::constant(7, Representation::IncompleteNTT));
+        assert_eq!(second, first);
     }
 }

@@ -186,184 +186,29 @@ impl<E: SumcheckElement> HighOrderSumcheckData for ProductSumcheck<E> {
     /// via batched inner products (3 dot products), eliminating all per-point
     /// vtable dispatch.
     fn univariate_polynomial_into(&self, polynomial: &mut Polynomial<Self::Element>) {
-        // Case 1: both children expose raw data → batched Karatsuba inner product
-        let lhs_ref = self.lhs_sumcheck.get_ref();
-        let rhs_ref = self.rhs_sumcheck.get_ref();
-        let lhs_data = lhs_ref.as_data_slices();
-        let rhs_data = rhs_ref.as_data_slices();
+        // Correctness-first fallback. The optimized claim path is currently
+        // unsound for some prefixed/suffixed products under LS-first ordering.
+        let temp = self.get_scratch_poly();
 
-        if let (Some((a_lo, a_hi)), Some((b_lo, b_hi))) = (lhs_data, rhs_data) {
-            // Σ_p poly_a(p) * poly_b(p)  where poly_x(p) = [x_lo[p], x_hi[p]-x_lo[p]]
-            //
-            // Using Karatsuba on the sums:
-            //   C0   = Σ a_lo[p] * b_lo[p]
-            //   C_mid = Σ a_hi[p] * b_hi[p]
-            //   C2   = Σ (a_hi[p]-a_lo[p]) * (b_hi[p]-b_lo[p])
-            //   C1   = C_mid - C0 - C2
-            //
-            // When the high-half slices are trimmed (shorter than low-half),
-            // we split into a dense region (full Karatsuba) and a sparse
-            // tail where both high halves are zero (C2_tail = C0_tail,
-            // C_mid_tail = 0 — only 1 mul instead of 3).
-            polynomial.set_zero();
-            polynomial.num_coefficients = 3;
-
-            let mut temp = Self::Element::zero();
-            let mut temp_a = Self::Element::zero();
-            let mut temp_b = Self::Element::zero();
-
-            let n = a_lo.len();
-            let a_hi_len = a_hi.len();
-            let b_hi_len = b_hi.len();
-            let dense_end = a_hi_len.min(b_hi_len);
-
-            // Region 1: [0, dense_end) — both high halves present, full Karatsuba
-            for p in 0..dense_end {
-                temp *= (&a_lo[p], &b_lo[p]);
-                polynomial.coefficients[0] += &temp;
-
-                temp *= (&a_hi[p], &b_hi[p]);
-                polynomial.coefficients[1] += &temp;
-
-                temp_a.set_from(&a_hi[p]);
-                temp_a -= &a_lo[p];
-                temp_b.set_from(&b_hi[p]);
-                temp_b -= &b_lo[p];
-                temp *= (&temp_a, &temp_b);
-                polynomial.coefficients[2] += &temp;
-            }
-
-            // Region 2: [dense_end, max_hi) — one high half non-zero, other zero.
-            // When b_hi is zero: C_mid += a_hi*0 = 0,
-            //   C2 += (a_hi-a_lo)*(0-b_lo) so we subtract (a_hi-a_lo)*b_lo from C2.
-            if a_hi_len > dense_end {
-                for p in dense_end..a_hi_len {
-                    temp *= (&a_lo[p], &b_lo[p]);
-                    polynomial.coefficients[0] += &temp;
-                    // C2 += (a_hi - a_lo) * (0 - b_lo) = -((a_hi-a_lo)*b_lo)
-                    // = a_lo*b_lo - a_hi*b_lo
-                    polynomial.coefficients[2] += &temp; // +a_lo*b_lo
-                    temp *= (&a_hi[p], &b_lo[p]);
-                    polynomial.coefficients[2] -= &temp; // -a_hi*b_lo
-                }
-            } else if b_hi_len > dense_end {
-                for p in dense_end..b_hi_len {
-                    temp *= (&a_lo[p], &b_lo[p]);
-                    polynomial.coefficients[0] += &temp;
-                    polynomial.coefficients[2] += &temp;
-                    temp *= (&a_lo[p], &b_hi[p]);
-                    polynomial.coefficients[2] -= &temp;
-                }
-            }
-
-            let max_hi = a_hi_len.max(b_hi_len);
-
-            // Region 3: [max_hi, n) — both high halves zero.
-            // poly_a = [a_lo, -a_lo], poly_b = [b_lo, -b_lo].
-            // C0 += a_lo*b_lo, C_mid += 0, C2 += a_lo*b_lo (= C0 contribution).
-            for p in max_hi..n {
-                temp *= (&a_lo[p], &b_lo[p]);
-                polynomial.coefficients[0] += &temp;
-                polynomial.coefficients[2] += &temp;
-            }
-
-            // C1 = C_mid - C0 - C2 (C_mid is currently in coeff[1])
-            let (first, rest) = polynomial.coefficients.split_at_mut(1);
-            let (second, third) = rest.split_at_mut(1);
-            second[0] -= &first[0];
-            second[0] -= &third[0];
-
-            return;
-        }
-
-        // Case 1b: both children expose interleaved data (LS-first layout).
-        // data[2i] = val@0, data[2i+1] = val@1.
-        // Karatsuba with stride-2 access.
-        let lhs_ref2 = self.lhs_sumcheck.get_ref();
-        let rhs_ref2 = self.rhs_sumcheck.get_ref();
-        let lhs_interleaved = lhs_ref2.as_interleaved_data();
-        let rhs_interleaved = rhs_ref2.as_interleaved_data();
-
-        if let (Some(a_data), Some(b_data)) = (lhs_interleaved, rhs_interleaved) {
-            polynomial.set_zero();
-            polynomial.num_coefficients = 3;
-
-            let mut temp = Self::Element::zero();
-            let mut temp_a = Self::Element::zero();
-            let mut temp_b = Self::Element::zero();
-
-            // Number of possibly non-zero pairs. If the slice has odd length,
-            // the last pair has an implicit odd entry equal to zero.
-            let a_pairs = (a_data.len() + 1) / 2;
-            let b_pairs = (b_data.len() + 1) / 2;
-            let dense_end = a_pairs.min(b_pairs);
-            let zero = Self::Element::zero();
-
-            // Region 1: [0, dense_end) — both sides have data, full Karatsuba
-            for p in 0..dense_end {
-                let idx0 = 2 * p;
-                let a0 = &a_data[idx0];
-                let a1 = if idx0 + 1 < a_data.len() {
-                    &a_data[idx0 + 1]
-                } else {
-                    &zero
-                };
-                let b0 = &b_data[idx0];
-                let b1 = if idx0 + 1 < b_data.len() {
-                    &b_data[idx0 + 1]
-                } else {
-                    &zero
-                };
-
-                temp *= (a0, b0);
-                polynomial.coefficients[0] += &temp; // C0
-
-                temp *= (a1, b1);
-                polynomial.coefficients[1] += &temp; // C_mid
-
-                temp_a.set_from(a1);
-                temp_a -= a0;
-                temp_b.set_from(b1);
-                temp_b -= b0;
-                temp *= (&temp_a, &temp_b);
-                polynomial.coefficients[2] += &temp; // C2
-            }
-
-            // Region 2: one side has data, other is zero — contributes nothing.
-
-            // C1 = C_mid - C0 - C2
-            let (first, rest) = polynomial.coefficients.split_at_mut(1);
-            let (second, third) = rest.split_at_mut(1);
-            second[0] -= &first[0];
-            second[0] -= &third[0];
-
-            return;
-        }
-
-        // Case 2: fall through to point-by-point, but skip the expensive
-        // `constant_at_point` tree traversal that the default impl performs.
-        // Use non_zero_range to iterate only the relevant points when a
-        // sparse selector is present.
         polynomial.set_zero();
         polynomial.num_coefficients = 1;
 
         let half_hypercube = 1 << (self.variable_count() - 1);
-        let (range_start, range_end) = self.non_zero_range().unwrap_or((0, half_hypercube));
-
-        // Disable per-point cache stores during the sweep: each point is
-        // visited exactly once, so the cache is never hit and the stores
-        // are pure overhead (~50ns per store × 3 levels × thousands of points).
-        self.set_cache_bypass(true);
-        let mut scratch = self.get_scratch_poly().borrow_mut();
-        for i in range_start..range_end {
+        for i in 0..half_hypercube {
             let point = HypercubePoint::new(i);
+
+            if let Some(constant) = self.constant_univariate_polynomial_at_point_available_by_ref(point) {
+                polynomial.coefficients[0] += constant;
+                continue;
+            }
+
             if self.is_univariate_polynomial_zero_at_point(point) {
                 continue;
             }
-            self.univariate_polynomial_at_point_into(point, &mut scratch);
-            add_poly_in_place(polynomial, &scratch);
+
+            self.univariate_polynomial_at_point_into(point, &mut temp.borrow_mut());
+            add_poly_in_place(polynomial, &temp.borrow());
         }
-        self.set_cache_bypass(false);
     }
 
     #[inline]

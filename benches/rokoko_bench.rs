@@ -29,13 +29,14 @@
 //!   cargo bench --bench rokoko_bench                  # p-28 (default)
 //!   cargo bench --bench rokoko_bench --features p-26  # recommended for comparison
 
+use std::collections::HashMap;
 use std::time::Duration;
 
 use criterion::{criterion_group, criterion_main, Criterion};
 use num::range;
 use rokoko::{
     common::{
-        pool::{drain_pool, load_and_preallocate, save_access_stats},
+        pool::{access_stats_snapshot, drain_pool, preallocate_from_stats, reset_access_tracker},
         ring_arithmetic::{Representation, RingElement},
         structured_row::StructuredRow,
     },
@@ -75,10 +76,10 @@ fn eval_outer(log: u32) -> Vec<StructuredRow> {
     )]
 }
 
-const POOL_STATS_FILE: &str = "target/rokoko_bench_pool_stats.txt";
+type PoolStats = (HashMap<usize, usize>, HashMap<usize, usize>);
 
 /// Warmup: run one full prove+verify to discover every pool size the protocol
-/// needs, save the access counts to a file, then reload them so the pool is
+/// needs, snapshot the access counts in memory, then reload them so the pool is
 /// full for the first benchmark iteration.
 ///
 /// Before each subsequent iteration the bench loop calls `refill_pool()` to
@@ -90,7 +91,10 @@ fn warmup(
     witness_decomposed: &rokoko::common::matrix::VerticallyAlignedMatrix<RingElement>,
     ep_inner: &Vec<StructuredRow>,
     ep_outer: &Vec<StructuredRow>,
-) {
+) -> PoolStats {
+    reset_access_tracker();
+    drain_pool();
+
     let mut ctx = init_sumcheck(crs, config);
     let mut vctx = init_verifier(crs, config);
     let (cwa, rc) = commit(crs, config, witness_decomposed);
@@ -99,19 +103,16 @@ fn warmup(
     );
     verifier_round(crs, config, &rc, &proof, ep_inner, ep_outer, &claims.unwrap(), &mut vctx, None);
 
-    // Persist the access pattern so each bench iteration can reload it.
-    save_access_stats(POOL_STATS_FILE).expect("failed to save pool stats");
-    // Refill the pool for the first iteration.
-    refill_pool();
+    let stats = access_stats_snapshot();
+    refill_pool(&stats);
+    stats
 }
 
 /// Restore the pool to the state it had at the start of a fresh prove+verify.
 /// Drains first so repeated calls don't accumulate memory unboundedly.
-/// Called before each timed iteration so misses (and their diagnostic prints)
-/// never appear during measurement.
-fn refill_pool() {
+fn refill_pool(stats: &PoolStats) {
     drain_pool();
-    load_and_preallocate(POOL_STATS_FILE).expect("failed to load pool stats");
+    preallocate_from_stats(&stats.0, &stats.1);
 }
 
 // ── Benchmarks ────────────────────────────────────────────────────────────────
@@ -126,7 +127,7 @@ fn bench_prove(c: &mut Criterion) {
     let ep_inner = eval_inner(witness_decomposed.height.ilog2());
     let ep_outer = eval_outer(witness_decomposed.width.ilog2());
 
-    warmup(&crs, config, &witness_decomposed, &ep_inner, &ep_outer);
+    let pool_stats = warmup(&crs, config, &witness_decomposed, &ep_inner, &ep_outer);
 
     let mut group = c.benchmark_group("rokoko");
     group.sample_size(10);
@@ -137,7 +138,7 @@ fn bench_prove(c: &mut Criterion) {
         b.iter_custom(|iters| {
             let mut total = Duration::ZERO;
             for _ in 0..iters {
-                refill_pool();
+                refill_pool(&pool_stats);
                 let mut ctx = init_sumcheck(&crs, config);
                 let start = std::time::Instant::now();
                 let (cwa, _rc) = commit(&crs, config, &witness_decomposed);
@@ -165,7 +166,7 @@ fn bench_verify(c: &mut Criterion) {
     let ep_inner = eval_inner(witness_decomposed.height.ilog2());
     let ep_outer = eval_outer(witness_decomposed.width.ilog2());
 
-    warmup(&crs, config, &witness_decomposed, &ep_inner, &ep_outer);
+    let pool_stats = warmup(&crs, config, &witness_decomposed, &ep_inner, &ep_outer);
 
     // Generate one proof outside the loop (same pattern as cyclo_bench).
     let mut ctx = init_sumcheck(&crs, config);
@@ -182,7 +183,7 @@ fn bench_verify(c: &mut Criterion) {
         b.iter_custom(|iters| {
             let mut total = Duration::ZERO;
             for _ in 0..iters {
-                refill_pool();
+                refill_pool(&pool_stats);
                 let mut vctx = init_verifier(&crs, config);
                 let start = std::time::Instant::now();
                 verifier_round(
@@ -209,7 +210,7 @@ fn bench_roundtrip(c: &mut Criterion) {
     let ep_inner = eval_inner(witness_decomposed.height.ilog2());
     let ep_outer = eval_outer(witness_decomposed.width.ilog2());
 
-    warmup(&crs, config, &witness_decomposed, &ep_inner, &ep_outer);
+    let pool_stats = warmup(&crs, config, &witness_decomposed, &ep_inner, &ep_outer);
 
     let mut group = c.benchmark_group("rokoko");
     group.sample_size(10);
@@ -218,7 +219,7 @@ fn bench_roundtrip(c: &mut Criterion) {
         b.iter_custom(|iters| {
             let mut total = Duration::ZERO;
             for _ in 0..iters {
-                refill_pool();
+                refill_pool(&pool_stats);
                 let mut ctx = init_sumcheck(&crs, config);
                 let mut vctx = init_verifier(&crs, config);
                 let start = std::time::Instant::now();
@@ -246,7 +247,7 @@ fn bench_roundtrip(c: &mut Criterion) {
 
 criterion_group! {
     name = benches;
-    config = Criterion::default();
+    config = Criterion::default().without_plots();
     targets = bench_prove, bench_verify, bench_roundtrip,
 }
 criterion_main!(benches);
